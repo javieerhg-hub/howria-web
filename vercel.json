@@ -1,5 +1,12 @@
 {
   "rewrites": [
-    { "source": "/boletas", "destination": "/boletas.html" }
+    {
+      "source": "/boletas",
+      "destination": "/boletas.html"
+    },
+    {
+      "source": "/nosotros",
+      "destination": "/nosotros.html"
+    }
   ]
 }
