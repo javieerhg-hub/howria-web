@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Search, ArrowUpDown } from "lucide-react";
-import { supabase } from "./lib/supabaseClient.js";
+import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import { jsPDF } from "jspdf";
 
 // ============================================================
@@ -18,6 +18,7 @@ function clienteToDb(c) {
     peso_kg: c.pesoKg,
     foto_url: c.fotoUrl,
     dias_habituales: c.diasHabituales || [],
+    hora_habitual: c.horaHabitual || null,
     plan_habitual: c.planHabitual,
     objetivos: c.objetivos,
     paseador_nombre: c.paseadorNombre,
@@ -41,6 +42,7 @@ function dbToCliente(row) {
     pesoKg: row.peso_kg,
     fotoUrl: row.foto_url,
     diasHabituales: row.dias_habituales || [],
+    horaHabitual: row.hora_habitual,
     planHabitual: row.plan_habitual,
     objetivos: row.objetivos,
     paseadorNombre: row.paseador_nombre,
@@ -126,6 +128,7 @@ function usuarioToDb(u) {
     tipo_cuenta: u.datosBancarios?.tipoCuenta || u.tipoCuenta || null,
     numero_cuenta: u.datosBancarios?.numeroCuenta || u.numeroCuenta || null,
     email: u.email || slugEmailUsuario(u.nombre),
+    capacitacion_completada: u.capacitacionCompletada || [],
   };
 }
 
@@ -137,6 +140,7 @@ function dbToUsuario(row) {
     fechaInicio: row.fecha_inicio,
     datosBancarios: { banco: row.banco, tipoCuenta: row.tipo_cuenta, numeroCuenta: row.numero_cuenta },
     email: row.email,
+    capacitacionCompletada: row.capacitacion_completada || [],
   };
 }
 
@@ -215,21 +219,107 @@ function dbToPago(row) {
   };
 }
 
+function equipoToDb(p) {
+  return { nombre: p.nombre };
+}
+function dbToEquipo(row) {
+  return { nombre: row.nombre };
+}
+
+function objetivoSemanalToDb(o) {
+  return { texto: o.texto, asignado_a: o.asignadoA || null, semana_key: o.semanaKey, cumplido: o.cumplido };
+}
+function dbToObjetivoSemanal(row) {
+  return { texto: row.texto, asignadoA: row.asignado_a, semanaKey: row.semana_key, cumplido: row.cumplido };
+}
+
+function objetivoMensualToDb(o) {
+  return { texto: o.texto, asignado_a: o.asignadoA || null, mes_key: o.mesKey, cumplido: o.cumplido };
+}
+function dbToObjetivoMensual(row) {
+  return { texto: row.texto, asignadoA: row.asignado_a, mesKey: row.mes_key, cumplido: row.cumplido };
+}
+
+function tareaToDb(t) {
+  return { titulo: t.titulo, asignado_a: t.asignadoA || null, enlace: t.enlace || null, fecha_hora: t.fechaISO, estado: t.estado };
+}
+function dbToTarea(row) {
+  return { titulo: row.titulo, asignadoA: row.asignado_a, enlace: row.enlace, fechaISO: row.fecha_hora, estado: row.estado };
+}
+
+function citaToDb(c) {
+  return {
+    cliente_id: c.clienteId || null,
+    cliente_nombre: c.clienteNombre,
+    perro: c.perro || null,
+    tipo: c.tipo,
+    adiestrador: c.adiestrador || null,
+    fecha_hora: c.fechaISO,
+    estado: c.estado,
+    notas: c.notas || null,
+  };
+}
+function dbToCita(row) {
+  return {
+    clienteId: row.cliente_id,
+    clienteNombre: row.cliente_nombre,
+    perro: row.perro,
+    tipo: row.tipo,
+    adiestrador: row.adiestrador,
+    fechaISO: row.fecha_hora,
+    estado: row.estado,
+    notas: row.notas,
+  };
+}
+
+function prospectoToDb(p) {
+  return {
+    nombre: p.nombre,
+    telefono: p.telefono || null,
+    perro: p.perro || null,
+    origen: p.origen,
+    tipo_servicio: p.tipoServicio || [],
+    estado: p.estado,
+    proximo_seguimiento: p.proximoSeguimiento || null,
+    asignado_a: p.asignadoA || null,
+    bitacora: p.bitacora || [],
+  };
+}
+function dbToProspecto(row) {
+  return {
+    nombre: row.nombre,
+    telefono: row.telefono,
+    perro: row.perro,
+    origen: row.origen,
+    tipoServicio: row.tipo_servicio || [],
+    estado: row.estado,
+    proximoSeguimiento: row.proximo_seguimiento,
+    asignadoA: row.asignado_a,
+    bitacora: row.bitacora || [],
+  };
+}
+
 // cambio hecho con el setter (igual que useState) de vuelta a la base
 // de datos — inserta, actualiza o elimina según corresponda.
 function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0) {
   const [items, setItemsState] = useState([]);
+  const [cargando, setCargando] = useState(true);
   const insertando = useRef(new Set());
 
   useEffect(() => {
     let activo = true;
+    setCargando(true);
     (async () => {
       let query = supabase.from(tableName).select("*");
       if (orderBy) query = query.order(orderBy);
       const { data, error } = await query;
-      if (!error && activo && data) {
+      if (!activo) return;
+      if (error) {
+        showToast(`No se pudo cargar ${tableName}: ${error.message}`);
+      } else if (data) {
         setItemsState(data.map((row, idx) => ({ ...mapFromDb(row), id: idx + 1, _dbId: row.id })));
       }
+      setCargando(false);
     })();
     return () => { activo = false; };
   }, [sessionVersion]);
@@ -240,7 +330,9 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
 
     for (const [dbId] of prevByDbId) {
       if (!nextByDbId.has(dbId)) {
-        supabase.from(tableName).delete().eq("id", dbId);
+        supabase.from(tableName).delete().eq("id", dbId).then(({ error }) => {
+          if (error) showToast(`No se pudo eliminar: ${error.message}`);
+        });
       }
     }
 
@@ -248,7 +340,10 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
       insertando.current.add(item.id);
       supabase.from(tableName).insert(mapToDb(item)).select().single().then(({ data, error }) => {
         insertando.current.delete(item.id);
-        if (!error && data) {
+        if (error) {
+          showToast(`No se pudo guardar: ${error.message}`);
+          setItemsState((cur) => cur.filter((x) => x.id !== item.id));
+        } else if (data) {
           setItemsState((cur) => cur.map((x) => (x.id === item.id ? { ...x, _dbId: data.id, numero: data.numero ?? x.numero } : x)));
         }
       });
@@ -257,7 +352,9 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
     for (const [dbId, item] of nextByDbId) {
       const anterior = prevByDbId.get(dbId);
       if (anterior && JSON.stringify(mapToDb(anterior)) !== JSON.stringify(mapToDb(item))) {
-        supabase.from(tableName).update(mapToDb(item)).eq("id", dbId);
+        supabase.from(tableName).update(mapToDb(item)).eq("id", dbId).then(({ error }) => {
+          if (error) showToast(`No se pudo guardar: ${error.message}`);
+        });
       }
     }
   }
@@ -270,7 +367,7 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
     });
   }
 
-  return [items, setItems];
+  return [items, setItems, cargando];
 }
 
 // Hook para el registro de paseos (mapa clienteIdLocal_fecha -> {realizado, cancelado, nota}).
@@ -341,6 +438,7 @@ const CREAM_SOFT = "#EAE0C6";
 const GOLD = "#C9A24B";
 const INK = "#332E22";
 const RUST = "#A85C3B";
+const NAVY_LOGO = "#102A41"; // mismo color de fondo que el logo, usado en el encabezado de las boletas (canvas)
 
 const CLIENTES_INICIAL = [
   { id: 1, nombre: "María José Reyes", perro: "Toby", telefono: "+56 9 1234 5678", valorPaseoRef: 8000, raza: "Golden Retriever", pesoKg: 28, fotoUrl: null, diasHabituales: [0,1,2,3,4], planHabitual: "LV", objetivos: "Bajar nivel de energía y mejorar caminata con correa.", paseadorNombre: "Pedro Vidal", tarifaPaseador: 5000, direccion: "Av. Providencia 1650, Providencia", lat: -33.4260, lng: -70.6100, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "2026-03-01" },
@@ -358,6 +456,14 @@ const TIPOS_SERVICIO = [
   { id: "paseos", nombre: "Paseos" },
   { id: "clases", nombre: "Clases de adiestramiento" },
   { id: "evaluacion", nombre: "Evaluación" },
+];
+
+const PASOS_CAPACITACION = [
+  { id: "induccion", texto: "Inducción inicial y valores de Howria" },
+  { id: "manejo_seguro", texto: "Manejo seguro de los perros" },
+  { id: "uso_app", texto: "Uso de la app (marcar paseos, notas)" },
+  { id: "emergencias", texto: "Protocolo ante emergencias" },
+  { id: "paseo_supervisado", texto: "Paseo supervisado de prueba" },
 ];
 
 const ESTADOS_PROSPECTO = [
@@ -660,12 +766,12 @@ function Login({ onLogin, clientes, usuarios, onLoginCliente }) {
           {modo === "equipo" ? (
             <>
               <p style={{ margin: "0 0 24px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1.5, textAlign: "center" }}>Portal administradores</p>
-              <label style={label}>Nombre</label>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre"
+              <label style={label} htmlFor="login-nombre">Nombre</label>
+              <input id="login-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre"
                 onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
                 style={input} autoFocus />
-              <label style={label}>Contraseña</label>
-              <input type="password" value={passwordEquipo} onChange={(e) => setPasswordEquipo(e.target.value)} placeholder="Tu contraseña"
+              <label style={label} htmlFor="login-password">Contraseña</label>
+              <input id="login-password" type="password" value={passwordEquipo} onChange={(e) => setPasswordEquipo(e.target.value)} placeholder="Tu contraseña"
                 onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
                 style={{ ...input, marginBottom: errorLogin ? 8 : 24 }} />
               {errorLogin && <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "#A85C3B" }}>{errorLogin}</p>}
@@ -676,8 +782,8 @@ function Login({ onLogin, clientes, usuarios, onLoginCliente }) {
           ) : (
             <>
               <p style={{ margin: "0 0 20px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1.5, textAlign: "center" }}>Portal del cliente</p>
-              <label style={label}>Busca tu nombre</label>
-              <input value={busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setClienteId(""); }} placeholder="Tu nombre" style={input} />
+              <label style={label} htmlFor="login-busca-cliente">Busca tu nombre</label>
+              <input id="login-busca-cliente" value={busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setClienteId(""); }} placeholder="Tu nombre" style={input} />
               {busquedaCliente.trim() && (
                 <div style={{ marginBottom: 16, maxHeight: 140, overflowY: "auto" }}>
                   {clientesFiltrados.map((c) => (
@@ -857,7 +963,6 @@ function dibujarBoleta(canvas, emitida, logoImg, huellaImg) {
   }
 
   // encabezado — mismo color de fondo que el logo, para que se unifiquen
-  const NAVY_LOGO = "#102A41";
   ctx.fillStyle = NAVY_LOGO;
   ctx.fillRect(0, 0, W, 130);
   if (logoImg) {
@@ -1371,12 +1476,12 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         </div>
 
         <h2 style={sectionTitle}>1. Cliente y mes</h2>
-        <label style={label}>N° de boleta</label>
-        <input type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
+        <label style={label} htmlFor="boleta-numero">N° de boleta</label>
+        <input id="boleta-numero" type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
 
-        <label style={label}>Paseador</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          <button type="button" onClick={() => cambiarFiltroPaseador("todos")}
+        <p style={label} id="boleta-paseador-label">Paseador</p>
+        <div role="group" aria-labelledby="boleta-paseador-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          <button type="button" onClick={() => cambiarFiltroPaseador("todos")} aria-pressed={filtroPaseador === "todos"}
             style={{
               padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
               border: filtroPaseador === "todos" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -1386,7 +1491,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
             Todos
           </button>
           {paseadoresDeClientes.map((p) => (
-            <button key={p} type="button" onClick={() => cambiarFiltroPaseador(p)}
+            <button key={p} type="button" onClick={() => cambiarFiltroPaseador(p)} aria-pressed={filtroPaseador === p}
               style={{
                 padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
                 border: filtroPaseador === p ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -1398,8 +1503,8 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           ))}
         </div>
 
-        <label style={label}>Cliente</label>
-        <select value={clienteId ?? ""} onChange={(e) => seleccionarCliente(e.target.value)} style={input}>
+        <label style={label} htmlFor="boleta-cliente">Cliente</label>
+        <select id="boleta-cliente" value={clienteId ?? ""} onChange={(e) => seleccionarCliente(e.target.value)} style={input}>
           {filtroPaseador === "todos" ? (
             paseadoresDeClientes.map((p) => (
               <optgroup key={p} label={p}>
@@ -1412,8 +1517,8 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
             clientesFiltrados.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)
           )}
         </select>
-        <label style={label}>Mes a facturar</label>
-        <select value={mesIdx} onChange={(e) => cambiarMes(Number(e.target.value))} style={input}>
+        <label style={label} htmlFor="boleta-mes">Mes a facturar</label>
+        <select id="boleta-mes" value={mesIdx} onChange={(e) => cambiarMes(Number(e.target.value))} style={input}>
           {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
         </select>
         {clienteTieneHistorial && (
@@ -1421,15 +1526,15 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         )}
 
         <div style={{ marginTop: 20, padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8 }}>
-          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }}>💬 Mensaje personalizado para esta boleta</label>
+          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }} htmlFor="boleta-mensaje">💬 Mensaje personalizado para esta boleta</label>
           <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 10px" }}>Cualquier trabajador puede agregar aquí una nota para el tutor — aparece en cursiva dorada dentro de la boleta.</p>
-          <input type="text" placeholder="ej. ¡Gracias por otro mes con nosotros!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+          <input id="boleta-mensaje" type="text" placeholder="ej. ¡Gracias por otro mes con nosotros!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
         </div>
 
-        <h2 style={{ ...sectionTitle, marginTop: 26 }}>2. Plan de paseos</h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <h2 style={{ ...sectionTitle, marginTop: 26 }} id="boleta-plan-label">2. Plan de paseos</h2>
+        <div role="group" aria-labelledby="boleta-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
           {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
-            <button key={p.id} onClick={() => aplicarPlan(p.id)} type="button"
+            <button key={p.id} onClick={() => aplicarPlan(p.id)} type="button" aria-pressed={planId === p.id}
               style={{
                 padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
                 border: planId === p.id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -1439,7 +1544,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
               {p.nombre}
             </button>
           ))}
-          <button onClick={() => setPlanId("PERSONALIZADO")} type="button"
+          <button onClick={() => setPlanId("PERSONALIZADO")} type="button" aria-pressed={planId === "PERSONALIZADO"}
             style={{
               padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
               border: planId === "PERSONALIZADO" ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
@@ -1450,9 +1555,9 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           </button>
         </div>
         {planId === "PERSONALIZADO" && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <div role="group" aria-label="Días de paseo personalizados" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             {DIAS_SEMANA_LARGO.map((d, dow) => (
-              <button key={dow} type="button" onClick={() => toggleDiaSemanaPersonalizado(dow)}
+              <button key={dow} type="button" onClick={() => toggleDiaSemanaPersonalizado(dow)} aria-pressed={diasSemanaPersonalizado.includes(dow)}
                 style={{
                   padding: "7px 12px", borderRadius: 8, fontSize: 12.5, cursor: "pointer",
                   border: diasSemanaPersonalizado.includes(dow) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -1468,12 +1573,12 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         <Calendario anio={anio} mesIdx={mesIdx} seleccionados={dias} onToggle={toggleDia} />
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }}>3. Valor y descuentos</h2>
-        <label style={label}>Valor del paseo este mes</label>
-        <input type="number" value={valorPaseo} onChange={(e) => { setValorPaseo(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label}>Paseos cancelados el mes anterior a descontar</label>
-        <input type="number" min="0" value={paseosCancelados} onChange={(e) => { setPaseosCancelados(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label}>Opcional: agregar paseo(s) del mes anterior no facturados</label>
-        <input type="number" min="0" value={paseosMesAnterior} onChange={(e) => { setPaseosMesAnterior(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="boleta-valor-paseo">Valor del paseo este mes</label>
+        <input id="boleta-valor-paseo" type="number" value={valorPaseo} onChange={(e) => { setValorPaseo(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="boleta-paseos-cancelados">Paseos cancelados el mes anterior a descontar</label>
+        <input id="boleta-paseos-cancelados" type="number" min="0" value={paseosCancelados} onChange={(e) => { setPaseosCancelados(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="boleta-paseos-mes-anterior">Opcional: agregar paseo(s) del mes anterior no facturados</label>
+        <input id="boleta-paseos-mes-anterior" type="number" min="0" value={paseosMesAnterior} onChange={(e) => { setPaseosMesAnterior(e.target.value); setEmitida(null); }} style={input} />
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }}>4. Servicios adicionales (opcional)</h2>
 
@@ -1484,16 +1589,16 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         {dogsitterActivo && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
             <div>
-              <label style={label}>Precio</label>
-              <input type="number" min="0" placeholder="$" value={dogsitterPrecio} onChange={(e) => { setDogsitterPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-dogsitter-precio">Precio</label>
+              <input id="boleta-dogsitter-precio" type="number" min="0" placeholder="$" value={dogsitterPrecio} onChange={(e) => { setDogsitterPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
             <div>
-              <label style={label}>Días</label>
-              <input type="text" placeholder="ej. 3 días" value={dogsitterDias} onChange={(e) => { setDogsitterDias(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-dogsitter-dias">Días</label>
+              <input id="boleta-dogsitter-dias" type="text" placeholder="ej. 3 días" value={dogsitterDias} onChange={(e) => { setDogsitterDias(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
             <div style={{ gridColumn: "span 2" }}>
-              <label style={label}>Nota breve (opcional)</label>
-              <input type="text" placeholder="ej. quedó en casa del cliente" value={dogsitterNota} onChange={(e) => { setDogsitterNota(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-dogsitter-nota">Nota breve (opcional)</label>
+              <input id="boleta-dogsitter-nota" type="text" placeholder="ej. quedó en casa del cliente" value={dogsitterNota} onChange={(e) => { setDogsitterNota(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
           </div>
         )}
@@ -1505,16 +1610,16 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         {paseoLargoActivo && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
             <div>
-              <label style={label}>Precio</label>
-              <input type="number" min="0" placeholder="$" value={paseoLargoPrecio} onChange={(e) => { setPaseoLargoPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-paseolargo-precio">Precio</label>
+              <input id="boleta-paseolargo-precio" type="number" min="0" placeholder="$" value={paseoLargoPrecio} onChange={(e) => { setPaseoLargoPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
             <div>
-              <label style={label}>Tiempo</label>
-              <input type="text" placeholder="ej. 1.5 horas" value={paseoLargoTiempo} onChange={(e) => { setPaseoLargoTiempo(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-paseolargo-tiempo">Tiempo</label>
+              <input id="boleta-paseolargo-tiempo" type="text" placeholder="ej. 1.5 horas" value={paseoLargoTiempo} onChange={(e) => { setPaseoLargoTiempo(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
             <div style={{ gridColumn: "span 2" }}>
-              <label style={label}>Nota breve (opcional)</label>
-              <input type="text" placeholder="ej. fue al cerro con otro perro" value={paseoLargoNota} onChange={(e) => { setPaseoLargoNota(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="boleta-paseolargo-nota">Nota breve (opcional)</label>
+              <input id="boleta-paseolargo-nota" type="text" placeholder="ej. fue al cerro con otro perro" value={paseoLargoNota} onChange={(e) => { setPaseoLargoNota(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
             </div>
           </div>
         )}
@@ -1608,7 +1713,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
 }
 
 // ---------- Formulario de registro / edición de cliente ----------
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
 function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
@@ -1663,10 +1768,10 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         </div>
       </div>
 
-      <label style={{ ...label, marginTop: 18 }}>Plan que normalmente contrata</label>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+      <p style={{ ...label, marginTop: 18 }} id="cliente-plan-label">Plan que normalmente contrata</p>
+      <div role="group" aria-labelledby="cliente-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
-          <button key={p.id} type="button" onClick={() => elegirPlan(p.id)}
+          <button key={p.id} type="button" onClick={() => elegirPlan(p.id)} aria-pressed={form.planHabitual === p.id}
             style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
               border: form.planHabitual === p.id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
               background: form.planHabitual === p.id ? NAVY : "#FFFFFF",
@@ -1676,10 +1781,10 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         ))}
       </div>
 
-      <label style={label}>Días de paseo habituales</label>
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+      <p style={label} id="cliente-dias-label">Días de paseo habituales</p>
+      <div role="group" aria-labelledby="cliente-dias-label" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {DIAS_SEMANA.map((d, dow) => (
-          <button key={dow} type="button" onClick={() => toggleDiaHabitual(dow)}
+          <button key={dow} type="button" onClick={() => toggleDiaHabitual(dow)} aria-pressed={form.diasHabituales.includes(dow)}
             style={{ width: 34, height: 34, borderRadius: 8, cursor: "pointer",
               border: form.diasHabituales.includes(dow) ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
               background: form.diasHabituales.includes(dow) ? NAVY : "#FFFFFF",
@@ -1689,7 +1794,10 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         ))}
       </div>
 
-      <label style={label}>Estado del cliente y fecha de inicio</label>
+      <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
+      <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />
+
+      <p style={label}>Estado del cliente y fecha de inicio</p>
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
         <select value={form.estadoCliente} onChange={(e) => setForm({ ...form, estadoCliente: e.target.value })} style={{ ...input, marginBottom: 0 }}>
           {ESTADOS_CLIENTE.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
@@ -1697,10 +1805,10 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         <input type="date" value={form.fechaInicio} onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })} style={{ ...input, marginBottom: 0 }} />
       </div>
 
-      <label style={label}>Tipo de servicio</label>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+      <p style={label} id="cliente-tiposervicio-label">Tipo de servicio</p>
+      <div role="group" aria-labelledby="cliente-tiposervicio-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         {TIPOS_SERVICIO.map((t) => (
-          <button key={t.id} type="button" onClick={() => toggleTipoServicio(t.id)}
+          <button key={t.id} type="button" onClick={() => toggleTipoServicio(t.id)} aria-pressed={form.tipoServicio.includes(t.id)}
             style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
               border: form.tipoServicio.includes(t.id) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
               background: form.tipoServicio.includes(t.id) ? NAVY : "#FFFFFF",
@@ -1713,11 +1821,11 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         <p style={{ ...hint, marginTop: -10 }}>Para agendar la evaluación con el adiestrador, guarda la ficha y ve a la pestaña "Agenda".</p>
       )}
 
-      <label style={label}>Objetivos a cumplir</label>
-      <textarea value={form.objetivos} onChange={(e) => setForm({ ...form, objetivos: e.target.value })} placeholder="Ej. socialización, bajar ansiedad, mejorar caminata con correa..."
+      <label style={label} htmlFor="cliente-objetivos">Objetivos a cumplir</label>
+      <textarea id="cliente-objetivos" value={form.objetivos} onChange={(e) => setForm({ ...form, objetivos: e.target.value })} placeholder="Ej. socialización, bajar ansiedad, mejorar caminata con correa..."
         style={{ ...input, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
 
-      <label style={label}>Paseador asignado</label>
+      <p style={label}>Paseador asignado</p>
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
         <select value={form.paseadorNombre} onChange={(e) => setForm({ ...form, paseadorNombre: e.target.value })} style={{ ...input, marginBottom: 0 }}>
           <option value="">Sin asignar</option>
@@ -1736,10 +1844,13 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
 }
 
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, onVolver, onEditar, onEliminar, puedeEliminar }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
-  const totalHistorico = boletasCliente.reduce((acc, b) => acc + b.total, 0);
-  const boletasOrdenadas = [...boletasCliente].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  const historialVentas = [
+    ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
+    ...boletasAdiestramientoCliente.map((b) => ({ ...b, _tipo: "adiestramiento" })),
+  ].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  const totalHistorico = historialVentas.reduce((acc, b) => acc + b.total, 0);
 
   return (
     <div>
@@ -1772,7 +1883,7 @@ function PerfilCliente({ cliente, boletasCliente, onVolver, onEditar, onEliminar
           </div>
           <div style={{ display: "flex", gap: 8, flex: "none" }}>
             <button onClick={onEditar} style={botonSecundario}>Editar</button>
-            {puedeEliminar && <button onClick={onEliminar} style={{ ...botonSecundario, borderColor: RUST, color: RUST }}>Eliminar</button>}
+            {puedeEliminar && <BotonEliminar onConfirm={onEliminar} style={{ ...botonSecundario, borderColor: RUST, color: RUST }} />}
           </div>
         </div>
 
@@ -1799,7 +1910,7 @@ function PerfilCliente({ cliente, boletasCliente, onVolver, onEditar, onEliminar
         </div>
 
         <div style={{ marginTop: 20 }}>
-          <p style={label}>Días de paseo habituales</p>
+          <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
           <div style={{ display: "flex", gap: 6 }}>
             {DIAS_SEMANA.map((d, dow) => (
               <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
@@ -1816,16 +1927,14 @@ function PerfilCliente({ cliente, boletasCliente, onVolver, onEditar, onEliminar
         </div>
 
         <div style={{ marginTop: 26 }}>
-          <p style={label}>Historial de boletas</p>
-          {boletasOrdenadas.length === 0 ? (
+          <p style={label}>Historial de ventas</p>
+          {historialVentas.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>Todavía no se le ha generado ninguna boleta.</p>
           ) : (
             <div>
-              {boletasOrdenadas.map((b) => (
-                <div key={b.numero} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                  <span style={{ color: INK }}>N°{String(b.numero).padStart(3, "0")} · {b.mes} {b.anio} · {b.cantidad} paseos</span>
-                  <b style={{ color: NAVY }}>{fmtCLP(b.total)}</b>
-                </div>
+              {historialVentas.map((b) => (
+                <FilaBoletaVenta key={`${b._tipo}-${b.numero}`} boleta={b} tipo={b._tipo}
+                  setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} />
               ))}
             </div>
           )}
@@ -1836,7 +1945,7 @@ function PerfilCliente({ cliente, boletasCliente, onVolver, onEditar, onEliminar
 }
 
 // ---------- Clientes (base de datos madre) ----------
-function Clientes({ clientes, setClientes, boletasEmitidas, usuarios, puedeEliminar }) {
+function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -1862,6 +1971,9 @@ function Clientes({ clientes, setClientes, boletasEmitidas, usuarios, puedeElimi
       <PerfilCliente
         cliente={clientePerfil}
         boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clientePerfil))}
+        boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
+        setBoletasEmitidas={setBoletasEmitidas}
+        setBoletasAdiestramiento={setBoletasAdiestramiento}
         onVolver={() => setPerfilId(null)}
         onEditar={() => { setEditandoId(clientePerfil.id); setPerfilId(null); setMostrarForm(true); }}
         onEliminar={() => { setClientes((prev) => prev.filter((x) => x.id !== clientePerfil.id)); setPerfilId(null); }}
@@ -1947,25 +2059,33 @@ function Clientes({ clientes, setClientes, boletasEmitidas, usuarios, puedeElimi
       <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: "6px 0 0" }}>{filtrados.length} de {clientes.length} cliente(s)</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14, marginTop: 14 }}>
-        {filtrados.map((c) => (
-          <button key={c.id} onClick={() => setPerfilId(c.id)} style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: 16, cursor: "pointer", font: "inherit" }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
-              <div>
-                <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
-                <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
-              {c.telefono || "Sin teléfono"}<br />
-              Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
-              Paseador: {c.paseadorNombre || "sin asignar"}
-              {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
-            </div>
-          </button>
-        ))}
-        {filtrados.length === 0 && (
-          <p style={{ ...hint, gridColumn: "1 / -1" }}>No se encontraron clientes con "{busqueda}".</p>
+        {cargandoClientes ? (
+          <p style={{ ...hint, gridColumn: "1 / -1" }}>Cargando clientes…</p>
+        ) : (
+          <>
+            {filtrados.map((c) => (
+              <button key={c.id} onClick={() => setPerfilId(c.id)} style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: 16, cursor: "pointer", font: "inherit" }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
+                  <div>
+                    <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
+                    <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
+                  {c.telefono || "Sin teléfono"}<br />
+                  Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
+                  Paseador: {c.paseadorNombre || "sin asignar"}
+                  {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
+                </div>
+              </button>
+            ))}
+            {filtrados.length === 0 && (
+              <p style={{ ...hint, gridColumn: "1 / -1" }}>
+                {clientes.length === 0 ? "No hay clientes registrados todavía." : `No se encontraron clientes con "${busqueda}".`}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -1983,7 +2103,7 @@ function inicioSemana(fecha) {
 
 function calcularTotales(lista) {
   const ingresos = lista.reduce((acc, b) => acc + b.total, 0);
-  const paseos = lista.reduce((acc, b) => acc + b.cantidad, 0);
+  const paseos = lista.reduce((acc, b) => acc + (b.cantidad || 0), 0);
   const descuentos = lista.reduce((acc, b) => acc + (b.descuento || 0), 0);
   return { ingresos, paseos, descuentos, cantidad: lista.length };
 }
@@ -1993,9 +2113,14 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-function Finanzas({ boletasEmitidas, clientes, pagosRegistrados = [] }) {
+function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagosRegistrados = [] }) {
   const [periodo, setPeriodo] = useState("semana");
   const hoy = new Date();
+
+  const todasLasBoletas = useMemo(() => [
+    ...boletasEmitidas,
+    ...boletasAdiestramiento.map((b) => ({ ...b, cantidad: 0, descuento: (b.descuentoPackMonto || 0) })),
+  ], [boletasEmitidas, boletasAdiestramiento]);
 
   const { actualDesde, anteriorDesde, anteriorHasta } = useMemo(() => {
     if (periodo === "semana") {
@@ -2013,8 +2138,8 @@ function Finanzas({ boletasEmitidas, clientes, pagosRegistrados = [] }) {
     return { actualDesde: inicioActual, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
   }, [periodo]);
 
-  const filtradas = useMemo(() => boletasEmitidas.filter((b) => new Date(b.fechaISO) >= actualDesde), [boletasEmitidas, actualDesde]);
-  const anteriores = useMemo(() => boletasEmitidas.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }), [boletasEmitidas, anteriorDesde, anteriorHasta]);
+  const filtradas = useMemo(() => todasLasBoletas.filter((b) => new Date(b.fechaISO) >= actualDesde), [todasLasBoletas, actualDesde]);
+  const anteriores = useMemo(() => todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }), [todasLasBoletas, anteriorDesde, anteriorHasta]);
 
   const actual = calcularTotales(filtradas);
   const anterior = calcularTotales(anteriores);
@@ -2037,7 +2162,7 @@ function Finanzas({ boletasEmitidas, clientes, pagosRegistrados = [] }) {
     if (periodo === "año") {
       return MESES.map((m, i) => ({
         etiqueta: m.slice(0, 3),
-        total: boletasEmitidas.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === i && f.getFullYear() === hoy.getFullYear(); }).reduce((acc, b) => acc + b.total, 0),
+        total: todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === i && f.getFullYear() === hoy.getFullYear(); }).reduce((acc, b) => acc + b.total, 0),
       }));
     }
     const mapa = {};
@@ -2047,14 +2172,14 @@ function Finanzas({ boletasEmitidas, clientes, pagosRegistrados = [] }) {
       mapa[clave] = (mapa[clave] || 0) + b.total;
     });
     return Object.entries(mapa).map(([etiqueta, total]) => ({ etiqueta, total }));
-  }, [filtradas, periodo, boletasEmitidas]);
+  }, [filtradas, periodo, todasLasBoletas]);
 
   const clientesSinBoletaEsteMes = useMemo(() => {
-    return clientes.filter((c) => !boletasEmitidas.some((b) => {
+    return clientes.filter((c) => !todasLasBoletas.some((b) => {
       const f = new Date(b.fechaISO);
       return esBoletaDeCliente(b, c) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
     }));
-  }, [clientes, boletasEmitidas]);
+  }, [clientes, todasLasBoletas]);
 
   const porTipoServicio = useMemo(() => {
     return TIPOS_SERVICIO.map((t) => {
@@ -2068,7 +2193,7 @@ function Finanzas({ boletasEmitidas, clientes, pagosRegistrados = [] }) {
     return clientes.filter((c) => (c.estadoCliente || "activo") === "activo")
       .reduce((acc, c) => acc + diasSegunPlan(mesActualIdx, anioActualN, c.diasHabituales || []).length * Number(c.valorPaseoRef || 0), 0);
   }, [clientes, mesActualIdx, anioActualN]);
-  const facturadoEsteMes = boletasEmitidas.filter((b) => b.mes === MESES[mesActualIdx] && b.anio === anioActualN).reduce((acc, b) => acc + b.total, 0);
+  const facturadoEsteMes = todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === mesActualIdx && f.getFullYear() === anioActualN; }).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
 
   const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año" }[periodo];
@@ -2234,7 +2359,6 @@ function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg) {
     ctx.restore();
   }
 
-  const NAVY_LOGO = "#102A41";
   ctx.fillStyle = NAVY_LOGO;
   ctx.fillRect(0, 0, W, 130);
   if (logoImg) {
@@ -2458,8 +2582,8 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
     <div className="howria-split" style={{ display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 28 }}>
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>1. Cliente</h2>
-        <label style={label}>N° de boleta</label>
-        <input type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
+        <label style={label} htmlFor="badiestramiento-numero">N° de boleta</label>
+        <input id="badiestramiento-numero" type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 14 }}>
           <input type="checkbox" checked={clienteManual} onChange={(e) => { setClienteManual(e.target.checked); setEmitida(null); }} style={{ width: 16, height: 16 }} />
@@ -2468,15 +2592,15 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
 
         {clienteManual ? (
           <>
-            <label style={label}>Nombre para la boleta</label>
-            <input type="text" placeholder="Nombre del tutor" value={nombreManual} onChange={(e) => { setNombreManual(e.target.value); setEmitida(null); }} style={input} />
-            <label style={label}>Nombre del perrito</label>
-            <input type="text" placeholder="Nombre del perro" value={perroManual} onChange={(e) => { setPerroManual(e.target.value); setEmitida(null); }} style={input} />
+            <label style={label} htmlFor="badiestramiento-nombre-manual">Nombre para la boleta</label>
+            <input id="badiestramiento-nombre-manual" type="text" placeholder="Nombre del tutor" value={nombreManual} onChange={(e) => { setNombreManual(e.target.value); setEmitida(null); }} style={input} />
+            <label style={label} htmlFor="badiestramiento-perro-manual">Nombre del perrito</label>
+            <input id="badiestramiento-perro-manual" type="text" placeholder="Nombre del perro" value={perroManual} onChange={(e) => { setPerroManual(e.target.value); setEmitida(null); }} style={input} />
           </>
         ) : (
           <>
-            <label style={label}>Cliente (con "Clases de adiestramiento" marcado en su ficha)</label>
-            <select value={clienteId} onChange={(e) => { setClienteId(e.target.value); setEmitida(null); }} style={input}>
+            <label style={label} htmlFor="badiestramiento-cliente">Cliente (con "Clases de adiestramiento" marcado en su ficha)</label>
+            <select id="badiestramiento-cliente" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setEmitida(null); }} style={input}>
               {clientesAdiestramiento.length === 0 && <option value="">No hay clientes marcados con "Clases"</option>}
               {clientesAdiestramiento.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
             </select>
@@ -2484,10 +2608,10 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
         )}
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }}>2. Clases</h2>
-        <label style={label}>Modalidad</label>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <p style={label} id="badiestramiento-modalidad-label">Modalidad</p>
+        <div role="group" aria-labelledby="badiestramiento-modalidad-label" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           {["individual", "grupal"].map((m) => (
-            <button key={m} type="button" onClick={() => { setModalidad(m); setEmitida(null); }}
+            <button key={m} type="button" onClick={() => { setModalidad(m); setEmitida(null); }} aria-pressed={modalidad === m}
               style={{
                 padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer", textTransform: "capitalize",
                 border: modalidad === m ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -2499,27 +2623,27 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
           ))}
         </div>
 
-        <label style={label}>Pack (sugerencias) — o edita a mano abajo</label>
+        <p style={label}>Pack (sugerencias) — o edita a mano abajo</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           <button type="button" onClick={() => elegirPack(4, 0, 20000)} style={botonSecundario}>Pack 4 clases — ahorra $20.000</button>
           <button type="button" onClick={() => elegirPack(8, 10)} style={botonSecundario}>8 clases — ahorra 10%</button>
           <button type="button" onClick={() => elegirPack(12, 15)} style={botonSecundario}>12 clases — ahorra 15%</button>
         </div>
 
-        <label style={label}>Número de clases</label>
-        <input type="number" min="1" value={numClases} onChange={(e) => { setNumClases(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label}>Precio por clase</label>
-        <input type="number" min="0" value={precioClase} onChange={(e) => { setPrecioClase(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label}>Descuento por pack (%)</label>
-        <input type="number" min="0" max="100" value={descuentoPackPct} onChange={(e) => { setDescuentoPackPct(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label}>Descuento por pack (monto fijo, opcional)</label>
-        <input type="number" min="0" value={descuentoPackMonto} onChange={(e) => { setDescuentoPackMonto(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="badiestramiento-num-clases">Número de clases</label>
+        <input id="badiestramiento-num-clases" type="number" min="1" value={numClases} onChange={(e) => { setNumClases(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="badiestramiento-precio-clase">Precio por clase</label>
+        <input id="badiestramiento-precio-clase" type="number" min="0" value={precioClase} onChange={(e) => { setPrecioClase(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="badiestramiento-descuento-pct">Descuento por pack (%)</label>
+        <input id="badiestramiento-descuento-pct" type="number" min="0" max="100" value={descuentoPackPct} onChange={(e) => { setDescuentoPackPct(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="badiestramiento-descuento-monto">Descuento por pack (monto fijo, opcional)</label>
+        <input id="badiestramiento-descuento-monto" type="number" min="0" value={descuentoPackMonto} onChange={(e) => { setDescuentoPackMonto(e.target.value); setEmitida(null); }} style={input} />
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }}>3. Evaluación y transporte</h2>
-        <label style={label}>Evaluación</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <p style={label} id="badiestramiento-evaluacion-label">Evaluación</p>
+        <div role="group" aria-labelledby="badiestramiento-evaluacion-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {[{ id: "ninguna", label: "Sin evaluación" }, { id: "presencial", label: "Presencial" }, { id: "online", label: "Online" }].map((e) => (
-            <button key={e.id} type="button" onClick={() => { setEvaluacion(e.id); setEmitida(null); }}
+            <button key={e.id} type="button" onClick={() => { setEvaluacion(e.id); setEmitida(null); }} aria-pressed={evaluacion === e.id}
               style={{
                 padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
                 border: evaluacion === e.id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -2532,16 +2656,16 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
         </div>
         {evaluacion !== "ninguna" && (
           <>
-            <label style={label}>Precio de la evaluación</label>
-            <input type="number" min="0" value={precioEvaluacion} onChange={(e) => { setPrecioEvaluacion(e.target.value); setEmitida(null); }} style={input} />
+            <label style={label} htmlFor="badiestramiento-precio-evaluacion">Precio de la evaluación</label>
+            <input id="badiestramiento-precio-evaluacion" type="number" min="0" value={precioEvaluacion} onChange={(e) => { setPrecioEvaluacion(e.target.value); setEmitida(null); }} style={input} />
           </>
         )}
-        <label style={label}>Precio de transporte (opcional)</label>
-        <input type="number" min="0" value={transporte} onChange={(e) => { setTransporte(e.target.value); setEmitida(null); }} style={input} />
+        <label style={label} htmlFor="badiestramiento-precio-transporte">Precio de transporte (opcional)</label>
+        <input id="badiestramiento-precio-transporte" type="number" min="0" value={transporte} onChange={(e) => { setTransporte(e.target.value); setEmitida(null); }} style={input} />
 
         <div style={{ marginTop: 20, padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8 }}>
-          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }}>💬 Mensaje personalizado para esta boleta</label>
-          <input type="text" placeholder="ej. ¡Nos vemos en la próxima clase!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }} htmlFor="badiestramiento-mensaje">💬 Mensaje personalizado para esta boleta</label>
+          <input id="badiestramiento-mensaje" type="text" placeholder="ej. ¡Nos vemos en la próxima clase!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
         </div>
 
         <div style={{ marginTop: 20, padding: "16px 18px", background: CREAM_SOFT, borderRadius: 8 }}>
@@ -2600,49 +2724,59 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
 // ---------- Facturas ----------
 const FORMAS_PAGO = ["Transferencia", "Efectivo", "Webpay/Tarjeta", "Otro"];
 
-function Facturas({ boletasEmitidas, setBoletasEmitidas, clientes }) {
+function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, cargandoBoletas }) {
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [filtroCliente, setFiltroCliente] = useState("todos");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const [pagoPendienteId, setPagoPendienteId] = useState(null);
+  const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null);
+  const [editandoBoleta, setEditandoBoleta] = useState(null);
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
 
-  function cambiarEstado(numero, estado) {
-    if (estado === "pagada") {
-      setPagoPendienteId(numero);
+  const todasLasBoletas = useMemo(() => [
+    ...boletasEmitidas.map((b) => ({ ...b, _tipo: "paseo" })),
+    ...boletasAdiestramiento.map((b) => ({ ...b, _tipo: "adiestramiento" })),
+  ], [boletasEmitidas, boletasAdiestramiento]);
+
+  function setterDe(tipo) {
+    return tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
+  }
+
+  function cambiarEstado(boleta, estado) {
+    if (estado === "pagada" && boleta._tipo === "paseo") {
+      setPagoPendienteNumero(boleta.numero);
       setFechaPagoForm(new Date().toISOString().slice(0, 10));
       setFormaPagoForm(FORMAS_PAGO[0]);
       return;
     }
-    setBoletasEmitidas((prev) => prev.map((b) => (b.numero === numero ? { ...b, estado, fechaPago: undefined, formaPago: undefined } : b)));
+    editarBoleta(setterDe(boleta._tipo), boleta.numero, estado === "pagada" ? { estado } : { estado, fechaPago: undefined, formaPago: undefined });
   }
 
   function confirmarPago() {
-    setBoletasEmitidas((prev) => prev.map((b) => (b.numero === pagoPendienteId ? { ...b, estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm } : b)));
-    setPagoPendienteId(null);
+    editarBoleta(setBoletasEmitidas, pagoPendienteNumero, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    setPagoPendienteNumero(null);
   }
 
   const conteos = useMemo(() => {
-    const c = { todas: boletasEmitidas.length };
-    ESTADOS_FACTURA.forEach((e) => { c[e.id] = boletasEmitidas.filter((b) => b.estado === e.id).length; });
+    const c = { todas: todasLasBoletas.length };
+    ESTADOS_FACTURA.forEach((e) => { c[e.id] = todasLasBoletas.filter((b) => b.estado === e.id).length; });
     return c;
-  }, [boletasEmitidas]);
+  }, [todasLasBoletas]);
 
   const lista = useMemo(() => {
-    return boletasEmitidas
+    return todasLasBoletas
       .filter((b) => filtroEstado === "todas" || b.estado === filtroEstado)
       .filter((b) => filtroCliente === "todos" || b.cliente === filtroCliente)
       .filter((b) => !desde || fechaKey(new Date(b.fechaISO)) >= desde)
       .filter((b) => !hasta || fechaKey(new Date(b.fechaISO)) <= hasta)
-      .filter((b) => !busqueda.trim() || b.cliente.toLowerCase().includes(busqueda.trim().toLowerCase()) || b.perro.toLowerCase().includes(busqueda.trim().toLowerCase()))
+      .filter((b) => !busqueda.trim() || b.cliente.toLowerCase().includes(busqueda.trim().toLowerCase()) || (b.perro || "").toLowerCase().includes(busqueda.trim().toLowerCase()))
       .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  }, [boletasEmitidas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
+  }, [todasLasBoletas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
 
   const totalListado = lista.reduce((acc, b) => acc + b.total, 0);
-  const nombresClientes = [...new Set(boletasEmitidas.map((b) => b.cliente))];
+  const nombresClientes = [...new Set(todasLasBoletas.map((b) => b.cliente))];
 
   return (
     <div className="howria-card" style={tarjeta}>
@@ -2685,16 +2819,16 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, clientes }) {
         <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
       </div>
 
-      {pagoPendienteId && (
+      {pagoPendienteNumero && (
         <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 14, marginBottom: 14 }}>
-          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#2F6A46" }}>Confirmar pago de la boleta N°{String(pagoPendienteId).padStart(3, "0")}</p>
+          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#2F6A46" }}>Confirmar pago de la boleta N°{String(pagoPendienteNumero).padStart(3, "0")}</p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 160 }} />
             <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 180 }}>
               {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
             <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Confirmar</button>
-            <button onClick={() => setPagoPendienteId(null)} style={botonSecundario}>Cancelar</button>
+            <button onClick={() => setPagoPendienteNumero(null)} style={botonSecundario}>Cancelar</button>
           </div>
         </div>
       )}
@@ -2704,6 +2838,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, clientes }) {
           <thead>
             <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
               <th style={{ padding: "8px 10px" }}>N°</th>
+              <th style={{ padding: "8px 10px" }}>Tipo</th>
               <th style={{ padding: "8px 10px" }}>Cliente</th>
               <th style={{ padding: "8px 10px" }}>Perro</th>
               <th style={{ padding: "8px 10px" }}>Período</th>
@@ -2711,31 +2846,60 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, clientes }) {
               <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
               <th style={{ padding: "8px 10px" }}>Estado</th>
               <th style={{ padding: "8px 10px" }}>Pago</th>
+              <th style={{ padding: "8px 10px" }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {lista.map((b) => {
-              const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
-              return (
-                <tr key={b.numero} style={{ borderTop: "1px solid #EDE4CE" }}>
-                  <td style={{ padding: "10px" }}>{String(b.numero).padStart(3, "0")}</td>
-                  <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
-                  <td style={{ padding: "10px" }}>🐾 {b.perro}</td>
-                  <td style={{ padding: "10px" }}>{b.mes} {b.anio}</td>
-                  <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
-                  <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
-                  <td style={{ padding: "10px" }}>
-                    <select value={b.estado} onChange={(e) => cambiarEstado(b.numero, e.target.value)}
-                      style={{ border: "none", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", background: est.bg, color: est.color }}>
-                      {ESTADOS_FACTURA.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
-                </tr>
-              );
-            })}
-            {lista.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay facturas que coincidan.</td></tr>
+            {cargandoBoletas ? (
+              <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>Cargando facturas…</td></tr>
+            ) : (
+              <>
+                {lista.map((b) => {
+                  const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
+                  const claveFila = `${b._tipo}-${b.numero}`;
+                  return (
+                    <React.Fragment key={claveFila}>
+                      <tr style={{ borderTop: "1px solid #EDE4CE" }}>
+                        <td style={{ padding: "10px" }}>{String(b.numero).padStart(3, "0")}</td>
+                        <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
+                        <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
+                        <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
+                        <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`}</td>
+                        <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
+                        <td style={{ padding: "10px" }}>
+                          <select value={b.estado} onChange={(e) => cambiarEstado(b, e.target.value)}
+                            style={{ border: "none", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", background: est.bg, color: est.color }}>
+                            {ESTADOS_FACTURA.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
+                        <td style={{ padding: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            {b.estado === "no_enviada" && (
+                              <button onClick={() => aceptarBoleta(setterDe(b._tipo), b.numero)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
+                            )}
+                            <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
+                            <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b.numero)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                          </div>
+                        </td>
+                      </tr>
+                      {editandoBoleta === claveFila && (
+                        <tr>
+                          <td colSpan={10} style={{ padding: "0 10px 12px" }}>
+                            <EditorBoletaBasico boleta={b} tipo={b._tipo}
+                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b.numero, cambios); setEditandoBoleta(null); }}
+                              onCancelar={() => setEditandoBoleta(null)} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {lista.length === 0 && (
+                  <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay facturas que coincidan.</td></tr>
+                )}
+              </>
             )}
           </tbody>
         </table>
@@ -2745,13 +2909,15 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, clientes }) {
 }
 
 // ---------- Panel admin (usuarios) ----------
-function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, esAdmin }) {
+function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, esAdmin, cargandoUsuarios }) {
   const [busqueda, setBusqueda] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
   const [borrarId, setBorrarId] = useState(null);
   const [nuevo, setNuevo] = useState({ nombre: "", rol: "coordinador" });
-  const [avisoNuevo, setAvisoNuevo] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [credencialesNuevo, setCredencialesNuevo] = useState(null);
+  const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
 
   const filtrados = usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
@@ -2761,6 +2927,17 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
 
   function actualizarRol(id, rol) {
     setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, rol } : u)));
+  }
+
+  function toggleCapacitacion(id, pasoId) {
+    setUsuarios((prev) => prev.map((u) => {
+      if (u.id !== id) return u;
+      const actual = u.capacitacionCompletada || [];
+      const completado = actual.includes(pasoId)
+        ? actual.filter((p) => p !== pasoId)
+        : [...actual, pasoId];
+      return { ...u, capacitacionCompletada: completado };
+    }));
   }
 
   function empezarEdicionNombre(u) {
@@ -2785,12 +2962,21 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     setBorrarId(null);
   }
 
-  function agregar() {
-    if (!nuevo.nombre.trim()) return;
-    const email = slugEmailUsuario(nuevo.nombre);
-    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: nuevo.nombre.trim(), rol: nuevo.rol, email }]);
-    setAvisoNuevo(`Creado. Para que "${nuevo.nombre.trim()}" pueda entrar, ve a Supabase → Authentication → Add user, con el correo "${email}" y la contraseña que quieras darle.`);
+  async function agregar() {
+    if (!nuevo.nombre.trim() || creando) return;
+    setCreando(true);
+    const nombreNuevo = nuevo.nombre.trim();
+    const email = slugEmailUsuario(nombreNuevo);
+    const { password, error } = await crearCuentaAcceso(email);
+    if (error) {
+      showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
+      setCreando(false);
+      return;
+    }
+    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: nombreNuevo, rol: nuevo.rol, email }]);
+    setCredencialesNuevo({ nombre: nombreNuevo, email, password });
     setNuevo({ nombre: "", rol: "coordinador" });
+    setCreando(false);
   }
 
   return (
@@ -2842,7 +3028,8 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         <input placeholder="Buscar por nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginBottom: 16, maxWidth: 320 }} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtrados.map((u) => {
+          {cargandoUsuarios && <p style={{ color: "#8A7E5C", fontSize: 13.5 }}>Cargando usuarios…</p>}
+          {!cargandoUsuarios && filtrados.map((u) => {
             const esUsuarioActual = usuarioActual && u.email === usuarioActual.email;
             return (
               <div key={u.id} style={{ padding: "14px 16px", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 10 }}>
@@ -2875,6 +3062,10 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
 
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 12.5, color: "#6B6248" }}>{clientesDe(u.nombre)} cliente(s) asignado(s)</span>
+                    <button onClick={() => setCapacitacionAbiertaId(capacitacionAbiertaId === u.id ? null : u.id)}
+                      style={{ border: "1px solid #E4DBC3", background: "none", color: NAVY, borderRadius: 6, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
+                      Capacitación {(u.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {capacitacionAbiertaId === u.id ? "▴" : "▾"}
+                    </button>
                     <select value={u.rol} onChange={(e) => actualizarRol(u.id, e.target.value)} style={{ ...input, marginBottom: 0, width: 170, padding: "8px 10px", fontSize: 13 }}>
                       <option value="entrenador">Entrenador</option>
                       <option value="coordinador">Coordinador</option>
@@ -2894,10 +3085,23 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                     )}
                   </div>
                 </div>
+                {capacitacionAbiertaId === u.id && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F1EAD9", display: "flex", flexDirection: "column", gap: 8 }}>
+                    {PASOS_CAPACITACION.map((paso) => {
+                      const hecho = (u.capacitacionCompletada || []).includes(paso.id);
+                      return (
+                        <label key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: hecho ? "#2F6A46" : INK }}>
+                          <input type="checkbox" checked={hecho} onChange={() => toggleCapacitacion(u.id, paso.id)} />
+                          {paso.texto}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
-          {filtrados.length === 0 && <p style={{ color: "#8A7E5C", fontSize: 13.5 }}>No hay usuarios que coincidan con la búsqueda.</p>}
+          {!cargandoUsuarios && filtrados.length === 0 && <p style={{ color: "#8A7E5C", fontSize: 13.5 }}>No hay usuarios que coincidan con la búsqueda.</p>}
         </div>
 
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 14, lineHeight: 1.5 }}>
@@ -2917,11 +3121,17 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
             <option value="entrenador">Entrenador</option>
             <option value="administrador">Administrador general</option>
           </select>
-          <button onClick={agregar} disabled={!nuevo.nombre.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 22px", opacity: !nuevo.nombre.trim() ? 0.5 : 1 }}>Agregar</button>
+          <button onClick={agregar} disabled={!nuevo.nombre.trim() || creando} style={{ ...botonPrincipal, width: "auto", padding: "0 22px", opacity: !nuevo.nombre.trim() || creando ? 0.5 : 1 }}>
+            {creando ? "Creando cuenta..." : "Agregar"}
+          </button>
         </div>
-        {avisoNuevo && (
-          <div style={{ marginTop: 14, padding: "12px 14px", background: CREAM_SOFT, borderRadius: 8, fontSize: 13, color: "#5C5442", lineHeight: 1.5 }}>
-            {avisoNuevo}
+        {credencialesNuevo && (
+          <div style={{ marginTop: 14, padding: "14px 16px", background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, fontSize: 13, color: "#2F6A46", lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ Cuenta creada para {credencialesNuevo.nombre} — pásale estos datos para que pueda entrar:</p>
+            <p style={{ margin: 0 }}>Correo: <b>{credencialesNuevo.email}</b></p>
+            <p style={{ margin: "4px 0 10px" }}>Contraseña: <b style={{ fontFamily: "monospace", fontSize: 14 }}>{credencialesNuevo.password}</b></p>
+            <button onClick={() => navigator.clipboard.writeText(`Correo: ${credencialesNuevo.email}\nContraseña: ${credencialesNuevo.password}`)}
+              style={{ ...botonSecundario, padding: "6px 14px", fontSize: 12 }}>Copiar datos</button>
           </div>
         )}
       </div>
@@ -3012,7 +3222,7 @@ function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEspe
   return n;
 }
 
-function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados }) {
+function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos }) {
   const [periodo, setPeriodo] = useState("semana");
   const [ajustes, setAjustes] = useState({});
   const hoy = new Date();
@@ -3177,7 +3387,9 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
       </div>
 
       <p style={label}>Historial de pagos realizados</p>
-      {historial.length === 0 ? (
+      {cargandoPagos ? (
+        <p style={{ ...hint, marginTop: 8 }}>Cargando historial de pagos…</p>
+      ) : historial.length === 0 ? (
         <p style={{ ...hint, marginTop: 8 }}>Todavía no se ha marcado ningún pago.</p>
       ) : (
         <div>
@@ -3198,13 +3410,14 @@ function fechaKey(d) {
   return d.toISOString().slice(0, 10);
 }
 
-function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user }) {
+function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [notaAbiertaId, setNotaAbiertaId] = useState(null);
   const [notaTexto, setNotaTexto] = useState("");
 
+  const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
 
   const inicioSemanaVista = useMemo(() => {
@@ -3220,6 +3433,17 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user }) {
       return d;
     });
   }, [inicioSemanaVista]);
+
+  const resumenPorDiaSemana = diasSemanaVista.map((d, i) => {
+    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(i));
+    const realizados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.realizado).length;
+    const cancelados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.cancelado).length;
+    return { fecha: d, total: clientesDia.length, realizados, cancelados };
+  });
+  const totalSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.total, 0);
+  const realizadosSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.realizados, 0);
+  const canceladosSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.cancelados, 0);
+  const pendientesSemana = totalSemana - realizadosSemana - canceladosSemana;
 
   function actualizarRegistro(clienteId, fecha, cambios) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
@@ -3280,7 +3504,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <h2 style={sectionTitle}>Mis paseos</h2>
-            <p style={hint}>Marca los paseos que hiciste hoy — quedan registrados para el informe semanal y mensual.</p>
+            <p style={hint}>
+              {misClientes.length} cliente(s) asignado(s) · Capacitación {(miUsuario.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length}
+            </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => setSemanaOffset((s) => s - 1)} style={botonSecundario}>← Semana anterior</button>
@@ -3289,7 +3515,35 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 6, marginTop: 20, marginBottom: 20, flexWrap: "wrap" }}>
+        <p style={{ ...label, marginTop: 18 }}>Mi semana</p>
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
+          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 14 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#9BAAB8" }}>Programados</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>{totalSemana}</p>
+          </div>
+          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 14 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#2E5C41" }}>Realizados</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: "#2E5C41" }}>{realizadosSemana}</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 14 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C" }}>Pendientes</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: RUST }}>{pendientesSemana}{canceladosSemana > 0 ? ` (${canceladosSemana} cancelado(s))` : ""}</p>
+          </div>
+        </div>
+        <div className="howria-week" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginBottom: 20 }}>
+          {resumenPorDiaSemana.map((d, i) => {
+            const esHoyCol = fechaKey(d.fecha) === fechaKey(hoy);
+            return (
+              <div key={i} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
+                <p style={{ margin: 0, fontSize: 10.5, color: esHoyCol ? "#9BAAB8" : "#8A7E5C" }}>{DIAS_SEMANA[i]} {d.fecha.getDate()}</p>
+                <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 700, color: esHoyCol ? CREAM : NAVY }}>{d.realizados}/{d.total}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        <p style={label}>Detalle del día</p>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 20, flexWrap: "wrap" }}>
           {diasSemanaVista.map((d, i) => {
             const esHoy = fechaKey(d) === fechaKey(hoy);
             const esFuturo = d > hoy;
@@ -3369,6 +3623,51 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user }) {
       </div>
 
       <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Mis clientes y horarios ({misClientes.length})</h2>
+        <p style={hint}>Tu horario completo, para tenerlo siempre a mano.</p>
+        <div style={{ overflowX: "auto", marginTop: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
+                <th style={{ padding: "8px 10px" }}>Cliente</th>
+                <th style={{ padding: "8px 10px" }}>Perro</th>
+                <th style={{ padding: "8px 10px" }}>Días</th>
+                <th style={{ padding: "8px 10px" }}>Hora</th>
+                <th style={{ padding: "8px 10px" }}>Dirección</th>
+              </tr>
+            </thead>
+            <tbody>
+              {misClientes.map((c) => (
+                <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
+                  <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
+                  <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
+                  <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
+                  <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
+                  <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Mi capacitación</h2>
+        <p style={hint}>La marca tu coordinador o administrador a medida que la vas completando.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          {PASOS_CAPACITACION.map((paso) => {
+            const hecho = (miUsuario.capacitacionCompletada || []).includes(paso.id);
+            return (
+              <div key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: hecho ? "#2F6A46" : "#8A7E5C" }}>
+                <span>{hecho ? "✓" : "○"}</span>
+                {paso.texto}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Resumen del mes — {MESES[mesActual]} {anioActual}</h2>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
@@ -3414,12 +3713,65 @@ function inicioSemanaActual() {
 
 const UMBRAL_SOBRECARGA = 8;
 
-function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos }) {
+function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   const [busqueda, setBusqueda] = useState("");
+  const [diaOffset, setDiaOffset] = useState(0);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dowHoy = (hoy.getDay() + 6) % 7;
   const inicioSemana = inicioSemanaActual();
+
+  const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset]);
+  const dowVista = (diaVista.getDay() + 6) % 7;
+  const esHoyVista = diaOffset === 0;
+
+  function actualizarRegistroDia(clienteId, fecha, cambios) {
+    const key = `${clienteId}_${fechaKey(fecha)}`;
+    setRegistroPaseos((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...cambios } }));
+  }
+  function toggleRealizadoDia(clienteId, fecha) {
+    const key = `${clienteId}_${fechaKey(fecha)}`;
+    actualizarRegistroDia(clienteId, fecha, { realizado: !registroPaseos[key]?.realizado, cancelado: false });
+  }
+  function toggleCanceladoDia(clienteId, fecha) {
+    const key = `${clienteId}_${fechaKey(fecha)}`;
+    actualizarRegistroDia(clienteId, fecha, { cancelado: !registroPaseos[key]?.cancelado, realizado: false });
+  }
+  function irAMapa(nombrePaseador) {
+    setMapaPaseadorSel(nombrePaseador);
+    setTab("mapa");
+  }
+
+  const calendarioDia = useMemo(() => {
+    const ahora = new Date();
+    return clientes
+      .filter((c) => c.diasHabituales?.includes(dowVista))
+      .map((c) => {
+        const key = `${c.id}_${fechaKey(diaVista)}`;
+        const registro = registroPaseos[key];
+        const estado = registro?.realizado ? "realizado" : registro?.cancelado ? "cancelado" : "pendiente";
+        let atrasado = false;
+        if (esHoyVista && estado === "pendiente" && c.horaHabitual) {
+          const [h, m] = c.horaHabitual.split(":").map(Number);
+          const horaProgramada = new Date(diaVista);
+          horaProgramada.setHours(h, m, 0, 0);
+          atrasado = ahora > horaProgramada;
+        }
+        return { cliente: c, estado, nota: registro?.nota || "", atrasado };
+      })
+      .sort((a, b) => (a.cliente.horaHabitual || "99:99").localeCompare(b.cliente.horaHabitual || "99:99"));
+  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista]);
+
+  const calendarioPorPaseador = useMemo(() => {
+    const grupos = {};
+    calendarioDia.forEach((item) => {
+      const nombre = item.cliente.paseadorNombre || "Sin asignar";
+      (grupos[nombre] ||= []).push(item);
+    });
+    return Object.entries(grupos)
+      .map(([paseador, items]) => ({ paseador, items }))
+      .sort((a, b) => a.paseador.localeCompare(b.paseador, "es"));
+  }, [calendarioDia]);
 
   const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dowHoy));
   const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
@@ -3473,6 +3825,71 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={sectionTitle}>Calendario del día</h2>
+            <p style={hint}>Quién pasea a quién, a qué hora, y si ya se hizo — ordenado por paseador.</p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setDiaOffset((d) => d - 1)} style={botonSecundario}>← Día anterior</button>
+            <button onClick={() => setDiaOffset(0)} disabled={diaOffset === 0} style={{ ...botonSecundario, opacity: diaOffset === 0 ? 0.5 : 1 }}>Hoy</button>
+            <button onClick={() => setDiaOffset((d) => d + 1)} style={botonSecundario}>Día siguiente →</button>
+          </div>
+        </div>
+        <p style={{ ...hint, marginTop: 10 }}>
+          <b style={{ color: NAVY }}>{DIAS_LARGOS[dowVista]} {diaVista.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}</b>
+        </p>
+
+        {calendarioPorPaseador.length === 0 ? (
+          <p style={{ ...hint, marginTop: 12 }}>No hay paseos programados este día.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+            {calendarioPorPaseador.map(({ paseador, items }) => {
+              const hechos = items.filter((i) => i.estado === "realizado").length;
+              return (
+                <div key={paseador} style={{ border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, background: "#FFFFFF" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{items.length} hecho(s)</span></span>
+                    {paseador !== "Sin asignar" && (
+                      <button onClick={() => irAMapa(paseador)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Ver ruta en el mapa →</button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {items.map(({ cliente: c, estado, nota, atrasado }) => {
+                      const colorEstado = estado === "realizado" ? "#2F6A46" : estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
+                      const bgEstado = estado === "realizado" ? "#D8ECDE" : estado === "cancelado" ? "#F1DCD2" : atrasado ? "#F1DCD2" : "#F3E3B4";
+                      const textoEstado = estado === "realizado" ? "Realizado" : estado === "cancelado" ? "Cancelado" : atrasado ? "⚠️ Atrasado" : "Pendiente";
+                      return (
+                        <div key={c.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "8px 10px", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 8 }}>
+                          <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600, width: 52, flexShrink: 0 }}>{c.horaHabitual || "—"}</span>
+                          <span style={{ fontSize: 13, color: INK, flex: "1 1 160px" }}>{c.nombre} · 🐾 {c.perro}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: bgEstado, color: colorEstado, flexShrink: 0 }}>{textoEstado}</span>
+                          <select defaultValue="" onChange={(e) => { if (e.target.value) asignarPaseadorRapido(c.id, e.target.value); e.target.value = ""; }} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid #E4DBC3", flexShrink: 0 }}>
+                            <option value="">Reasignar...</option>
+                            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+                          </select>
+                          <button onClick={() => toggleRealizadoDia(c.id, diaVista)} disabled={diaVista > hoy}
+                            style={{ border: "none", background: "none", color: estado === "realizado" ? "#8A7E5C" : "#2F6A46", cursor: diaVista > hoy ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                            {estado === "realizado" ? "Desmarcar" : "Marcar realizado"}
+                          </button>
+                          <button onClick={() => toggleCanceladoDia(c.id, diaVista)}
+                            style={{ border: "none", background: "none", color: estado === "cancelado" ? "#8A7E5C" : RUST, cursor: "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                            {estado === "cancelado" ? "Desmarcar" : "Cancelar"}
+                          </button>
+                          <input defaultValue={nota} placeholder="nota..." onBlur={(e) => guardarNotaDia(c.id, diaVista, e.target.value)}
+                            style={{ fontSize: 11.5, padding: "4px 6px", border: "1px solid #E4DBC3", borderRadius: 6, flex: "1 1 120px", minWidth: 90 }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Control diario y semanal</h2>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 18 }}>
@@ -3714,9 +4131,9 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
 }
 
 // ---------- Mapa de rutas ----------
-function MapaRutas({ clientes, setClientes, usuarios }) {
+function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId }) {
   const paseadores = usuarios;
-  const [paseadorId, setPaseadorId] = useState(paseadores[0]?.nombre ?? "");
+  const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
   const [incluidos, setIncluidos] = useState({});
   const [velocidad, setVelocidad] = useState(20);
   const [duracionParada, setDuracionParada] = useState(25);
@@ -3780,18 +4197,18 @@ function MapaRutas({ clientes, setClientes, usuarios }) {
 
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, margin: "16px 0" }}>
           <div>
-            <label style={label}>Paseador</label>
-            <select value={paseadorId} onChange={(e) => { setPaseadorId(e.target.value); setIncluidos({}); setRuta(null); }} style={{ ...input, marginBottom: 0 }}>
+            <label style={label} htmlFor="mapa-paseador">Paseador</label>
+            <select id="mapa-paseador" value={paseadorId} onChange={(e) => { setPaseadorId(e.target.value); setIncluidos({}); setRuta(null); }} style={{ ...input, marginBottom: 0 }}>
               {paseadores.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label style={label}>Velocidad promedio (km/h)</label>
-            <input type="number" value={velocidad} onChange={(e) => setVelocidad(Number(e.target.value) || 1)} style={{ ...input, marginBottom: 0 }} />
+            <label style={label} htmlFor="mapa-velocidad">Velocidad promedio (km/h)</label>
+            <input id="mapa-velocidad" type="number" value={velocidad} onChange={(e) => setVelocidad(Number(e.target.value) || 1)} style={{ ...input, marginBottom: 0 }} />
           </div>
           <div>
-            <label style={label}>Minutos por paseo</label>
-            <input type="number" value={duracionParada} onChange={(e) => setDuracionParada(Number(e.target.value) || 0)} style={{ ...input, marginBottom: 0 }} />
+            <label style={label} htmlFor="mapa-minutos">Minutos por paseo</label>
+            <input id="mapa-minutos" type="number" value={duracionParada} onChange={(e) => setDuracionParada(Number(e.target.value) || 0)} style={{ ...input, marginBottom: 0 }} />
           </div>
         </div>
 
@@ -3884,7 +4301,8 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
   const [tipoCuenta, setTipoCuenta] = useState("Cuenta corriente");
   const [numeroCuenta, setNumeroCuenta] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
-  const [confirmacion, setConfirmacion] = useState("");
+  const [registrando, setRegistrando] = useState(false);
+  const [credenciales, setCredenciales] = useState(null);
 
   const hoy = new Date();
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
@@ -3915,14 +4333,24 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
     return acc + paseosMes * Number(c.tarifaPaseador || 0);
   }, 0);
 
-  function registrar() {
-    if (!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0)) return;
-    const nuevoUsuario = { id: Date.now(), nombre: nombre.trim(), rol, fotoUrl, fechaInicio, email: slugEmailUsuario(nombre), datosBancarios: { banco, tipoCuenta, numeroCuenta } };
+  async function registrar() {
+    if (!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0) || registrando) return;
+    setRegistrando(true);
+    const nombreNuevo = nombre.trim();
+    const email = slugEmailUsuario(nombreNuevo);
+    const { password, error } = await crearCuentaAcceso(email);
+    if (error) {
+      showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
+      setRegistrando(false);
+      return;
+    }
+    const nuevoUsuario = { id: Date.now(), nombre: nombreNuevo, rol, fotoUrl, fechaInicio, email, datosBancarios: { banco, tipoCuenta, numeroCuenta } };
     setUsuarios((prev) => [...prev, nuevoUsuario]);
     setClientes((prev) => prev.map((c) => (seleccionados.includes(c.id) ? { ...c, paseadorNombre: nuevoUsuario.nombre } : c)));
     const detalleClientes = clientesElegidos.length > 0 ? ` con ${clientesElegidos.length} cliente(s) asignado(s)` : "";
-    setConfirmacion(`${nuevoUsuario.nombre} quedó registrado${detalleClientes}. Para que pueda entrar, créale la cuenta en Supabase → Authentication → Add user, con el correo "${nuevoUsuario.email}" y la contraseña que quieras asignarle.`);
+    setCredenciales({ nombre: nombreNuevo, email, password, detalleClientes });
     setNombre(""); setFotoUrl(null); setSeleccionados([]); setRol("entrenador"); setFechaInicio(""); setBanco(""); setNumeroCuenta("");
+    setRegistrando(false);
   }
 
   return (
@@ -3931,9 +4359,13 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
         <h2 style={sectionTitle}>Ingreso de personal nuevo</h2>
         <p style={hint}>Registra a un paseador o entrenador nuevo, asígnale clientes desde el inicio, y revisa su horario y ganancia estimada antes de confirmar.</p>
 
-        {confirmacion && (
-          <div style={{ background: "#D8ECDE", color: "#2F6A46", borderRadius: 8, padding: "12px 16px", margin: "14px 0", fontSize: 13.5, fontWeight: 600 }}>
-            ✓ {confirmacion}
+        {credenciales && (
+          <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", color: "#2F6A46", borderRadius: 8, padding: "12px 16px", margin: "14px 0", fontSize: 13.5, lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ {credenciales.nombre} quedó registrado{credenciales.detalleClientes} — pásale estos datos para que pueda entrar:</p>
+            <p style={{ margin: 0 }}>Correo: <b>{credenciales.email}</b></p>
+            <p style={{ margin: "4px 0 10px" }}>Contraseña: <b style={{ fontFamily: "monospace", fontSize: 14 }}>{credenciales.password}</b></p>
+            <button onClick={() => navigator.clipboard.writeText(`Correo: ${credenciales.email}\nContraseña: ${credenciales.password}`)}
+              style={{ ...botonSecundario, padding: "6px 14px", fontSize: 12 }}>Copiar datos</button>
           </div>
         )}
 
@@ -3955,8 +4387,8 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
               <option value="administrador">Administrador general</option>
             </select>
             <div>
-              <label style={label}>Fecha de inicio de contrato</label>
-              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              <label style={label} htmlFor="ingreso-fecha-inicio">Fecha de inicio de contrato</label>
+              <input id="ingreso-fecha-inicio" type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={{ ...input, marginBottom: 0 }} />
             </div>
           </div>
         </div>
@@ -3966,7 +4398,7 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
           Correo de acceso (se genera solo): <b>{nombre.trim() ? slugEmailUsuario(nombre) : "—"}</b>
         </p>
         <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: 0 }}>
-          Después de registrar, crea la cuenta en Supabase → Authentication → "Add user" con ese correo y la contraseña que quieras darle.
+          Al registrar, se crea sola la cuenta de acceso con ese correo — te va a mostrar una contraseña generada para que se la pases.
         </p>
 
         <p style={{ ...label, marginTop: 16 }}>Datos bancarios para el pago</p>
@@ -4023,16 +4455,16 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
         </div>
       )}
 
-      <button onClick={registrar} disabled={!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0)}
-        style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || clientesElegidos.length === 0 ? 0.45 : 1 }}>
-        Registrar paseador y asignar clientes
+      <button onClick={registrar} disabled={!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0) || registrando}
+        style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || clientesElegidos.length === 0 || registrando ? 0.45 : 1 }}>
+        {registrando ? "Creando cuenta..." : "Registrar paseador y asignar clientes"}
       </button>
     </div>
   );
 }
 
 // ---------- Equipo (organización de trabajo interno) ----------
-function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas }) {
+function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando }) {
   const hoy = new Date();
   const [semanaOffset, setSemanaOffset] = useState(0);
   const fechaRef = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + semanaOffset * 7); return d; }, [semanaOffset]);
@@ -4095,19 +4527,23 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
   }
 
   function agregarMiembro() {
-    if (!nuevoMiembro.trim() || equipo.includes(nuevoMiembro.trim())) return;
-    setEquipo((prev) => [...prev, nuevoMiembro.trim()]);
+    if (!nuevoMiembro.trim() || equipo.some((p) => p.nombre === nuevoMiembro.trim())) return;
+    setEquipo((prev) => [...prev, { id: Date.now(), nombre: nuevoMiembro.trim() }]);
     setNuevoMiembro("");
   }
 
-  const progresoPorPersona = equipo.map((persona) => {
-    const suyas = tareasSemana.filter((t) => t.asignadoA === persona);
+  const progresoPorPersona = equipo.map((p) => {
+    const suyas = tareasSemana.filter((t) => t.asignadoA === p.nombre);
     const hechas = suyas.filter((t) => t.estado === "hecho").length;
-    return { persona, total: suyas.length, hechas };
+    return { persona: p.nombre, total: suyas.length, hechas };
   });
   const totalTareasSemana = tareasSemana.length;
   const totalHechasSemana = tareasSemana.filter((t) => t.estado === "hecho").length;
   const objetivosCumplidos = objetivosSemana.filter((o) => o.cumplido).length;
+
+  if (cargando) {
+    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando equipo…</p></div>;
+  }
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -4128,7 +4564,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
         <p style={{ ...label, marginTop: 16 }}>Equipo</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
           {equipo.map((persona) => (
-            <span key={persona} style={{ padding: "6px 14px", borderRadius: 20, background: CREAM_SOFT, color: NAVY, fontSize: 13, fontWeight: 600 }}>{persona}</span>
+            <span key={persona.id} style={{ padding: "6px 14px", borderRadius: 20, background: CREAM_SOFT, color: NAVY, fontSize: 13, fontWeight: 600 }}>{persona.nombre}</span>
           ))}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -4158,7 +4594,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
                       {o.texto} {o.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {o.asignadoA}</span>}
                     </span>
                   </label>
-                  <button onClick={() => eliminarObjetivo(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }}>Eliminar</button>
+                  <BotonEliminar onConfirm={() => eliminarObjetivo(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
                 </div>
               ))}
               {objetivosSemana.length === 0 && <p style={{ ...hint, marginTop: 4 }}>Todavía no hay objetivos para esta semana.</p>}
@@ -4168,7 +4604,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
               <input placeholder="Nuevo objetivo de la semana" value={nuevoObjetivo} onChange={(e) => setNuevoObjetivo(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               <select value={asignadoObjetivo} onChange={(e) => setAsignadoObjetivo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 <option value="">Equipo (todos)</option>
-                {equipo.map((p) => <option key={p} value={p}>{p}</option>)}
+                {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
               <button onClick={agregarObjetivo} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
             </div>
@@ -4185,7 +4621,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
                       {o.texto} {o.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {o.asignadoA}</span>}
                     </span>
                   </label>
-                  <button onClick={() => eliminarObjetivoMes(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }}>Eliminar</button>
+                  <BotonEliminar onConfirm={() => eliminarObjetivoMes(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
                 </div>
               ))}
               {objetivosDelMes.length === 0 && <p style={{ ...hint, marginTop: 4 }}>Todavía no hay objetivos para este mes.</p>}
@@ -4195,7 +4631,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
               <input placeholder="Nuevo objetivo del mes" value={nuevoObjetivoMes} onChange={(e) => setNuevoObjetivoMes(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               <select value={asignadoObjetivoMes} onChange={(e) => setAsignadoObjetivoMes(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 <option value="">Equipo (todos)</option>
-                {equipo.map((p) => <option key={p} value={p}>{p}</option>)}
+                {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
               <button onClick={agregarObjetivoMes} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
             </div>
@@ -4231,7 +4667,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
                   {t.enlace && <> · <a href={t.enlace} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#1F5C8A" }}>🔗 documento</a></>}
                 </span>
               </label>
-              <button onClick={() => eliminarTarea(t.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }}>Eliminar</button>
+              <BotonEliminar onConfirm={() => eliminarTarea(t.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
             </div>
           ))}
           {tareasDelDia.length === 0 && <p style={hint}>No hay tareas para este día.</p>}
@@ -4241,7 +4677,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
           <input placeholder="Nueva tarea para este día" value={nuevaTarea} onChange={(e) => setNuevaTarea(e.target.value)} style={{ ...input, marginBottom: 0 }} />
           <select value={asignadoTarea} onChange={(e) => setAsignadoTarea(e.target.value)} style={{ ...input, marginBottom: 0 }}>
             <option value="">Sin asignar</option>
-            {equipo.map((p) => <option key={p} value={p}>{p}</option>)}
+            {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
           </select>
           <input placeholder="Enlace a documento (opcional)" value={enlaceTarea} onChange={(e) => setEnlaceTarea(e.target.value)} style={{ ...input, marginBottom: 0 }} />
           <button onClick={agregarTarea} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
@@ -4431,7 +4867,7 @@ const TIPOS_CITA = [
   { id: "clase", nombre: "Clase" },
 ];
 
-function Agenda({ clientes, usuarios, citas, setCitas }) {
+function Agenda({ clientes, usuarios, citas, setCitas, cargando }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
@@ -4465,6 +4901,10 @@ function Agenda({ clientes, usuarios, citas, setCitas }) {
   const proximas = citasFiltradas.filter((c) => c.estado === "agendada").sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
   const historial = citasFiltradas.filter((c) => c.estado !== "agendada").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
 
+  if (cargando) {
+    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando agenda…</p></div>;
+  }
+
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={tarjeta}>
@@ -4473,30 +4913,30 @@ function Agenda({ clientes, usuarios, citas, setCitas }) {
 
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
           <div>
-            <label style={label}>Cliente</label>
-            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <label style={label} htmlFor="agenda-cliente">Cliente</label>
+            <select id="agenda-cliente" value={clienteId} onChange={(e) => setClienteId(e.target.value)} style={{ ...input, marginBottom: 0 }}>
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
             </select>
           </div>
           <div>
-            <label style={label}>Tipo</label>
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <label style={label} htmlFor="agenda-tipo">Tipo</label>
+            <select id="agenda-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
               {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label style={label}>Adiestrador</label>
-            <select value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <label style={label} htmlFor="agenda-adiestrador">Adiestrador</label>
+            <select id="agenda-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
               {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label style={label}>Fecha y hora</label>
-            <input type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            <label style={label} htmlFor="agenda-fecha-hora">Fecha y hora</label>
+            <input id="agenda-fecha-hora" type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
           </div>
         </div>
-        <label style={{ ...label, marginTop: 12 }}>Notas (opcional)</label>
-        <textarea value={notasNuevas} onChange={(e) => setNotasNuevas(e.target.value)} placeholder="Ej. primera evaluación, revisar reactividad con otros perros..."
+        <label style={{ ...label, marginTop: 12 }} htmlFor="agenda-notas">Notas (opcional)</label>
+        <textarea id="agenda-notas" value={notasNuevas} onChange={(e) => setNotasNuevas(e.target.value)} placeholder="Ej. primera evaluación, revisar reactividad con otros perros..."
           style={{ ...input, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} />
         <button onClick={agendar} disabled={!clienteId || !fechaHora || !adiestrador} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", opacity: !clienteId || !fechaHora || !adiestrador ? 0.45 : 1 }}>
           Agendar
@@ -4573,12 +5013,13 @@ function Agenda({ clientes, usuarios, citas, setCitas }) {
 }
 
 // ---------- Seguimiento de prospectos (ventas) ----------
-const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", bitacora: [] };
+const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
-function Prospectos({ prospectos, setProspectos, setClientes }) {
+function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(PROSPECTO_VACIO);
   const [filtroEstado, setFiltroEstado] = useState("activos");
+  const [busqueda, setBusqueda] = useState("");
   const [notaNueva, setNotaNueva] = useState({});
 
   function crearProspecto() {
@@ -4612,11 +5053,27 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
     setProspectos((prev) => prev.filter((x) => x.id !== p.id));
   }
 
+  const hoyStr = fechaKey(new Date());
+  const esVencido = (p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido";
+  const busquedaLimpia = busqueda.trim().toLowerCase();
+
   const listaFiltrada = prospectos
-    .filter((p) => filtroEstado === "todos" || (filtroEstado === "activos" ? p.estado !== "ganado" && p.estado !== "perdido" : p.estado === filtroEstado))
+    .filter((p) => {
+      if (busquedaLimpia) {
+        return p.nombre.toLowerCase().includes(busquedaLimpia)
+          || (p.telefono || "").toLowerCase().includes(busquedaLimpia)
+          || (p.perro || "").toLowerCase().includes(busquedaLimpia);
+      }
+      if (filtroEstado === "todos") return true;
+      if (filtroEstado === "activos") return p.estado !== "ganado" && p.estado !== "perdido";
+      if (filtroEstado === "vencidos") return esVencido(p);
+      return p.estado === filtroEstado;
+    })
     .sort((a, b) => (a.proximoSeguimiento || "9999").localeCompare(b.proximoSeguimiento || "9999"));
 
-  const hoyStr = fechaKey(new Date());
+  if (cargando) {
+    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando prospectos…</p></div>;
+  }
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -4641,11 +5098,15 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
                 {ORIGENES_PROSPECTO.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
               <input type="date" value={form.proximoSeguimiento} onChange={(e) => setForm({ ...form, proximoSeguimiento: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+              <select value={form.asignadoA} onChange={(e) => setForm({ ...form, asignadoA: e.target.value })} style={{ ...input, marginBottom: 0 }}>
+                <option value="">Sin asignar</option>
+                {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+              </select>
             </div>
-            <p style={{ ...label, marginTop: 12 }}>Interés en</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <p style={{ ...label, marginTop: 12 }} id="prospecto-interes-label">Interés en</p>
+            <div role="group" aria-labelledby="prospecto-interes-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {TIPOS_SERVICIO.map((t) => (
-                <button key={t.id} type="button" onClick={() => setForm((f) => ({ ...f, tipoServicio: f.tipoServicio.includes(t.id) ? f.tipoServicio.filter((x) => x !== t.id) : [...f.tipoServicio, t.id] }))}
+                <button key={t.id} type="button" onClick={() => setForm((f) => ({ ...f, tipoServicio: f.tipoServicio.includes(t.id) ? f.tipoServicio.filter((x) => x !== t.id) : [...f.tipoServicio, t.id] }))} aria-pressed={form.tipoServicio.includes(t.id)}
                   style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
                     border: form.tipoServicio.includes(t.id) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
                     background: form.tipoServicio.includes(t.id) ? NAVY : "#FFFFFF", color: form.tipoServicio.includes(t.id) ? CREAM : INK }}>
@@ -4657,12 +5118,25 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
           </div>
         )}
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+        <div style={{ position: "relative", marginTop: 16, maxWidth: 340 }}>
+          <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          <input placeholder="Buscar por nombre, teléfono o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
+        </div>
+        <p style={{ ...hint, marginTop: 6 }}>La búsqueda revisa todos los prospectos guardados, sin importar su estado — útil para encontrar un contacto o cliente pasado.</p>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, opacity: busquedaLimpia ? 0.4 : 1, pointerEvents: busquedaLimpia ? "none" : "auto" }}>
           <button onClick={() => setFiltroEstado("activos")}
             style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
               border: filtroEstado === "activos" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
               background: filtroEstado === "activos" ? NAVY : "#FFFFFF", color: filtroEstado === "activos" ? CREAM : INK }}>
             Activos ({prospectos.filter((p) => p.estado !== "ganado" && p.estado !== "perdido").length})
+          </button>
+          <button onClick={() => setFiltroEstado("vencidos")}
+            style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+              border: filtroEstado === "vencidos" ? `1.5px solid ${RUST}` : "1px solid #DCD2B4",
+              background: filtroEstado === "vencidos" ? RUST : "#FFFFFF", color: filtroEstado === "vencidos" ? "#FFFFFF" : RUST, fontWeight: 600 }}>
+            ⚠️ Vencidos ({prospectos.filter(esVencido).length})
           </button>
           <button onClick={() => setFiltroEstado("todos")}
             style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
@@ -4684,7 +5158,7 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
       <div style={{ display: "grid", gap: 14 }}>
         {listaFiltrada.map((p) => {
           const est = ESTADOS_PROSPECTO.find((e) => e.id === p.estado) || ESTADOS_PROSPECTO[0];
-          const vencido = p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido";
+          const vencido = esVencido(p);
           return (
             <div key={p.id} className="howria-card" style={{ ...tarjeta, borderLeft: vencido ? `4px solid ${RUST}` : "4px solid transparent" }}>
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
@@ -4694,6 +5168,9 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
                   <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
                     {p.telefono || "sin teléfono"} {p.perro && `· 🐾 ${p.perro}`} · {p.origen}
                     {p.tipoServicio?.length > 0 && ` · interés: ${p.tipoServicio.map((t) => TIPOS_SERVICIO.find((x) => x.id === t)?.nombre).join(", ")}`}
+                  </p>
+                  <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
+                    Responsable: <b style={{ color: p.asignadoA ? NAVY : "#8A7E5C" }}>{p.asignadoA || "sin asignar"}</b>
                   </p>
                   {p.proximoSeguimiento && (
                     <p style={{ margin: "4px 0 0", fontSize: 12.5, fontWeight: 600, color: vencido ? RUST : "#8A7E5C" }}>
@@ -4708,6 +5185,11 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
                   </select>
                   <input type="date" value={p.proximoSeguimiento || ""} onChange={(e) => actualizarCampo(p.id, "proximoSeguimiento", e.target.value)}
                     style={{ ...input, marginBottom: 0, padding: "6px 10px", fontSize: 12.5, width: 150 }} />
+                  <select value={p.asignadoA || ""} onChange={(e) => actualizarCampo(p.id, "asignadoA", e.target.value)}
+                    style={{ ...input, marginBottom: 0, padding: "6px 10px", fontSize: 12.5, width: 150 }}>
+                    <option value="">Sin asignar</option>
+                    {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -4731,7 +5213,7 @@ function Prospectos({ prospectos, setProspectos, setClientes }) {
                 {p.estado === "ganado" && (
                   <button onClick={() => convertirACliente(p)} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Convertir a cliente</button>
                 )}
-                <button onClick={() => eliminarProspecto(p.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }}>Eliminar prospecto</button>
+                <BotonEliminar onConfirm={() => eliminarProspecto(p.id)} label="Eliminar prospecto" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
               </div>
             </div>
           );
@@ -4753,13 +5235,176 @@ const botonPrincipal = { width: "100%", padding: "12px", background: NAVY, color
 const botonSecundario = { padding: "10px 18px", background: "transparent", color: NAVY, border: `1.5px solid ${NAVY}`, borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600, flex: 1, fontFamily: "'Inter', sans-serif", transition: "background .12s" };
 const tarjeta = { background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 14, padding: 24, boxShadow: "0 1px 3px rgba(20,33,61,0.05)" };
 
+// ---------- Confirmación de borrado (dos pasos) ----------
+function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
+  const [confirmando, setConfirmando] = useState(false);
+  if (confirmando) {
+    return (
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={() => { onConfirm(); setConfirmando(false); }}
+          style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+          Confirmar
+        </button>
+        <button onClick={() => setConfirmando(false)}
+          style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+          Cancelar
+        </button>
+      </div>
+    );
+  }
+  return <button onClick={() => setConfirmando(true)} style={style}>{label}</button>;
+}
+
+// ---------- Acciones compartidas sobre boletas (paseo o adiestramiento) ----------
+function aceptarBoleta(setBoletas, numero) {
+  setBoletas((prev) => prev.map((b) => (b.numero === numero ? { ...b, estado: "pendiente_pago" } : b)));
+}
+
+function eliminarBoleta(setBoletas, numero) {
+  setBoletas((prev) => prev.filter((b) => b.numero !== numero));
+}
+
+function editarBoleta(setBoletas, numero, cambios) {
+  setBoletas((prev) => prev.map((b) => (b.numero === numero ? { ...b, ...cambios } : b)));
+}
+
+function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
+  const [total, setTotal] = useState(boleta.total);
+  const [mensaje, setMensaje] = useState(boleta.mensajePersonalizado || "");
+  const [mes, setMes] = useState(boleta.mes || MESES[0]);
+  const [anio, setAnio] = useState(boleta.anio || new Date().getFullYear());
+
+  function guardar() {
+    const cambios = { total: Number(total) || 0, mensajePersonalizado: mensaje.trim() || null };
+    if (tipo === "paseo") { cambios.mes = mes; cambios.anio = Number(anio) || boleta.anio; }
+    onGuardar(cambios);
+  }
+
+  return (
+    <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14, marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 140px" }}>
+          <label style={label} htmlFor={`editar-boleta-total-${tipo}-${boleta.numero}`}>Total</label>
+          <input id={`editar-boleta-total-${tipo}-${boleta.numero}`} type="number" min="0" value={total}
+            onChange={(e) => setTotal(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+        </div>
+        {tipo === "paseo" && (
+          <>
+            <div style={{ flex: "1 1 140px" }}>
+              <label style={label} htmlFor={`editar-boleta-mes-${boleta.numero}`}>Mes</label>
+              <select id={`editar-boleta-mes-${boleta.numero}`} value={mes} onChange={(e) => setMes(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                {MESES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "0 1 100px" }}>
+              <label style={label} htmlFor={`editar-boleta-anio-${boleta.numero}`}>Año</label>
+              <input id={`editar-boleta-anio-${boleta.numero}`} type="number" value={anio}
+                onChange={(e) => setAnio(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+          </>
+        )}
+      </div>
+      <div>
+        <label style={label} htmlFor={`editar-boleta-mensaje-${tipo}-${boleta.numero}`}>Mensaje personalizado</label>
+        <input id={`editar-boleta-mensaje-${tipo}-${boleta.numero}`} type="text" value={mensaje}
+          onChange={(e) => setMensaje(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={guardar} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Guardar</button>
+        <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// Fila de una venta (boleta de paseo o de adiestramiento) con acciones: aceptar, marcar pagada, editar, eliminar.
+function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestramiento }) {
+  const [editando, setEditando] = useState(false);
+  const [pagoPendiente, setPagoPendiente] = useState(false);
+  const [fechaPagoForm, setFechaPagoForm] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
+  const setBoletas = tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
+  const est = ESTADOS_FACTURA.find((e) => e.id === boleta.estado) || ESTADOS_FACTURA[0];
+
+  function confirmarPago() {
+    editarBoleta(setBoletas, boleta.numero, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    setPagoPendiente(false);
+  }
+
+  return (
+    <div style={{ padding: "10px 0", borderBottom: "1px solid #EDE4CE" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, fontSize: 13.5 }}>
+        <span style={{ color: INK }}>
+          N°{String(boleta.numero).padStart(3, "0")} · {tipo === "paseo" ? `${boleta.mes} ${boleta.anio} · ${boleta.cantidad} paseos` : `Adiestramiento · ${boleta.modalidad}`}
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
+          {tipo === "paseo" && boleta.estado === "pagada" && boleta.formaPago && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>{boleta.formaPago} · {boleta.fechaPago}</span>
+          )}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <b style={{ color: NAVY }}>{fmtCLP(boleta.total)}</b>
+          {boleta.estado === "no_enviada" && (
+            <button onClick={() => aceptarBoleta(setBoletas, boleta.numero)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
+          )}
+          {tipo === "paseo" && boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
+            <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
+          )}
+          <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
+          <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta.numero)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+        </div>
+      </div>
+      {pagoPendiente && (
+        <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
+          <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
+            {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
+          <button onClick={() => setPagoPendiente(false)} style={botonSecundario}>Cancelar</button>
+        </div>
+      )}
+      {editando && (
+        <EditorBoletaBasico boleta={boleta} tipo={tipo}
+          onGuardar={(cambios) => { editarBoleta(setBoletas, boleta.numero, cambios); setEditando(false); }}
+          onCancelar={() => setEditando(false)} />
+      )}
+    </div>
+  );
+}
+
+// ---------- Notificaciones de error (toast) ----------
+let toastListeners = [];
+function showToast(mensaje, tipo = "error") {
+  const t = { id: Date.now() + Math.random(), mensaje, tipo };
+  toastListeners.forEach((fn) => fn(t));
+}
+export function ToastHost() {
+  const [toasts, setToasts] = useState([]);
+  useEffect(() => {
+    const listener = (t) => {
+      setToasts((prev) => [...prev, t]);
+      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 5000);
+    };
+    toastListeners.push(listener);
+    return () => { toastListeners = toastListeners.filter((l) => l !== listener); };
+  }, []);
+  if (!toasts.length) return null;
+  return (
+    <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+      {toasts.map((t) => (
+        <div key={t.id} style={{ background: t.tipo === "error" ? RUST : NAVY, color: "#fff", padding: "12px 18px", borderRadius: 8, fontSize: 13.5, boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: 320 }}>
+          {t.mensaje}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const USUARIOS_INICIAL = [
   { id: 1, nombre: "Camila Soto", rol: "coordinador", fotoUrl: null },
   { id: 2, nombre: "Pedro Vidal", rol: "entrenador", fotoUrl: null },
   { id: 3, nombre: "Ignacio Muñoz", rol: "entrenador", fotoUrl: null },
 ];
-
-const EQUIPO_INICIAL = ["Javier Arniaz", "Javier Herrera", "Oliska Mendoza"];
 
 // ---------- App ----------
 export default function HowriaAdmin() {
@@ -4767,13 +5412,14 @@ export default function HowriaAdmin() {
   const [verificandoSesion, setVerificandoSesion] = useState(true);
   const [sessionVersion, setSessionVersion] = useState(0);
   const [tab, setTab] = useState("inicio");
+  const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [grupoAbierto, setGrupoAbierto] = useState(null);
-  const [clientes, setClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
+  const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [correlativo, setCorrelativo] = useState(107);
-  const [boletasEmitidas, setBoletasEmitidas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
-  const [usuarios, setUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion);
-  const [pagosRegistrados, setPagosRegistrados] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
-  const [boletasAdiestramiento, setBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
+  const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
+  const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion);
+  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
+  const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
   const [correlativoAdiestramiento, setCorrelativoAdiestramiento] = useState(1);
 
   useEffect(() => {
@@ -4842,12 +5488,13 @@ export default function HowriaAdmin() {
         if (data && data[0]) setCorrelativo(data[0].numero + 1);
       });
   }, []);
-  const [equipoInterno, setEquipoInterno] = useState(EQUIPO_INICIAL);
-  const [objetivosSemanales, setObjetivosSemanales] = useState([]);
-  const [objetivosMensuales, setObjetivosMensuales] = useState([]);
-  const [tareasEquipo, setTareasEquipo] = useState([]);
-  const [citasAgenda, setCitasAgenda] = useState([]);
-  const [prospectos, setProspectos] = useState([]);
+  const [equipoInterno, setEquipoInterno, cargandoEquipoInterno] = useSyncedTable("equipo_interno", equipoToDb, dbToEquipo, "nombre", sessionVersion);
+  const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
+  const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
+  const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
+  const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion);
+  const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
+  const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
   const [clienteSesion, setClienteSesion] = useState(null);
 
   if (clienteSesion) {
@@ -4878,7 +5525,16 @@ export default function HowriaAdmin() {
         .howria-card { transition: box-shadow .18s ease, transform .18s ease; }
         .howria-card:hover { box-shadow: 0 6px 18px rgba(20,33,61,0.09); }
         button { font-family: 'Inter', sans-serif; }
+        button:not(:disabled) { transition: filter .12s ease, transform .05s ease; }
+        button:not(:disabled):hover { filter: brightness(0.93); }
+        button:not(:disabled):active { transform: scale(0.98); }
+        input:focus-visible, select:focus-visible, textarea:focus-visible {
+          outline: none; border-color: ${NAVY} !important; box-shadow: 0 0 0 3px rgba(18,42,64,0.15);
+        }
         h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; }
+        @media (prefers-reduced-motion: reduce) {
+          .howria-card, button:not(:disabled) { transition: none !important; }
+        }
         @media (max-width: 680px) {
           .howria-g2, .howria-g3, .howria-g4, .howria-split, .howria-photo-row {
             grid-template-columns: 1fr !important;
@@ -4963,8 +5619,8 @@ export default function HowriaAdmin() {
       </div>
 
       <div className="howria-tabs-mobile" style={{ display: "none", padding: "12px 16px", background: "#FFFFFF", borderBottom: "1px solid #EDE4CE" }}>
-        <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Sección</label>
-        <select value={tab} onChange={(e) => setTab(e.target.value)}
+        <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }} htmlFor="tab-movil">Sección</label>
+        <select id="tab-movil" value={tab} onChange={(e) => setTab(e.target.value)}
           style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${NAVY}`, background: CREAM_SOFT, color: NAVY, fontSize: 15, fontWeight: 600 }}>
           {tabs.filter((t) => t.grupo === "").map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           {ORDEN_GRUPOS.map((grupo) => {
@@ -4981,20 +5637,20 @@ export default function HowriaAdmin() {
 
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} />}
-        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} />}
+        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
-        {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} clientes={clientes} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} usuarios={usuarios} puedeEliminar={esAdmin} />}
-        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} clientes={clientes} pagosRegistrados={pagosRegistrados} />}
-        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} />}
-        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} />}
-        {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} />}
+        {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} />}
+        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} />}
+        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
+        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
+        {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} />}
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
-        {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} />}
-        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} />}
-        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} />}
+        {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
+        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} />}
+        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} />}
       </div>
     </div>
   );
