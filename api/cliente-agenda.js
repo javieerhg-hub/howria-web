@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       .eq("id", clienteId)
       .maybeSingle();
     if (clienteErr || !cliente) {
-      res.status(404).json({ error: "Link inválido — no encontramos tu ficha de cliente", _debug: clienteErr ? clienteErr.message : "sin fila", _url: supabaseUrl });
+      res.status(404).json({ error: "Link inválido — no encontramos tu ficha de cliente" });
       return;
     }
 
