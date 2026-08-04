@@ -13,6 +13,7 @@ function clienteToDb(c) {
     nombre: c.nombre,
     perro: c.perro,
     telefono: c.telefono,
+    email: c.email || null,
     valor_paseo_ref: c.valorPaseoRef,
     raza: c.raza,
     peso_kg: c.pesoKg,
@@ -37,6 +38,7 @@ function dbToCliente(row) {
     nombre: row.nombre,
     perro: row.perro,
     telefono: row.telefono,
+    email: row.email,
     valorPaseoRef: row.valor_paseo_ref,
     raza: row.raza,
     pesoKg: row.peso_kg,
@@ -142,6 +144,13 @@ function dbToUsuario(row) {
     email: row.email,
     capacitacionCompletada: row.capacitacion_completada || [],
   };
+}
+
+function loginPendienteToDb(l) {
+  return { nombre: l.nombre, email: l.email, eliminado_en: l.eliminadoEn || new Date().toISOString() };
+}
+function dbToLoginPendiente(row) {
+  return { nombre: row.nombre, email: row.email, eliminadoEn: row.eliminado_en };
 }
 
 function esBoletaDeCliente(b, c) {
@@ -301,7 +310,7 @@ function dbToProspecto(row) {
 
 // cambio hecho con el setter (igual que useState) de vuelta a la base
 // de datos — inserta, actualiza o elimina según corresponda.
-function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0) {
+function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0, selectFrom = tableName) {
   const [items, setItemsState] = useState([]);
   const [cargando, setCargando] = useState(true);
   const insertando = useRef(new Set());
@@ -310,7 +319,7 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
     let activo = true;
     setCargando(true);
     (async () => {
-      let query = supabase.from(tableName).select("*");
+      let query = supabase.from(selectFrom).select("*");
       if (orderBy) query = query.order(orderBy);
       const { data, error } = await query;
       if (!activo) return;
@@ -663,6 +672,12 @@ const FERIADOS_CHILE = new Set([
   "2026-06-21", "2026-06-29", "2026-07-16", "2026-08-15", "2026-09-18",
   "2026-09-19", "2026-10-12", "2026-10-31", "2026-11-01", "2026-12-08",
   "2026-12-25",
+  // 2027 (Viernes/Sábado Santo, San Pedro y San Pablo y Encuentro de Dos
+  // Mundos son movibles — calculados a partir de Pascua 2027 = 28 de marzo)
+  "2027-01-01", "2027-03-26", "2027-03-27", "2027-05-01", "2027-05-21",
+  "2027-06-21", "2027-06-28", "2027-07-16", "2027-08-15", "2027-09-18",
+  "2027-09-19", "2027-10-11", "2027-10-31", "2027-11-01", "2027-12-08",
+  "2027-12-25",
 ]);
 
 const RECARGO_FIN_SEMANA_FERIADO_DEFAULT = 30; // % por defecto, editable desde Boletas
@@ -720,16 +735,31 @@ function NotificacionesBell({ avisos }) {
 }
 
 // ---------- Login ----------
-function Login({ onLogin, clientes, usuarios, onLoginCliente }) {
+function Login({ onLogin, usuarios }) {
   const [nombre, setNombre] = useState("");
   const [passwordEquipo, setPasswordEquipo] = useState("");
   const [errorLogin, setErrorLogin] = useState("");
   const [entrando, setEntrando] = useState(false);
   const [modo, setModo] = useState("equipo");
-  const [busquedaCliente, setBusquedaCliente] = useState("");
-  const [clienteId, setClienteId] = useState("");
+  const [emailCliente, setEmailCliente] = useState("");
+  const [enviandoLink, setEnviandoLink] = useState(false);
+  const [linkEnviado, setLinkEnviado] = useState(false);
 
-  const clientesFiltrados = clientes.filter((c) => c.nombre.toLowerCase().includes(busquedaCliente.trim().toLowerCase()));
+  async function enviarLinkCliente() {
+    const email = emailCliente.trim();
+    if (!email || enviandoLink) return;
+    setEnviandoLink(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/admin` },
+    });
+    setEnviandoLink(false);
+    if (error) {
+      showToast(`No se pudo enviar el link: ${error.message}`);
+      return;
+    }
+    setLinkEnviado(true);
+  }
 
   async function intentarLogin() {
     if (!nombre.trim() || !passwordEquipo.trim()) return;
@@ -782,30 +812,54 @@ function Login({ onLogin, clientes, usuarios, onLoginCliente }) {
           ) : (
             <>
               <p style={{ margin: "0 0 20px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1.5, textAlign: "center" }}>Portal del cliente</p>
-              <label style={label} htmlFor="login-busca-cliente">Busca tu nombre</label>
-              <input id="login-busca-cliente" value={busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setClienteId(""); }} placeholder="Tu nombre" style={input} />
-              {busquedaCliente.trim() && (
-                <div style={{ marginBottom: 16, maxHeight: 140, overflowY: "auto" }}>
-                  {clientesFiltrados.map((c) => (
-                    <button key={c.id} onClick={() => setClienteId(c.id)} type="button"
-                      style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                        background: clienteId === c.id ? "#D8ECDE" : "#FFFFFF", marginBottom: 4, fontSize: 13 }}>
-                      {c.nombre} · 🐾 {c.perro}
-                    </button>
-                  ))}
-                  {clientesFiltrados.length === 0 && <p style={{ ...hint, margin: 0 }}>No encontramos ese nombre.</p>}
-                </div>
+              {linkEnviado ? (
+                <p style={{ margin: 0, fontSize: 13.5, color: "#2F6A46", background: "#D8ECDE", borderRadius: 8, padding: "12px 14px", lineHeight: 1.6 }}>
+                  ✓ Te enviamos un link de acceso a <b>{emailCliente.trim()}</b>. Ábrelo desde tu correo para entrar — no hace falta contraseña.
+                </p>
+              ) : (
+                <>
+                  <label style={label} htmlFor="login-email-cliente">Tu correo</label>
+                  <input id="login-email-cliente" type="email" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} placeholder="tu@correo.com"
+                    onKeyDown={(e) => e.key === "Enter" && enviarLinkCliente()} style={input} autoFocus />
+                  <button onClick={enviarLinkCliente} disabled={!emailCliente.trim() || enviandoLink}
+                    style={{ ...botonPrincipal, opacity: !emailCliente.trim() || enviandoLink ? 0.45 : 1 }}>
+                    {enviandoLink ? "Enviando..." : "Enviarme el link de acceso"}
+                  </button>
+                  <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 10, marginBottom: 0 }}>Usa el correo que nos diste al registrarte como cliente.</p>
+                </>
               )}
-              <button onClick={() => clienteId && onLoginCliente(clientes.find((c) => c.id === clienteId))} disabled={!clienteId}
-                style={{ ...botonPrincipal, opacity: clienteId ? 1 : 0.45 }}>
-                Ver mi cuenta
-              </button>
             </>
           )}
         </div>
         <p style={{ fontSize: 12, color: "#7E8FA0", marginTop: 18, textAlign: "center", lineHeight: 1.5 }}>
-          Acceso protegido con contraseña — solo el equipo de Howria puede entrar.
+          {modo === "equipo" ? "Acceso protegido con contraseña — solo el equipo de Howria puede entrar." : "Te mandamos un link de acceso a tu correo, sin contraseña."}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Selector cuando un correo tiene más de un perrito registrado ----------
+function SeleccionarPerrito({ opciones, onElegir, onSalir }) {
+  return (
+    <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Helvetica Neue', Arial, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 380, padding: "0 24px" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 36 }}>
+          <LogoHowria height={110} />
+        </div>
+        <div style={{ background: CREAM, borderRadius: 10, padding: "36px 32px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+          <p style={{ margin: "0 0 20px", fontSize: 15, color: NAVY, fontWeight: 600, textAlign: "center" }}>¿Cuál es tu perrito?</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {opciones.map((c) => (
+              <button key={c.id} onClick={() => onElegir(c)} type="button"
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 8, border: "1px solid #E4DBC3", background: "#FFFFFF", cursor: "pointer", textAlign: "left", font: "inherit" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+                <span style={{ fontSize: 14, color: NAVY, fontWeight: 600 }}>🐾 {c.perro}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={onSalir} style={{ ...botonSecundario, width: "100%", marginTop: 18 }}>Cerrar sesión</button>
+        </div>
       </div>
     </div>
   );
@@ -1713,7 +1767,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
 }
 
 // ---------- Formulario de registro / edición de cliente ----------
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
 function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
@@ -1760,6 +1814,7 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <input placeholder="Nombre cliente" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Teléfono / WhatsApp" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input type="email" placeholder="Correo (para que pueda entrar a su portal)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Nombre del perro" value={form.perro} onChange={(e) => setForm({ ...form, perro: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Raza" value={form.raza} onChange={(e) => setForm({ ...form, raza: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Peso (kg)" type="number" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
@@ -1868,7 +1923,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
                 ); })()}
               </h2>
               <p style={{ margin: "0 0 4px", color: "#8A7E5C", fontSize: 14 }}>Dueño/a: {cliente.nombre}</p>
-              <p style={{ margin: 0, color: "#8A7E5C", fontSize: 14 }}>{cliente.telefono || "sin teléfono"}</p>
+              <p style={{ margin: 0, color: "#8A7E5C", fontSize: 14 }}>{cliente.telefono || "sin teléfono"} {cliente.email ? `· ${cliente.email}` : "· sin correo (no puede entrar a su portal)"}</p>
               <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>{cliente.raza || "Raza no especificada"} {cliente.pesoKg ? `· ${cliente.pesoKg} kg` : ""}</p>
               <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>📍 {cliente.direccion || "Sin dirección registrada"}</p>
               {cliente.fechaInicio && <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>Cliente desde: {new Date(cliente.fechaInicio + "T00:00:00").toLocaleDateString("es-CL")}</p>}
@@ -2909,7 +2964,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
 }
 
 // ---------- Panel admin (usuarios) ----------
-function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, esAdmin, cargandoUsuarios }) {
+function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes }) {
   const [busqueda, setBusqueda] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
@@ -2959,7 +3014,14 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
 
   function confirmarBorrar(u) {
     setUsuarios((prev) => prev.filter((x) => x.id !== u.id));
+    if (u.email) {
+      setLoginsPendientes((prev) => [...prev, { id: Date.now(), nombre: u.nombre, email: u.email, eliminadoEn: new Date().toISOString() }]);
+    }
     setBorrarId(null);
+  }
+
+  function quitarLoginPendiente(id) {
+    setLoginsPendientes((prev) => prev.filter((l) => l.id !== id));
   }
 
   async function agregar() {
@@ -3135,6 +3197,29 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           </div>
         )}
       </div>
+
+      {esAdmin && loginsPendientes.length > 0 && (
+        <div className="howria-card" style={{ ...tarjeta, background: "#FBF6E9", border: `1px solid ${GOLD}` }}>
+          <h2 style={{ ...sectionTitle, color: "#8A6A1E" }}>Logins pendientes de borrar en Supabase ({loginsPendientes.length})</h2>
+          <p style={{ fontSize: 13, color: "#6B6248", marginTop: -8, marginBottom: 14 }}>
+            Al eliminar a alguien aquí, su acceso a la app se corta al instante, pero su cuenta de acceso sigue existiendo en Supabase → Authentication → Users hasta que la borres ahí a mano. Esta lista es solo para que no se te olvide.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {loginsPendientes.map((l) => (
+              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: "10px 14px" }}>
+                <span style={{ fontSize: 13 }}>
+                  <b style={{ color: NAVY }}>{l.nombre}</b> · {l.email}
+                  <span style={{ color: "#8A7E5C", fontSize: 12 }}> · eliminado el {new Date(l.eliminadoEn).toLocaleDateString("es-CL")}</span>
+                </span>
+                <button onClick={() => quitarLoginPendiente(l.id)} title="Ya lo borré en Supabase"
+                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  Ya lo borré, quitar de la lista
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -5410,6 +5495,8 @@ const USUARIOS_INICIAL = [
 export default function HowriaAdmin() {
   const [user, setUser] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [clienteSesion, setClienteSesion] = useState(null);
+  const [clientesParaElegir, setClientesParaElegir] = useState(null);
   const [sessionVersion, setSessionVersion] = useState(0);
   const [tab, setTab] = useState("inicio");
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
@@ -5417,7 +5504,8 @@ export default function HowriaAdmin() {
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [correlativo, setCorrelativo] = useState(107);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
-  const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion);
+  const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
+  const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", sessionVersion);
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
   const [correlativoAdiestramiento, setCorrelativoAdiestramiento] = useState(1);
@@ -5463,15 +5551,28 @@ export default function HowriaAdmin() {
   }, []);
 
   useEffect(() => {
-    if (!verificandoSesion || usuarios.length === 0 || user) return;
+    if (!verificandoSesion || usuarios.length === 0 || clientes.length === 0 || user || clienteSesion) return;
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
-        const perfil = usuarios.find((u) => u.email === data.session.user.email);
-        if (perfil) setUser(perfil);
+        const emailSesion = data.session.user.email;
+        const perfil = usuarios.find((u) => u.email === emailSesion);
+        if (perfil) {
+          setUser(perfil);
+        } else {
+          const fichas = clientes.filter((c) => c.email && c.email === emailSesion);
+          if (fichas.length === 1) {
+            setClienteSesion(fichas[0]);
+          } else if (fichas.length > 1) {
+            setClientesParaElegir(fichas);
+          } else {
+            showToast("Tu correo no está asociado a ninguna cuenta. Contáctanos si crees que es un error.");
+            supabase.auth.signOut();
+          }
+        }
       }
       setVerificandoSesion(false);
     });
-  }, [usuarios, verificandoSesion, user]);
+  }, [usuarios, clientes, verificandoSesion, user, clienteSesion]);
 
   function cerrarSesion() {
     supabase.auth.signOut();
@@ -5495,14 +5596,23 @@ export default function HowriaAdmin() {
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
-  const [clienteSesion, setClienteSesion] = useState(null);
+
+  if (clientesParaElegir) {
+    return (
+      <SeleccionarPerrito
+        opciones={clientesParaElegir}
+        onElegir={(c) => { setClienteSesion(c); setClientesParaElegir(null); }}
+        onSalir={() => { supabase.auth.signOut(); setClientesParaElegir(null); }}
+      />
+    );
+  }
 
   if (clienteSesion) {
     return (
       <PortalCliente
         cliente={clienteSesion}
         boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clienteSesion))}
-        onSalir={() => setClienteSesion(null)}
+        onSalir={() => { supabase.auth.signOut(); setClienteSesion(null); }}
       />
     );
   }
@@ -5510,7 +5620,7 @@ export default function HowriaAdmin() {
   if (verificandoSesion) {
     return <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>Cargando...</div>;
   }
-  if (!user) return <Login clientes={clientes} usuarios={usuarios} onLoginCliente={setClienteSesion} onLogin={(u) => { setUser(u); if (u.rol === "entrenador") setTab("mis-paseos"); }} />;
+  if (!user) return <Login usuarios={usuarios} onLogin={(u) => { setUser(u); if (u.rol === "entrenador") setTab("mis-paseos"); }} />;
 
   const esAdmin = user.rol === "administrador";
   const esCoordinador = user.rol === "coordinador";
@@ -5650,7 +5760,7 @@ export default function HowriaAdmin() {
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
     </div>
   );

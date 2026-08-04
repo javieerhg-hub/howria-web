@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Howria — Paseos y adiestramiento canino</title>
+<meta name="description" content="Conoce el equipo de Howria: paseos y adiestramiento canino en Santiago, con cariño real y método profesional." />
+<link rel="icon" type="image/png" href="/logo-howria.png" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Howria" />
+<meta property="og:title" content="Howria — Paseos y adiestramiento canino" />
+<meta property="og:description" content="Conoce el equipo de Howria: paseos y adiestramiento canino en Santiago, con cariño real y método profesional." />
+<meta property="og:image" content="https://howria.cl/logo-howria.png" />
+<meta property="og:url" content="https://howria.cl/nosotros" />
+<meta name="twitter:card" content="summary" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
@@ -162,6 +171,13 @@
     border-radius: 8px;
     text-decoration: none;
     font-size: 0.95rem;
+    transition: filter .15s ease;
+  }
+  .btn:hover { filter: brightness(0.93); }
+  .gallery img { transition: transform .25s ease; }
+  .gallery img:hover { transform: scale(1.03); }
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .gallery img { transition: none; }
   }
   footer {
     text-align: center;
@@ -181,10 +197,10 @@
 
   <section>
     <div class="gallery">
-      <img class="tall" src="images/perro-1.jpg" alt="Pastor alemán sentado al aire libre" />
-      <img src="images/javier-perro.jpg" alt="Entrenador junto a su perro" />
-      <img src="images/perro-ciudad.jpg" alt="Perro paseando en un parque de la ciudad" />
-      <img src="images/cachorros.jpg" alt="Dos cachorros golden retriever" style="grid-column: span 2;" />
+      <img class="tall" src="images/perro-1.jpg" alt="Pastor alemán sentado al aire libre" loading="lazy" />
+      <img src="images/javier-perro.jpg" alt="Entrenador junto a su perro" loading="lazy" />
+      <img src="images/perro-ciudad.jpg" alt="Perro paseando en un parque de la ciudad" loading="lazy" />
+      <img src="images/cachorros.jpg" alt="Dos cachorros golden retriever" style="grid-column: span 2;" loading="lazy" />
     </div>
   </section>
 
@@ -224,8 +240,8 @@
 
   <section>
     <div class="gallery" style="grid-template-columns: 1fr 1fr;">
-      <img src="images/perro-cerca.jpg" alt="Retrato cercano de pastor alemán" style="height: 340px;" />
-      <img src="images/perro-ciudad.jpg" alt="Perro con correa roja en el parque" style="height: 340px;" />
+      <img src="images/perro-cerca.jpg" alt="Retrato cercano de pastor alemán" style="height: 340px;" loading="lazy" />
+      <img src="images/perro-ciudad.jpg" alt="Perro con correa roja en el parque" style="height: 340px;" loading="lazy" />
     </div>
   </section>
 
