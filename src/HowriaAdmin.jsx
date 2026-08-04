@@ -739,35 +739,6 @@ function diasDelMes(mesIdx, anio) {
   return new Date(anio, mesIdx + 1, 0).getDate();
 }
 
-// Calcula los horarios libres de un adiestrador en un día puntual, a
-// partir de su franja activa (disponibilidad) y las citas que ya le
-// ocupan ese día (ocupados, formato { fecha_hora, duracion_min } — viene
-// del RPC citas_ocupadas_dia, no del citasAgenda local del cliente, que
-// por RLS solo trae sus propias citas).
-function calcularSlotsDisponibles({ adiestrador, fechaStr, disponibilidad, ocupados, duracionMin = 60 }) {
-  if (!fechaStr) return [];
-  const dow = (new Date(`${fechaStr}T00:00:00`).getDay() + 6) % 7; // 0=lunes, igual que DIAS_SEMANA
-  const rango = disponibilidad.find((d) => d.adiestrador === adiestrador && d.diaSemana === dow && d.activo);
-  if (!rango) return [];
-
-  const slots = [];
-  let cursor = new Date(`${fechaStr}T${rango.horaInicio}`);
-  const fin = new Date(`${fechaStr}T${rango.horaFin}`);
-  const ahora = Date.now();
-  while (cursor.getTime() + duracionMin * 60000 <= fin.getTime()) {
-    const inicioSlot = cursor.getTime();
-    const finSlot = inicioSlot + duracionMin * 60000;
-    const choca = ocupados.some((o) => {
-      const oIni = new Date(o.fecha_hora).getTime();
-      const oFin = oIni + (o.duracion_min || 60) * 60000;
-      return inicioSlot < oFin && finSlot > oIni;
-    });
-    if (!choca && inicioSlot > ahora) slots.push(new Date(cursor));
-    cursor = new Date(cursor.getTime() + duracionMin * 60000);
-  }
-  return slots;
-}
-
 // Feriados de Chile — lista editable. Fechas fijas se repiten cada año;
 // Semana Santa y algunos feriados "puente" cambian, así que conviene
 // revisar/agregar los del año siguiente cuando corresponda.
@@ -971,144 +942,11 @@ function SeleccionarPerrito({ opciones, onElegir, onSalir }) {
 }
 
 // ---------- Portal del cliente ----------
-const ESTADOS_CITA_CLIENTE = {
-  pendiente: { nombre: "Esperando confirmación", color: "#8A6A1E", bg: "#F3E3B4" },
-  agendada: { nombre: "Confirmada", color: "#2F6A46", bg: "#D8ECDE" },
-  rechazada: { nombre: "No disponible", color: "#A85C3B", bg: "#F1DCD2" },
-  cancelada: { nombre: "Cancelada", color: "#8A7E5C", bg: "#EDE4CE" },
-  realizada: { nombre: "Realizada", color: NAVY, bg: "#EDE4CE" },
-};
-
-// ---------- Agendar evaluación o clase (portal del cliente) ----------
-function AgendarCitaCliente({ cliente, usuarios, disponibilidad, citasCliente, onCrearCita }) {
-  const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
-  const [tipo, setTipo] = useState("evaluacion");
-  const [adiestrador, setAdiestrador] = useState(adiestradores[0]?.nombre ?? "");
-  const [fecha, setFecha] = useState("");
-  const [ocupados, setOcupados] = useState([]);
-  const [cargandoSlots, setCargandoSlots] = useState(false);
-  const [horaSel, setHoraSel] = useState(null);
-  const [enviando, setEnviando] = useState(false);
-
-  useEffect(() => {
-    setHoraSel(null);
-    if (!adiestrador || !fecha) { setOcupados([]); return; }
-    let activo = true;
-    setCargandoSlots(true);
-    supabase.rpc("citas_ocupadas_dia", { p_adiestrador: adiestrador, p_fecha: fecha }).then(({ data, error }) => {
-      if (!activo) return;
-      if (error) showToast(`No se pudo revisar la disponibilidad: ${error.message}`);
-      setOcupados(data || []);
-      setCargandoSlots(false);
-    });
-    return () => { activo = false; };
-  }, [adiestrador, fecha]);
-
-  const slots = useMemo(
-    () => calcularSlotsDisponibles({ adiestrador, fechaStr: fecha, disponibilidad, ocupados, duracionMin: 60 }),
-    [adiestrador, fecha, disponibilidad, ocupados]
-  );
-
-  async function enviarSolicitud() {
-    if (!horaSel || enviando) return;
-    setEnviando(true);
-    await onCrearCita({
-      clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
-      tipo, adiestrador, fechaISO: horaSel.toISOString(), estado: "pendiente", origen: "cliente", duracionMin: 60,
-    });
-    setEnviando(false);
-    setHoraSel(null);
-    setFecha("");
-    showToast("Solicitud enviada — te avisaremos por correo cuando el adiestrador la confirme.");
-  }
-
-  const citasOrdenadas = [...citasCliente].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  const manana = new Date(); manana.setDate(manana.getDate() + 1);
-  const limiteMax = new Date(); limiteMax.setDate(limiteMax.getDate() + 45);
-
-  return (
-    <div className="howria-card" style={tarjeta}>
-      <h2 style={sectionTitle}>Agendar evaluación o clase</h2>
-      <p style={hint}>Elige adiestrador y día para ver sus horarios disponibles. Quedará pendiente hasta que el adiestrador la confirme.</p>
-
-      {adiestradores.length === 0 ? (
-        <p style={{ ...hint, marginTop: 10 }}>Todavía no hay adiestradores disponibles para agendar.</p>
-      ) : (
-        <>
-          <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
-            <div>
-              <label style={label} htmlFor="cliente-cita-tipo">Tipo</label>
-              <select id="cliente-cita-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-                {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={label} htmlFor="cliente-cita-adiestrador">Adiestrador</label>
-              <select id="cliente-cita-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-                {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={label} htmlFor="cliente-cita-fecha">Día</label>
-              <input id="cliente-cita-fecha" type="date" value={fecha} min={fechaKey(manana)} max={fechaKey(limiteMax)}
-                onChange={(e) => setFecha(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-            </div>
-          </div>
-
-          {fecha && (
-            <div style={{ marginTop: 16 }}>
-              <p style={label}>Horarios disponibles</p>
-              {cargandoSlots ? (
-                <p style={hint}>Buscando horarios…</p>
-              ) : slots.length === 0 ? (
-                <p style={hint}>No quedan horarios libres ese día — prueba con otra fecha.</p>
-              ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {slots.map((s) => (
-                    <button key={s.toISOString()} type="button" onClick={() => setHoraSel(s)}
-                      style={{ padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
-                        border: horaSel?.getTime() === s.getTime() ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
-                        background: horaSel?.getTime() === s.getTime() ? NAVY : "#FFFFFF",
-                        color: horaSel?.getTime() === s.getTime() ? CREAM : INK }}>
-                      {s.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <button onClick={enviarSolicitud} disabled={!horaSel || enviando}
-            style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", opacity: !horaSel || enviando ? 0.45 : 1 }}>
-            {enviando ? "Enviando..." : "Solicitar cita"}
-          </button>
-        </>
-      )}
-
-      {citasOrdenadas.length > 0 && (
-        <div style={{ marginTop: 22, borderTop: "1px solid #EDE4CE", paddingTop: 16 }}>
-          <p style={label}>Tus solicitudes y citas</p>
-          {citasOrdenadas.map((c, i) => {
-            const est = ESTADOS_CITA_CLIENTE[c.estado] || ESTADOS_CITA_CLIENTE.pendiente;
-            return (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                <span>{TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre} con {c.adiestrador} · {new Date(c.fechaISO).toLocaleString("es-CL", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: est.bg, color: est.color, flex: "none", marginLeft: 10 }}>{est.nombre}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PortalCliente({ cliente, boletasCliente, citasCliente, usuarios, disponibilidad, onCrearCita, onSalir }) {
+function PortalCliente({ cliente, boletasCliente, onSalir }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const boletasOrdenadas = [...boletasCliente].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
   const pendientes = boletasCliente.filter((b) => b.estado === "pendiente_pago" || b.estado === "no_enviada");
   const totalPendiente = pendientes.reduce((acc, b) => acc + b.total, 0);
-  const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
 
   return (
     <div style={{ minHeight: "100vh", background: CREAM, fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
@@ -1156,10 +994,6 @@ function PortalCliente({ cliente, boletasCliente, citasCliente, usuarios, dispon
             ))}
           </div>
         </div>
-
-        {puedeAgendar && (
-          <AgendarCitaCliente cliente={cliente} usuarios={usuarios} disponibilidad={disponibilidad} citasCliente={citasCliente} onCrearCita={onCrearCita} />
-        )}
 
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Tus boletas</h2>
@@ -2148,6 +1982,16 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
     ...boletasAdiestramientoCliente.map((b) => ({ ...b, _tipo: "adiestramiento" })),
   ].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
   const totalHistorico = historialVentas.reduce((acc, b) => acc + b.total, 0);
+  const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
+  const [linkCopiado, setLinkCopiado] = useState(false);
+
+  function copiarLinkAgenda() {
+    const link = `${window.location.origin}/agendar?c=${cliente._dbId}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2500);
+    });
+  }
 
   return (
     <div>
@@ -2178,7 +2022,10 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flex: "none" }}>
+          <div style={{ display: "flex", gap: 8, flex: "none", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {puedeAgendar && cliente._dbId && (
+              <button onClick={copiarLinkAgenda} style={botonSecundario}>{linkCopiado ? "¡Copiado!" : "Copiar link de agenda"}</button>
+            )}
             <button onClick={onEditar} style={botonSecundario}>Editar</button>
             {puedeEliminar && <BotonEliminar onConfirm={onEliminar} style={{ ...botonSecundario, borderColor: RUST, color: RUST }} />}
           </div>
@@ -5941,10 +5788,6 @@ export default function HowriaAdmin() {
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion);
   const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
-
-  function crearCitaCliente(citaData) {
-    setCitasAgenda((prev) => [...prev, { id: Date.now(), notas: "", ...citaData }]);
-  }
   const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
 
   if (clientesParaElegir) {
@@ -5962,10 +5805,6 @@ export default function HowriaAdmin() {
       <PortalCliente
         cliente={clienteSesion}
         boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clienteSesion))}
-        citasCliente={citasAgenda.filter((c) => c.clienteId === clienteSesion._dbId)}
-        usuarios={usuarios}
-        disponibilidad={disponibilidad}
-        onCrearCita={crearCitaCliente}
         onSalir={() => { supabase.auth.signOut(); setClienteSesion(null); }}
       />
     );
