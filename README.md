@@ -44,14 +44,13 @@ npm run dev
 ## Notas importantes
 
 - **RLS activado** en todas las tablas: solo usuarios autenticados
-  (Supabase Auth) pueden leer/escribir. Desde `database/rls_permisos_por_rol.sql`
-  (**hay que correrlo a mano en el SQL Editor de Supabase — todavía no se ha
-  ejecutado ahí**) los permisos ya distinguen por rol a nivel de base de
-  datos, no solo de interfaz: por ejemplo, solo `administrador` puede
-  escribir en `usuarios` (antes cualquiera podía auto-ascenderse de rol), y
-  `boletas`/`pagos_trabajadores` quedan restringidos a coordinador y
-  administrador. Ver ese archivo para la matriz completa de qué rol puede
-  hacer qué en cada tabla.
+  (Supabase Auth) pueden leer/escribir. `database/rls_permisos_por_rol.sql`
+  ya está corrido en el SQL Editor de Supabase — los permisos distinguen
+  por rol a nivel de base de datos, no solo de interfaz: por ejemplo, solo
+  `administrador` puede escribir en `usuarios` (antes cualquiera podía
+  auto-ascenderse de rol), y `boletas`/`pagos_trabajadores` quedan
+  restringidos a coordinador y administrador. Ver ese archivo para la
+  matriz completa de qué rol puede hacer qué en cada tabla.
 - El login usa Supabase Auth con correos sintéticos tipo
   `nombre.apellido@howria.local` (no reciben correos reales — las cuentas
   se crean/gestionan a mano en Supabase → Authentication → Users).
