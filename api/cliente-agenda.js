@@ -83,6 +83,9 @@ export default async function handler(req, res) {
       .from("disponibilidad_adiestrador")
       .select("adiestrador, dia_semana, hora_inicio, hora_fin")
       .eq("activo", true);
+    const { data: tarifas } = await admin
+      .from("tarifas_adiestrador")
+      .select("adiestrador, precio_evaluacion, precio_clase");
 
     let slots;
     if (adiestrador && fecha) {
@@ -106,6 +109,7 @@ export default async function handler(req, res) {
       puedeAgendar,
       adiestradores: (usuarios || []).map((u) => u.nombre),
       disponibilidad: (disponibilidad || []).map((d) => ({ adiestrador: d.adiestrador, diaSemana: d.dia_semana, horaInicio: d.hora_inicio, horaFin: d.hora_fin })),
+      tarifas: (tarifas || []).map((t) => ({ adiestrador: t.adiestrador, precioEvaluacion: t.precio_evaluacion, precioClase: t.precio_clase })),
       slots,
       diasAdelanteMax: DIAS_ADELANTE_MAX,
     });
@@ -166,6 +170,16 @@ export default async function handler(req, res) {
       return;
     }
 
+    // el precio queda "congelado" en la cita al momento de la solicitud —
+    // si el adiestrador cambia su tarifa después, no afecta lo que el
+    // cliente ya vio y reservó.
+    const { data: tarifa } = await admin
+      .from("tarifas_adiestrador")
+      .select("precio_evaluacion, precio_clase")
+      .eq("adiestrador", adiestrador)
+      .maybeSingle();
+    const precio = tipo === "evaluacion" ? (tarifa?.precio_evaluacion ?? 0) : (tarifa?.precio_clase ?? 0);
+
     const { error: insertErr } = await admin.from("citas_agenda").insert({
       cliente_id: cliente.id,
       cliente_nombre: cliente.nombre,
@@ -176,6 +190,7 @@ export default async function handler(req, res) {
       estado: "pendiente",
       origen: "cliente",
       duracion_min: DURACION_MIN,
+      precio,
     });
     if (insertErr) {
       res.status(500).json({ error: "No se pudo guardar la solicitud" });

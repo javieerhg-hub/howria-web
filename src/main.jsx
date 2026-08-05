@@ -2,9 +2,11 @@ import React, { Suspense } from "react";
 import ReactDOM from "react-dom/client";
 
 // Carga perezosa por ruta: cada visitante solo baja el JS de la página que
-// realmente ve — antes las tres rutas (landing pública, /agendar, /admin)
-// venían en un mismo bundle, así que la landing y la reserva pública
-// arrastraban también todo el código del panel interno sin usarlo.
+// realmente ve — antes las tres rutas (landing pública, /agendaadiestrador
+// o /agendar, /admin) venían en un mismo bundle, así que la landing y la
+// reserva pública arrastraban también todo el código del panel interno
+// sin usarlo. /agendar se deja funcionando para links ya compartidos con
+// ese nombre — /agendaadiestrador es el que se comparte de ahora en más.
 const HowriaAdminBundle = React.lazy(() =>
   import("./HowriaAdmin.jsx").then((m) => ({
     default: () => (<><m.default /><m.ToastHost /></>),
@@ -15,7 +17,7 @@ const AgendarPublico = React.lazy(() => import("./AgendarPublico.jsx"));
 
 const pathname = window.location.pathname;
 const esAdmin = pathname.startsWith("/admin");
-const esAgendar = pathname.startsWith("/agendar");
+const esAgendar = pathname.startsWith("/agendar") || pathname.startsWith("/agendaadiestrador");
 
 function Cargando() {
   return (

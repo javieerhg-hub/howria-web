@@ -314,6 +314,21 @@ function dbToDisponibilidad(row) {
   };
 }
 
+function tarifaToDb(t) {
+  return {
+    adiestrador: t.adiestrador,
+    precio_evaluacion: t.precioEvaluacion,
+    precio_clase: t.precioClase,
+  };
+}
+function dbToTarifa(row) {
+  return {
+    adiestrador: row.adiestrador,
+    precioEvaluacion: row.precio_evaluacion,
+    precioClase: row.precio_clase,
+  };
+}
+
 function prospectoToDb(p) {
   return {
     nombre: p.nombre,
@@ -638,6 +653,41 @@ function useDisponibilidad(sessionVersion) {
         return idx >= 0 ? prev.map((f, i) => (i === idx ? guardada : f)) : [...prev, guardada];
       });
     }
+  }
+
+  return [filas, actualizar, cargando];
+}
+
+// Precio de evaluación/clase por adiestrador (tarifas_adiestrador): una
+// fila por adiestrador, upsert igual que useDisponibilidad pero sin la
+// dimensión de día de semana.
+function useTarifas(sessionVersion) {
+  const [filas, setFilas] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("tarifas_adiestrador").select("*").then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar las tarifas: ${error.message}`);
+      else if (data) setFilas(data.map(dbToTarifa));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  async function actualizar(adiestrador, cambios) {
+    const actual = filas.find((f) => f.adiestrador === adiestrador)
+      || { adiestrador, precioEvaluacion: 0, precioClase: 0 };
+    const nueva = { ...actual, ...cambios };
+    setFilas((prev) => {
+      const idx = prev.findIndex((f) => f.adiestrador === adiestrador);
+      return idx >= 0 ? prev.map((f, i) => (i === idx ? nueva : f)) : [...prev, nueva];
+    });
+    const { error } = await supabase.from("tarifas_adiestrador")
+      .upsert(tarifaToDb(nueva), { onConflict: "adiestrador" });
+    if (error) showToast(`No se pudo guardar la tarifa: ${error.message}`);
   }
 
   return [filas, actualizar, cargando];
@@ -1938,7 +1988,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
   const [linkCopiado, setLinkCopiado] = useState(false);
 
   function copiarLinkAgenda() {
-    const link = `${window.location.origin}/agendar?c=${cliente._dbId}`;
+    const link = `${window.location.origin}/agendaadiestrador?c=${cliente._dbId}`;
     navigator.clipboard.writeText(link).then(() => {
       setLinkCopiado(true);
       setTimeout(() => setLinkCopiado(false), 2500);
@@ -4988,7 +5038,7 @@ const TIPOS_CITA = [
 
 const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rechazada: "Rechazada", cancelada: "Cancelada", realizada: "Realizada" };
 
-function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad, actualizarDisponibilidad, rolActual, nombreActual }) {
+function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad, actualizarDisponibilidad, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
@@ -5228,6 +5278,38 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
                     </div>
                   );
                 })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {(esEntrenador || adiestradores.length > 0) && (
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Precios</h2>
+          <p style={hint}>Lo que ve el tutor al reservar en el link público — se guarda en cada solicitud, así que si lo cambias no afecta las citas ya agendadas.</p>
+          {!esEntrenador && (
+            <select value={adiestradorHorario} onChange={(e) => setAdiestradorHorario(e.target.value)} style={{ ...input, marginTop: 12, width: 240 }}>
+              {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+            </select>
+          )}
+          {(() => {
+            const objetivo = esEntrenador ? nombreActual : adiestradorHorario;
+            const tarifa = tarifas.find((t) => t.adiestrador === objetivo) || { precioEvaluacion: 0, precioClase: 0 };
+            return (
+              <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+                <div>
+                  <label style={label} htmlFor="tarifa-evaluacion">Precio evaluación</label>
+                  <input id="tarifa-evaluacion" type="number" min="0" value={tarifa.precioEvaluacion}
+                    onChange={(e) => actualizarTarifas(objetivo, { precioEvaluacion: Number(e.target.value) })}
+                    style={{ ...input, marginBottom: 0 }} />
+                </div>
+                <div>
+                  <label style={label} htmlFor="tarifa-clase">Precio clase</label>
+                  <input id="tarifa-clase" type="number" min="0" value={tarifa.precioClase}
+                    onChange={(e) => actualizarTarifas(objetivo, { precioClase: Number(e.target.value) })}
+                    style={{ ...input, marginBottom: 0 }} />
+                </div>
               </div>
             );
           })()}
@@ -5735,6 +5817,7 @@ export default function HowriaAdmin() {
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion);
   const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
+  const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
 
@@ -5899,7 +5982,7 @@ export default function HowriaAdmin() {
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} />}
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
-        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>

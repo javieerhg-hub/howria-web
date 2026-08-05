@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/nosotros", "destination": "/nosotros.html" },
     { "source": "/admin", "destination": "/index.html" },
-    { "source": "/agendar", "destination": "/index.html" }
+    { "source": "/agendar", "destination": "/index.html" },
+    { "source": "/agendaadiestrador", "destination": "/index.html" }
   ]
 }

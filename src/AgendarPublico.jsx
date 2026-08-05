@@ -25,6 +25,10 @@ function fechaKey(d) {
   return d.toISOString().slice(0, 10);
 }
 
+function fmtCLP(n) {
+  return Number(n || 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+}
+
 export default function AgendarPublico() {
   const clienteId = useMemo(() => new URLSearchParams(window.location.search).get("c"), []);
 
@@ -137,10 +141,20 @@ export default function AgendarPublico() {
               </select>
 
               <label style={label} htmlFor="pub-adiestrador">Adiestrador</label>
-              <select id="pub-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 14 }}>
+              <select id="pub-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 8 }}>
                 {info.adiestradores.length === 0 && <option value="">No hay adiestradores disponibles</option>}
                 {info.adiestradores.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
+
+              {(() => {
+                const tarifa = (info.tarifas || []).find((t) => t.adiestrador === adiestrador);
+                const precio = tipo === "evaluacion" ? tarifa?.precioEvaluacion : tarifa?.precioClase;
+                return precio > 0 ? (
+                  <p style={{ margin: "0 0 14px", fontSize: 13.5, color: NAVY, fontWeight: 600 }}>
+                    Precio: {fmtCLP(precio)}
+                  </p>
+                ) : <div style={{ marginBottom: 14 }} />;
+              })()}
 
               <label style={label} htmlFor="pub-fecha">Día</label>
               <input id="pub-fecha" type="date" value={fecha} min={fechaKey(manana)} max={fechaKey(limiteMax)}

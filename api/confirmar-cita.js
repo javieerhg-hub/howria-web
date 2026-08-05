@@ -13,6 +13,10 @@ const RUST = "#A85C3B";
 
 const NOMBRES_TIPO = { evaluacion: "Evaluación", clase: "Clase de adiestramiento" };
 
+function fmtCLP(n) {
+  return Number(n || 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+}
+
 function renderCorreoConfirmacion(cita) {
   const fecha = new Intl.DateTimeFormat("es-CL", {
     weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
@@ -46,7 +50,9 @@ function renderCorreoConfirmacion(cita) {
                       <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Tipo</p>
                       <p style="margin:0 0 14px; font-size:15px; color:${NAVY};">${tipoNombre}${cita.perro ? ` · 🐾 ${cita.perro}` : ""}</p>
                       <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Adiestrador</p>
-                      <p style="margin:0; font-size:15px; color:${NAVY};">${cita.adiestrador}</p>
+                      <p style="margin:0${cita.precio > 0 ? " 0 14px" : ""}; font-size:15px; color:${NAVY};">${cita.adiestrador}</p>
+                      ${cita.precio > 0 ? `<p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Precio</p>
+                      <p style="margin:0; font-size:15px; color:${NAVY};">${fmtCLP(cita.precio)}</p>` : ""}
                     </td>
                   </tr>
                 </table>
@@ -112,7 +118,7 @@ export default async function handler(req, res) {
 
   const { data: cita, error: citaErr } = await admin
     .from("citas_agenda")
-    .select("id, cliente_id, cliente_nombre, perro, tipo, adiestrador, fecha_hora, duracion_min, estado, clientes(email)")
+    .select("id, cliente_id, cliente_nombre, perro, tipo, adiestrador, fecha_hora, duracion_min, estado, precio, clientes(email)")
     .eq("id", citaId)
     .maybeSingle();
   if (citaErr || !cita) {
