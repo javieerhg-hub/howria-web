@@ -5091,12 +5091,15 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
         body: JSON.stringify({ citaId: cita._dbId }),
       });
       const resultado = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
+      // 502 = la cita sí quedó confirmada en la base, pero el envío del
+      // correo falló (ver api/confirmar-cita.js) — igual hay que reflejar
+      // el cambio de estado en pantalla, no solo los errores de verdad.
+      if (!resp.ok && resp.status !== 502) {
         showToast(resultado.error || "No se pudo confirmar la cita.");
         return;
       }
       setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, estado: "agendada" } : c)));
-      showToast("Cita confirmada — se le avisó al cliente por correo.");
+      showToast(resp.status === 502 ? resultado.error : "Cita confirmada — se le avisó al cliente por correo.");
     } catch {
       showToast("No se pudo confirmar la cita — revisa tu conexión.");
     } finally {
