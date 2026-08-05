@@ -546,6 +546,7 @@ const TODOS_LOS_TABS = [
   { id: "coordinacion", label: "Coordinación", grupo: "Trabajo diario" },
   { id: "mapa", label: "Mapa", grupo: "Trabajo diario" },
   { id: "agenda", label: "Agenda", grupo: "Trabajo diario" },
+  { id: "mail", label: "Mail", grupo: "Trabajo diario" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y boletas" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y boletas" },
   { id: "boletas-adiestramiento", label: "Boletas Adiestramiento", grupo: "Clientes y boletas" },
@@ -693,6 +694,42 @@ function useTarifas(sessionVersion) {
   }
 
   return [filas, actualizar, cargando];
+}
+
+function dbToCorreo(row) {
+  return {
+    direccion: row.direccion,
+    remitente: row.remitente,
+    destinatario: row.destinatario,
+    asunto: row.asunto,
+    cuerpoTexto: row.cuerpo_texto,
+    cuerpoHtml: row.cuerpo_html,
+    clienteId: row.cliente_id,
+    prospectoId: row.prospecto_id,
+    creadoEn: row.creado_en,
+  };
+}
+
+// Solo lectura: los correos se escriben desde el servidor (Cloudflare
+// Worker -> api/correo-entrante.js para los entrantes, api/confirmar-cita.js
+// para los salientes), nunca desde el navegador.
+function useCorreos(sessionVersion) {
+  const [correos, setCorreos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("correos").select("*").order("creado_en", { ascending: false }).then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar el correo: ${error.message}`);
+      else if (data) setCorreos(data.map(dbToCorreo));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  return [correos, cargando];
 }
 
 function boletaDemo(diasAtras, numero, cliente, perro, cantidad, valorPaseo, estado = "no_enviada") {
@@ -5338,6 +5375,82 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
   );
 }
 
+// ---------- Mail (contacto@howria.cl) ----------
+function fmtFechaCorreo(iso) {
+  return new Date(iso).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function Mail({ correos, cargando }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [abiertoId, setAbiertoId] = useState(null);
+
+  const busquedaLimpia = busqueda.trim().toLowerCase();
+  const listaFiltrada = correos.filter((c) => {
+    if (!busquedaLimpia) return true;
+    return (c.asunto || "").toLowerCase().includes(busquedaLimpia)
+      || c.remitente.toLowerCase().includes(busquedaLimpia)
+      || c.destinatario.toLowerCase().includes(busquedaLimpia);
+  });
+
+  if (cargando) {
+    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando correo…</p></div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 20 }}>
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Mail — contacto@howria.cl</h2>
+        <p style={hint}>Correos recibidos en contacto@howria.cl y confirmaciones enviadas a clientes, todo en un solo lugar.</p>
+        <input placeholder="Buscar por asunto, remitente o destinatario…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginTop: 14, marginBottom: 0 }} />
+      </div>
+
+      {listaFiltrada.length === 0 ? (
+        <div className="howria-card" style={tarjeta}><p style={hint}>No hay correos {busquedaLimpia ? "que coincidan con la búsqueda" : "todavía"}.</p></div>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {listaFiltrada.map((c, idx) => {
+            const abierto = abiertoId === idx;
+            const esEntrante = c.direccion === "entrante";
+            return (
+              <div key={idx} className="howria-card" style={{ ...tarjeta, padding: "14px 18px", cursor: "pointer" }} onClick={() => setAbiertoId(abierto ? null : idx)}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ fontSize: 13.5 }}>
+                    <span style={{ marginRight: 8, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: esEntrante ? "#D8ECDE" : "#F1DCD2", color: esEntrante ? "#2F6A46" : "#A85C3B" }}>
+                      {esEntrante ? "Recibido" : "Enviado"}
+                    </span>
+                    <b style={{ color: NAVY }}>{c.asunto || "(sin asunto)"}</b>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>{fmtFechaCorreo(c.creadoEn)}</div>
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
+                  {esEntrante ? `De: ${c.remitente}` : `Para: ${c.destinatario}`}
+                </p>
+                {abierto && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #E4DBC3" }} onClick={(e) => e.stopPropagation()}>
+                    {c.cuerpoHtml ? (
+                      // sandbox sin "allow-scripts"/"allow-same-origin": el correo puede
+                      // traer HTML/CSS de quien sea, incluso con <script> malicioso — el
+                      // iframe aislado lo muestra pero nunca lo ejecuta ni comparte cookies.
+                      <iframe
+                        sandbox=""
+                        srcDoc={c.cuerpoHtml}
+                        title={`Correo: ${c.asunto || "sin asunto"}`}
+                        style={{ width: "100%", height: 360, border: "1px solid #E4DBC3", borderRadius: 6, background: "#FFFFFF" }}
+                      />
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 13.5, color: "#332E22", whiteSpace: "pre-wrap" }}>{c.cuerpoTexto || "(sin contenido)"}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
@@ -5838,6 +5951,7 @@ export default function HowriaAdmin() {
   const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
+  const [correos, cargandoCorreos] = useCorreos(sessionVersion);
   const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
 
   if (clientesParaElegir) {
@@ -6003,6 +6117,7 @@ export default function HowriaAdmin() {
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} />}
+        {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} cargando={cargandoCorreos} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
     </div>

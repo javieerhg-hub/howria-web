@@ -182,5 +182,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  await admin.from("correos").insert({
+    direccion: "saliente",
+    remitente: "citas@howria.cl",
+    destinatario: clienteEmail,
+    asunto: "Tu cita con Howria fue confirmada",
+    cuerpo_html: renderCorreoConfirmacion(cita),
+    cliente_id: cita.cliente_id,
+    prospecto_id: cita.prospecto_id,
+  });
+
   res.status(200).json({ ok: true });
 }
