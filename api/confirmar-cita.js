@@ -118,7 +118,7 @@ export default async function handler(req, res) {
 
   const { data: cita, error: citaErr } = await admin
     .from("citas_agenda")
-    .select("id, cliente_id, cliente_nombre, perro, tipo, adiestrador, fecha_hora, duracion_min, estado, precio, clientes(email)")
+    .select("id, cliente_id, prospecto_id, cliente_nombre, perro, tipo, adiestrador, fecha_hora, duracion_min, estado, precio, clientes(email), prospectos(email)")
     .eq("id", citaId)
     .maybeSingle();
   if (citaErr || !cita) {
@@ -133,7 +133,7 @@ export default async function handler(req, res) {
     res.status(409).json({ error: "La cita ya no está pendiente de confirmación" });
     return;
   }
-  const clienteEmail = cita.clientes?.email;
+  const clienteEmail = cita.clientes?.email || cita.prospectos?.email;
   if (!clienteEmail) {
     res.status(422).json({ error: "El cliente no tiene correo registrado" });
     return;

@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-// Página pública sin login: el equipo le manda este link al tutor
-// (howria.cl/agendar?c=<clienteId>) para que elija día y hora de una
-// evaluación o clase. No usa Supabase Auth — todo pasa por
-// /api/cliente-agenda, que valida y guarda del lado del servidor.
+// Página pública sin login, con dos modos:
+//  - howria.cl/agendaadiestrador?c=<clienteId> — el equipo la comparte
+//    desde la ficha de un cliente que ya existe (nombre/perro precargados).
+//  - howria.cl/agendaadiestrador (sin ?c=) — link genérico, para cualquier
+//    persona que todavía no es cliente; pide sus datos de contacto y eso
+//    crea un prospecto en vez de reservar a nombre de un cliente.
+// No usa Supabase Auth — todo pasa por /api/cliente-agenda, que valida y
+// guarda del lado del servidor.
 
 const NAVY = "#122A40";
 const CREAM = "#F3ECDC";
@@ -46,13 +50,14 @@ export default function AgendarPublico() {
   const [enviado, setEnviado] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState("");
 
+  const [contactoNombre, setContactoNombre] = useState("");
+  const [contactoEmail, setContactoEmail] = useState("");
+  const [contactoTelefono, setContactoTelefono] = useState("");
+  const [contactoPerro, setContactoPerro] = useState("");
+
   useEffect(() => {
-    if (!clienteId) {
-      setError("Este link no es válido — pídele al equipo de Howria que te lo reenvíe.");
-      setCargando(false);
-      return;
-    }
-    fetch(`/api/cliente-agenda?clienteId=${encodeURIComponent(clienteId)}`)
+    const url = clienteId ? `/api/cliente-agenda?clienteId=${encodeURIComponent(clienteId)}` : "/api/cliente-agenda";
+    fetch(url)
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
       .then(({ ok, data }) => {
         if (!ok) {
@@ -73,25 +78,32 @@ export default function AgendarPublico() {
 
   useEffect(() => {
     setHoraSel(null);
-    if (!adiestrador || !fecha || !clienteId) { setSlots([]); return; }
+    if (!adiestrador || !fecha) { setSlots([]); return; }
     let activo = true;
     setCargandoSlots(true);
-    fetch(`/api/cliente-agenda?clienteId=${encodeURIComponent(clienteId)}&adiestrador=${encodeURIComponent(adiestrador)}&fecha=${fecha}`)
+    const params = new URLSearchParams({ adiestrador, fecha });
+    if (clienteId) params.set("clienteId", clienteId);
+    fetch(`/api/cliente-agenda?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => { if (activo) setSlots(data.slots || []); })
       .finally(() => { if (activo) setCargandoSlots(false); });
     return () => { activo = false; };
   }, [adiestrador, fecha, clienteId]);
 
+  const faltanDatosContacto = !clienteId && (!contactoNombre.trim() || !contactoEmail.trim() || !contactoTelefono.trim() || !contactoPerro.trim());
+
   async function enviarSolicitud() {
-    if (!horaSel || enviando) return;
+    if (!horaSel || enviando || faltanDatosContacto) return;
     setEnviando(true);
     setErrorEnvio("");
     try {
+      const body = clienteId
+        ? { clienteId, adiestrador, tipo, fechaISO: horaSel }
+        : { nombre: contactoNombre.trim(), email: contactoEmail.trim(), telefono: contactoTelefono.trim(), perro: contactoPerro.trim(), adiestrador, tipo, fechaISO: horaSel };
       const resp = await fetch("/api/cliente-agenda", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clienteId, adiestrador, tipo, fechaISO: horaSel }),
+        body: JSON.stringify(body),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
@@ -132,8 +144,28 @@ export default function AgendarPublico() {
             <>
               <p style={{ margin: "0 0 4px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1 }}>Agendar con Howria</p>
               <h1 style={{ margin: "0 0 20px", fontSize: 20, color: NAVY, fontFamily: "Georgia, serif" }}>
-                Hola {info.cliente.nombre.split(" ")[0]}, elige día y hora
+                {info.cliente ? `Hola ${info.cliente.nombre.split(" ")[0]}, elige día y hora` : "Agenda tu evaluación o clase"}
               </h1>
+
+              {!info.cliente && (
+                <div style={{ marginBottom: 4 }}>
+                  <label style={label} htmlFor="pub-nombre">Tu nombre</label>
+                  <input id="pub-nombre" value={contactoNombre} onChange={(e) => setContactoNombre(e.target.value)} placeholder="Nombre y apellido"
+                    style={{ ...input, marginBottom: 12 }} />
+
+                  <label style={label} htmlFor="pub-correo">Tu correo</label>
+                  <input id="pub-correo" type="email" value={contactoEmail} onChange={(e) => setContactoEmail(e.target.value)} placeholder="tu@correo.com"
+                    style={{ ...input, marginBottom: 12 }} />
+
+                  <label style={label} htmlFor="pub-telefono">Tu teléfono</label>
+                  <input id="pub-telefono" value={contactoTelefono} onChange={(e) => setContactoTelefono(e.target.value)} placeholder="+56 9 1234 5678"
+                    style={{ ...input, marginBottom: 12 }} />
+
+                  <label style={label} htmlFor="pub-perro">Nombre de tu perro</label>
+                  <input id="pub-perro" value={contactoPerro} onChange={(e) => setContactoPerro(e.target.value)} placeholder="Ej. Toby"
+                    style={{ ...input, marginBottom: 18 }} />
+                </div>
+              )}
 
               <label style={label} htmlFor="pub-tipo">Tipo</label>
               <select id="pub-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 14 }}>
@@ -185,8 +217,8 @@ export default function AgendarPublico() {
 
               {errorEnvio && <p style={{ margin: "10px 0 0", fontSize: 12.5, color: RUST }}>{errorEnvio}</p>}
 
-              <button onClick={enviarSolicitud} disabled={!horaSel || enviando}
-                style={{ ...botonPrincipal, opacity: !horaSel || enviando ? 0.45 : 1 }}>
+              <button onClick={enviarSolicitud} disabled={!horaSel || enviando || faltanDatosContacto}
+                style={{ ...botonPrincipal, opacity: !horaSel || enviando || faltanDatosContacto ? 0.45 : 1 }}>
                 {enviando ? "Enviando..." : "Solicitar cita"}
               </button>
             </>

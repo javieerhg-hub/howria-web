@@ -332,6 +332,7 @@ function dbToTarifa(row) {
 function prospectoToDb(p) {
   return {
     nombre: p.nombre,
+    email: p.email || null,
     telefono: p.telefono || null,
     perro: p.perro || null,
     origen: p.origen,
@@ -345,6 +346,7 @@ function prospectoToDb(p) {
 function dbToProspecto(row) {
   return {
     nombre: row.nombre,
+    email: row.email,
     telefono: row.telefono,
     perro: row.perro,
     origen: row.origen,
@@ -532,7 +534,7 @@ const ESTADOS_PROSPECTO = [
   { id: "perdido", nombre: "Perdido", color: "#A85C3B", bg: "#F1DCD2" },
 ];
 
-const ORIGENES_PROSPECTO = ["Instagram", "Facebook", "WhatsApp", "Referido", "Página web", "Otro"];
+const ORIGENES_PROSPECTO = ["Instagram", "Facebook", "WhatsApp", "Referido", "Página web", "Agenda pública", "Otro"];
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS_SEMANA = ["L","M","X","J","V","S","D"]; // lun..dom
@@ -5051,6 +5053,15 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
   const [confirmandoId, setConfirmandoId] = useState(null);
   const esEntrenador = rolActual === "entrenador";
   const [adiestradorHorario, setAdiestradorHorario] = useState(esEntrenador ? nombreActual : (adiestradores[0]?.nombre ?? ""));
+  const [linkGenericoCopiado, setLinkGenericoCopiado] = useState(false);
+
+  function copiarLinkGenerico() {
+    const link = `${window.location.origin}/agendaadiestrador`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkGenericoCopiado(true);
+      setTimeout(() => setLinkGenericoCopiado(false), 2500);
+    });
+  }
 
   function agendar() {
     const cliente = clientes.find((c) => c.id === Number(clienteId));
@@ -5113,6 +5124,14 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
+      <div className="howria-card" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Link público de agenda</h2>
+          <p style={{ ...hint, margin: 0 }}>Compártelo donde quieras (Instagram, WhatsApp) — cualquier persona puede pedir hora y quedar como prospecto.</p>
+        </div>
+        <button onClick={copiarLinkGenerico} style={botonSecundario}>{linkGenericoCopiado ? "¡Copiado!" : "Copiar link genérico"}</button>
+      </div>
+
       {pendientes.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
           <h2 style={sectionTitle}>Pendientes de confirmar ({pendientes.length})</h2>
@@ -5353,7 +5372,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
 
   function convertirACliente(p) {
     setClientes((prev) => [...prev, {
-      id: Date.now(), nombre: p.nombre, perro: p.perro || "Sin nombre", telefono: p.telefono,
+      id: Date.now(), nombre: p.nombre, perro: p.perro || "Sin nombre", telefono: p.telefono, email: p.email || null,
       valorPaseoRef: 0, raza: "", pesoKg: 0, fotoUrl: null, diasHabituales: [], planHabitual: "LV",
       objetivos: "", paseadorNombre: "", tarifaPaseador: 0, direccion: "", lat: null, lng: null, tipoServicio: p.tipoServicio,
     }]);
@@ -5473,7 +5492,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
                   <b style={{ color: NAVY, fontSize: 15 }}>{p.nombre}</b>
                   <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
                   <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
-                    {p.telefono || "sin teléfono"} {p.perro && `· 🐾 ${p.perro}`} · {p.origen}
+                    {p.telefono || "sin teléfono"} {p.email && `· ${p.email}`} {p.perro && `· 🐾 ${p.perro}`} · {p.origen}
                     {p.tipoServicio?.length > 0 && ` · interés: ${p.tipoServicio.map((t) => TIPOS_SERVICIO.find((x) => x.id === t)?.nombre).join(", ")}`}
                   </p>
                   <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
