@@ -698,6 +698,7 @@ function useTarifas(sessionVersion) {
 
 function dbToCorreo(row) {
   return {
+    id: row.id,
     direccion: row.direccion,
     remitente: row.remitente,
     destinatario: row.destinatario,
@@ -706,13 +707,16 @@ function dbToCorreo(row) {
     cuerpoHtml: row.cuerpo_html,
     clienteId: row.cliente_id,
     prospectoId: row.prospecto_id,
+    leido: row.leido,
     creadoEn: row.creado_en,
   };
 }
 
-// Solo lectura: los correos se escriben desde el servidor (Cloudflare
-// Worker -> api/correo-entrante.js para los entrantes, api/confirmar-cita.js
-// para los salientes), nunca desde el navegador.
+// Los correos entrantes se escriben desde el servidor (Cloudflare Worker ->
+// api/correo-entrante.js) y los salientes desde api/confirmar-cita.js /
+// api/responder-correo.js — el navegador nunca inserta filas acá, pero sí
+// necesita el setter para marcar "leído" y para reflejar al toque una
+// respuesta recién enviada, sin esperar el próximo refetch completo.
 function useCorreos(sessionVersion) {
   const [correos, setCorreos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -729,7 +733,7 @@ function useCorreos(sessionVersion) {
     return () => { activo = false; };
   }, [sessionVersion]);
 
-  return [correos, cargando];
+  return [correos, setCorreos, cargando];
 }
 
 function boletaDemo(diasAtras, numero, cliente, perro, cantidad, valorPaseo, estado = "no_enviada") {
@@ -2016,7 +2020,7 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
 }
 
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -2094,6 +2098,13 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           </p>
         </div>
 
+        {cliente.email && (
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
+            <p style={{ ...label, marginBottom: 8 }}>Correo</p>
+            <ListaCorreosCompacta correos={correosCliente} />
+          </div>
+        )}
+
         <div style={{ marginTop: 20 }}>
           <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
           <div style={{ display: "flex", gap: 6 }}>
@@ -2130,7 +2141,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
-function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes }) {
+function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -2138,6 +2149,13 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
   const [filtroPaseador, setFiltroPaseador] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [orden, setOrden] = useState("nombre-asc");
+
+  useEffect(() => {
+    if (!saltarClienteDbId) return;
+    const c = clientes.find((x) => x._dbId === saltarClienteDbId);
+    if (c) setPerfilId(c.id);
+    limpiarSaltoCliente();
+  }, [saltarClienteDbId, clientes]);
 
   function guardar(datos) {
     const limpio = { ...datos, valorPaseoRef: Number(datos.valorPaseoRef) || 0, pesoKg: Number(datos.pesoKg) || 0, tarifaPaseador: Number(datos.tarifaPaseador) || 0 };
@@ -2157,6 +2175,7 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
         cliente={clientePerfil}
         boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clientePerfil))}
         boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
+        correosCliente={correos.filter((c) => c.clienteId === clientePerfil._dbId)}
         setBoletasEmitidas={setBoletasEmitidas}
         setBoletasAdiestramiento={setBoletasAdiestramiento}
         onVolver={() => setPerfilId(null)}
@@ -5380,17 +5399,143 @@ function fmtFechaCorreo(iso) {
   return new Date(iso).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function Mail({ correos, cargando }) {
+// La "contraparte" de un correo es la persona externa del intercambio —
+// el remitente si nos escribió, el destinatario si le escribimos nosotros.
+// Agrupar por esa dirección arma un hilo por persona sin importar si el
+// mensaje vino de una reserva automática o de una respuesta manual.
+function construirHilos(correos) {
+  const porContraparte = new Map();
+  for (const c of correos) {
+    const contraparte = (c.direccion === "entrante" ? c.remitente : c.destinatario).toLowerCase();
+    if (!porContraparte.has(contraparte)) porContraparte.set(contraparte, []);
+    porContraparte.get(contraparte).push(c);
+  }
+  const hilos = [];
+  for (const [contraparte, mensajes] of porContraparte) {
+    mensajes.sort((a, b) => new Date(a.creadoEn) - new Date(b.creadoEn));
+    const conFicha = [...mensajes].reverse().find((m) => m.clienteId || m.prospectoId);
+    hilos.push({
+      contraparte,
+      mensajes,
+      ultimo: mensajes[mensajes.length - 1],
+      noLeidos: mensajes.filter((m) => m.direccion === "entrante" && !m.leido).length,
+      clienteId: conFicha?.clienteId || null,
+      prospectoId: conFicha?.prospectoId || null,
+    });
+  }
+  hilos.sort((a, b) => new Date(b.ultimo.creadoEn) - new Date(a.ultimo.creadoEn));
+  return hilos;
+}
+
+// Mismo render para cualquier mensaje (entrante o saliente): si trae HTML
+// se muestra en un iframe sandbox — el saliente es contenido propio, pero
+// aplicar la misma regla sin excepciones evita tener dos caminos distintos
+// para renderizar HTML de correo, uno de ellos sin aislar.
+function CuerpoCorreo({ mensaje }) {
+  if (mensaje.cuerpoHtml) {
+    return (
+      <iframe
+        sandbox=""
+        srcDoc={mensaje.cuerpoHtml}
+        title={`Correo: ${mensaje.asunto || "sin asunto"}`}
+        style={{ width: "100%", height: 300, border: "1px solid #E4DBC3", borderRadius: 6, background: "#FFFFFF" }}
+      />
+    );
+  }
+  return <p style={{ margin: 0, fontSize: 13.5, color: "#332E22", whiteSpace: "pre-wrap" }}>{mensaje.cuerpoTexto || "(sin contenido)"}</p>;
+}
+
+// Lista compacta reutilizada en la ficha de un cliente y en la tarjeta de
+// un prospecto — sin cuerpo expandible, para eso está la pestaña Mail.
+function ListaCorreosCompacta({ correos }) {
+  if (correos.length === 0) return <p style={{ ...hint, margin: 0 }}>Sin correos todavía.</p>;
+  const ordenados = [...correos].sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn));
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      {ordenados.map((c) => (
+        <p key={c.id} style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>
+          <span style={{ fontWeight: 600, color: c.direccion === "entrante" ? "#2F6A46" : "#A85C3B" }}>
+            {c.direccion === "entrante" ? "Recibido" : "Enviado"}
+          </span>{" "}
+          {c.asunto || "(sin asunto)"} · {fmtFechaCorreo(c.creadoEn)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVerCliente, onVerProspecto }) {
   const [busqueda, setBusqueda] = useState("");
-  const [abiertoId, setAbiertoId] = useState(null);
+  const [hiloAbierto, setHiloAbierto] = useState(null);
+  const [respuesta, setRespuesta] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState("");
+
+  const hilos = useMemo(() => construirHilos(correos), [correos]);
+
+  function nombreDe(hilo) {
+    if (hilo.clienteId) {
+      const c = clientes.find((x) => x._dbId === hilo.clienteId);
+      if (c) return c.nombre;
+    }
+    if (hilo.prospectoId) {
+      const p = prospectos.find((x) => x._dbId === hilo.prospectoId);
+      if (p) return p.nombre;
+    }
+    return hilo.contraparte;
+  }
 
   const busquedaLimpia = busqueda.trim().toLowerCase();
-  const listaFiltrada = correos.filter((c) => {
+  const hilosFiltrados = hilos.filter((h) => {
     if (!busquedaLimpia) return true;
-    return (c.asunto || "").toLowerCase().includes(busquedaLimpia)
-      || c.remitente.toLowerCase().includes(busquedaLimpia)
-      || c.destinatario.toLowerCase().includes(busquedaLimpia);
+    return h.contraparte.includes(busquedaLimpia)
+      || nombreDe(h).toLowerCase().includes(busquedaLimpia)
+      || (h.ultimo.asunto || "").toLowerCase().includes(busquedaLimpia);
   });
+
+  function abrirHilo(hilo) {
+    const yaAbierto = hiloAbierto === hilo.contraparte;
+    setHiloAbierto(yaAbierto ? null : hilo.contraparte);
+    setErrorEnvio("");
+    if (yaAbierto) return;
+    const idsNoLeidos = hilo.mensajes.filter((m) => m.direccion === "entrante" && !m.leido).map((m) => m.id);
+    if (idsNoLeidos.length === 0) return;
+    supabase.from("correos").update({ leido: true }).in("id", idsNoLeidos).then(({ error }) => {
+      if (!error) setCorreos((prev) => prev.map((c) => (idsNoLeidos.includes(c.id) ? { ...c, leido: true } : c)));
+    });
+  }
+
+  async function enviarRespuesta(hilo) {
+    if (!respuesta.trim() || enviando) return;
+    setEnviando(true);
+    setErrorEnvio("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch("/api/responder-correo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({
+          destinatario: hilo.contraparte,
+          asunto: hilo.ultimo.asunto ? `Re: ${hilo.ultimo.asunto.replace(/^Re:\s*/i, "")}` : undefined,
+          cuerpo: respuesta,
+          clienteId: hilo.clienteId,
+          prospectoId: hilo.prospectoId,
+        }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setErrorEnvio(resultado.error || "No se pudo enviar la respuesta.");
+        return;
+      }
+      if (resultado.correo) setCorreos((prev) => [dbToCorreo(resultado.correo), ...prev]);
+      setRespuesta("");
+      showToast("Respuesta enviada.");
+    } catch {
+      setErrorEnvio("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   if (cargando) {
     return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando correo…</p></div>;
@@ -5400,46 +5545,62 @@ function Mail({ correos, cargando }) {
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Mail — contacto@howria.cl</h2>
-        <p style={hint}>Correos recibidos en contacto@howria.cl y confirmaciones enviadas a clientes, todo en un solo lugar.</p>
-        <input placeholder="Buscar por asunto, remitente o destinatario…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginTop: 14, marginBottom: 0 }} />
+        <p style={hint}>Correos recibidos en contacto@howria.cl y confirmaciones enviadas a clientes, agrupados por conversación.</p>
+        <input placeholder="Buscar por nombre, correo o asunto…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginTop: 14, marginBottom: 0 }} />
       </div>
 
-      {listaFiltrada.length === 0 ? (
+      {hilosFiltrados.length === 0 ? (
         <div className="howria-card" style={tarjeta}><p style={hint}>No hay correos {busquedaLimpia ? "que coincidan con la búsqueda" : "todavía"}.</p></div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
-          {listaFiltrada.map((c, idx) => {
-            const abierto = abiertoId === idx;
-            const esEntrante = c.direccion === "entrante";
+          {hilosFiltrados.map((hilo) => {
+            const abierto = hiloAbierto === hilo.contraparte;
+            const nombre = nombreDe(hilo);
             return (
-              <div key={idx} className="howria-card" style={{ ...tarjeta, padding: "14px 18px", cursor: "pointer" }} onClick={() => setAbiertoId(abierto ? null : idx)}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div key={hilo.contraparte} className="howria-card" style={tarjeta}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, cursor: "pointer" }} onClick={() => abrirHilo(hilo)}>
                   <div style={{ fontSize: 13.5 }}>
-                    <span style={{ marginRight: 8, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: esEntrante ? "#D8ECDE" : "#F1DCD2", color: esEntrante ? "#2F6A46" : "#A85C3B" }}>
-                      {esEntrante ? "Recibido" : "Enviado"}
-                    </span>
-                    <b style={{ color: NAVY }}>{c.asunto || "(sin asunto)"}</b>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>{fmtFechaCorreo(c.creadoEn)}</div>
-                </div>
-                <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
-                  {esEntrante ? `De: ${c.remitente}` : `Para: ${c.destinatario}`}
-                </p>
-                {abierto && (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #E4DBC3" }} onClick={(e) => e.stopPropagation()}>
-                    {c.cuerpoHtml ? (
-                      // sandbox sin "allow-scripts"/"allow-same-origin": el correo puede
-                      // traer HTML/CSS de quien sea, incluso con <script> malicioso — el
-                      // iframe aislado lo muestra pero nunca lo ejecuta ni comparte cookies.
-                      <iframe
-                        sandbox=""
-                        srcDoc={c.cuerpoHtml}
-                        title={`Correo: ${c.asunto || "sin asunto"}`}
-                        style={{ width: "100%", height: 360, border: "1px solid #E4DBC3", borderRadius: 6, background: "#FFFFFF" }}
-                      />
-                    ) : (
-                      <p style={{ margin: 0, fontSize: 13.5, color: "#332E22", whiteSpace: "pre-wrap" }}>{c.cuerpoTexto || "(sin contenido)"}</p>
+                    {hilo.noLeidos > 0 && (
+                      <span style={{ marginRight: 8, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{hilo.noLeidos}</span>
                     )}
+                    <b style={{ color: NAVY }}>{nombre}</b>
+                    {nombre !== hilo.contraparte && <span style={{ color: "#8A7E5C" }}> · {hilo.contraparte}</span>}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>{fmtFechaCorreo(hilo.ultimo.creadoEn)}</div>
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C", cursor: "pointer" }} onClick={() => abrirHilo(hilo)}>
+                  {hilo.ultimo.direccion === "entrante" ? "Recibido" : "Enviado"} · {hilo.ultimo.asunto || "(sin asunto)"}
+                </p>
+
+                {abierto && (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3", display: "grid", gap: 14 }}>
+                    {(hilo.clienteId || hilo.prospectoId) && (
+                      <button onClick={() => (hilo.clienteId ? onVerCliente(hilo.clienteId) : onVerProspecto(hilo.contraparte))}
+                        style={{ ...botonSecundario, width: "auto", padding: "6px 14px", fontSize: 12.5, flex: "none", alignSelf: "flex-start" }}>
+                        Ver ficha de {hilo.clienteId ? "cliente" : "prospecto"}
+                      </button>
+                    )}
+                    {hilo.mensajes.map((m) => (
+                      <div key={m.id}>
+                        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: m.direccion === "entrante" ? "#D8ECDE" : "#F1DCD2", color: m.direccion === "entrante" ? "#2F6A46" : "#A85C3B" }}>
+                            {m.direccion === "entrante" ? `De: ${m.remitente}` : `Para: ${m.destinatario}`}
+                          </span>
+                          <span style={{ fontSize: 12, color: "#8A7E5C" }}>{fmtFechaCorreo(m.creadoEn)}</span>
+                        </div>
+                        <CuerpoCorreo mensaje={m} />
+                      </div>
+                    ))}
+
+                    <div style={{ borderTop: "1px solid #E4DBC3", paddingTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                      <textarea placeholder={`Responder a ${hilo.contraparte}…`} value={respuesta} onChange={(e) => setRespuesta(e.target.value)}
+                        rows={3} style={{ ...input, marginBottom: 8, resize: "vertical" }} />
+                      {errorEnvio && <p style={{ margin: "0 0 8px", fontSize: 12.5, color: RUST }}>{errorEnvio}</p>}
+                      <button onClick={() => enviarRespuesta(hilo)} disabled={!respuesta.trim() || enviando}
+                        style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: !respuesta.trim() || enviando ? 0.5 : 1 }}>
+                        {enviando ? "Enviando..." : "Enviar respuesta"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -5454,12 +5615,18 @@ function Mail({ correos, cargando }) {
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
-function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando }) {
+function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando, correos = [], enfoqueEmail, limpiarEnfoque }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(PROSPECTO_VACIO);
   const [filtroEstado, setFiltroEstado] = useState("activos");
   const [busqueda, setBusqueda] = useState("");
   const [notaNueva, setNotaNueva] = useState({});
+
+  useEffect(() => {
+    if (!enfoqueEmail) return;
+    setBusqueda(enfoqueEmail);
+    limpiarEnfoque();
+  }, [enfoqueEmail]);
 
   function crearProspecto() {
     if (!form.nombre.trim()) return;
@@ -5501,7 +5668,8 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
       if (busquedaLimpia) {
         return p.nombre.toLowerCase().includes(busquedaLimpia)
           || (p.telefono || "").toLowerCase().includes(busquedaLimpia)
-          || (p.perro || "").toLowerCase().includes(busquedaLimpia);
+          || (p.perro || "").toLowerCase().includes(busquedaLimpia)
+          || (p.email || "").toLowerCase().includes(busquedaLimpia);
       }
       if (filtroEstado === "todos") return true;
       if (filtroEstado === "activos") return p.estado !== "ganado" && p.estado !== "perdido";
@@ -5647,6 +5815,13 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
                   <button onClick={() => agregarNota(p.id)} style={{ ...botonSecundario, padding: "8px 16px" }}>Agregar</button>
                 </div>
               </div>
+
+              {p._dbId && (
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ ...label, marginBottom: 6 }}>Correo</p>
+                  <ListaCorreosCompacta correos={correos.filter((c) => c.prospectoId === p._dbId)} />
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 {p.estado === "ganado" && (
@@ -5951,7 +6126,10 @@ export default function HowriaAdmin() {
   const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
-  const [correos, cargandoCorreos] = useCorreos(sessionVersion);
+  const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
+  const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
+  const [enfoqueEmailProspecto, setEnfoqueEmailProspecto] = useState(null);
+  const correosNoLeidos = correos.filter((c) => c.direccion === "entrante" && !c.leido).length;
   const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
 
   if (clientesParaElegir) {
@@ -6064,18 +6242,25 @@ export default function HowriaAdmin() {
                   borderBottom: grupoActivo ? `2.5px solid ${GOLD}` : "2.5px solid transparent",
                   fontWeight: grupoActivo ? 700 : 500, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap"
                 }}>
-                {grupo} <span style={{ fontSize: 10, transform: grupoAbierto === grupo ? "rotate(180deg)" : "none", display: "inline-block" }}>▾</span>
+                {grupo}
+                {tabsDelGrupo.some((t) => t.id === "mail") && correosNoLeidos > 0 && (
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: RUST, display: "inline-block" }} />
+                )}
+                <span style={{ fontSize: 10, transform: grupoAbierto === grupo ? "rotate(180deg)" : "none", display: "inline-block" }}>▾</span>
               </button>
               {grupoAbierto === grupo && (
                 <div style={{ position: "absolute", top: "100%", left: 0, background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 8, boxShadow: "0 8px 20px rgba(20,33,61,0.12)", minWidth: 200, zIndex: 20, overflow: "hidden" }}>
                   {tabsDelGrupo.map((t) => (
                     <button key={t.id} onClick={() => { setTab(t.id); setGrupoAbierto(null); }}
                       style={{
-                        display: "block", width: "100%", textAlign: "left", padding: "11px 16px", border: "none",
+                        display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "11px 16px", border: "none",
                         background: tab === t.id ? CREAM_SOFT : "none", cursor: "pointer",
                         fontSize: 13.5, color: tab === t.id ? NAVY : INK, fontWeight: tab === t.id ? 700 : 500
                       }}>
                       {t.label}
+                      {t.id === "mail" && correosNoLeidos > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{correosNoLeidos}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -6108,7 +6293,7 @@ export default function HowriaAdmin() {
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
@@ -6116,8 +6301,8 @@ export default function HowriaAdmin() {
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} />}
-        {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} cargando={cargandoCorreos} />}
+        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
+        {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
     </div>
