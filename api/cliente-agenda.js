@@ -14,13 +14,27 @@ import { createClient } from "@supabase/supabase-js";
 
 const DURACION_MIN = 60;
 const DIAS_ADELANTE_MAX = 45;
+const ZONA_CHILE = "America/Santiago";
+
+// El horario del adiestrador (ej. "09:00") es hora de Chile, pero esta
+// función corre en el servidor de Vercel (UTC) — hay que anclar el offset
+// explícitamente o "09:00" se interpreta como 09:00 UTC (5 horas antes de
+// lo que corresponde). Se calcula con Intl en vez de un offset fijo porque
+// Chile tiene horario de verano y el desfase cambia según la fecha.
+function offsetChileISO(fechaStr) {
+  const partes = new Intl.DateTimeFormat("en-US", { timeZone: ZONA_CHILE, timeZoneName: "longOffset" })
+    .formatToParts(new Date(`${fechaStr}T12:00:00Z`));
+  const gmt = partes.find((p) => p.type === "timeZoneName").value; // "GMT-04:00" o "GMT-03:00"
+  return gmt.replace("GMT", "");
+}
 
 function calcularSlotsDisponibles({ diaSemana, rango, ocupados, duracionMin = DURACION_MIN }) {
   if (!rango) return [];
   const [fecha] = rango.fecha.split("T");
+  const offset = offsetChileISO(fecha);
   const slots = [];
-  let cursor = new Date(`${fecha}T${rango.horaInicio}`);
-  const fin = new Date(`${fecha}T${rango.horaFin}`);
+  let cursor = new Date(`${fecha}T${rango.horaInicio}${offset}`);
+  const fin = new Date(`${fecha}T${rango.horaFin}${offset}`);
   const ahora = Date.now();
   while (cursor.getTime() + duracionMin * 60000 <= fin.getTime()) {
     const inicioSlot = cursor.getTime();
@@ -79,8 +93,8 @@ export default async function handler(req, res) {
         .select("fecha_hora, duracion_min")
         .eq("adiestrador", adiestrador)
         .in("estado", ["pendiente", "agendada"])
-        .gte("fecha_hora", `${fecha}T00:00:00`)
-        .lt("fecha_hora", `${fecha}T23:59:59`);
+        .gte("fecha_hora", `${fecha}T00:00:00${offsetChileISO(fecha)}`)
+        .lt("fecha_hora", `${fecha}T23:59:59${offsetChileISO(fecha)}`);
       slots = calcularSlotsDisponibles({
         rango: rangoRow ? { fecha, horaInicio: rangoRow.hora_inicio, horaFin: rangoRow.hora_fin } : null,
         ocupados: ocupados || [],
