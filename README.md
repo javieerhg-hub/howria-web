@@ -24,9 +24,8 @@ howria.cl (DNS en Cloudflare).
   "pendiente" hasta que el adiestrador la confirma desde el panel. El
   equipo comparte este link a mano (botón "Copiar link de agenda" en la
   ficha del cliente, pestaña Clientes).
-- `public/boletas.html` y `public/nosotros.html` — páginas estáticas
-  independientes (no pasan por React). Rutas resueltas en `vercel.json`
-  (`/boletas`, `/nosotros`, `/admin`, `/agendar`).
+- `public/nosotros.html` — página estática independiente (no pasa por
+  React). Ruta resuelta en `vercel.json` (junto con `/admin` y `/agendar`).
 - `src/App.jsx` — portal viejo sin protección, **ya no se usa** (se puede
   borrar; `main.jsx` no lo importa).
 - `api/confirmar-cita.js` — función serverless de Vercel: el adiestrador o
