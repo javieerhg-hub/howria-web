@@ -15,6 +15,7 @@
 // POST { clienteId, adiestrador, tipo, fechaISO }                              -> cita a nombre de un cliente existente
 // POST { nombre, email, telefono, perro, adiestrador, tipo, fechaISO }         -> crea un prospecto + la cita
 import { createClient } from "@supabase/supabase-js";
+import { enviarNotificacionPush } from "./_lib/enviarPush.js";
 
 const DURACION_MIN = 60;
 const DIAS_ADELANTE_MAX = 45;
@@ -237,6 +238,14 @@ export default async function handler(req, res) {
       res.status(500).json({ error: "No se pudo guardar la solicitud" });
       return;
     }
+
+    const nombreSolicitante = cliente ? cliente.nombre : nombre.trim();
+    const tipoTexto = tipo === "evaluacion" ? "una evaluación" : "una clase";
+    await enviarNotificacionPush(admin, {
+      titulo: "Nueva solicitud de cita",
+      cuerpo: `${nombreSolicitante} pidió ${tipoTexto} con ${adiestrador}`,
+      url: "/admin",
+    });
 
     res.status(200).json({ ok: true });
     return;

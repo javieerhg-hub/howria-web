@@ -11,6 +11,7 @@
 // (mismo secreto configurado en las variables del Worker).
 import { createClient } from "@supabase/supabase-js";
 import PostalMime from "postal-mime";
+import { enviarNotificacionPush } from "./_lib/enviarPush.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -74,6 +75,12 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "No se pudo guardar el correo" });
     return;
   }
+
+  await enviarNotificacionPush(admin, {
+    titulo: "Nuevo correo",
+    cuerpo: parsed.subject ? `${remitente}: ${parsed.subject}` : `De ${remitente}`,
+    url: "/admin",
+  });
 
   res.status(200).json({ ok: true });
 }

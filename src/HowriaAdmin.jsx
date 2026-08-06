@@ -1,7 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Bell, BellOff } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
+import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones } from "./lib/pushNotificaciones.js";
 import {
   diasDelMes, FERIADOS_CHILE, RECARGO_FIN_SEMANA_FERIADO_DEFAULT, esFinDeSemanaOFeriado,
   valorConRecargo, diasSegunPlan, calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
@@ -859,6 +860,51 @@ function NotificacionesBell({ avisos }) {
         </div>
       )}
     </div>
+  );
+}
+
+function BotonNotificacionesPush({ usuarioEmail }) {
+  const [soportado, setSoportado] = useState(true);
+  const [activo, setActivo] = useState(false);
+  const [cargando, setCargando] = useState(false);
+
+  useEffect(() => {
+    if (!soportaPush()) {
+      setSoportado(false);
+      return;
+    }
+    suscripcionActiva().then(setActivo);
+  }, []);
+
+  if (!soportado) return null;
+
+  async function alternar() {
+    if (cargando) return;
+    setCargando(true);
+    try {
+      if (activo) {
+        await desuscribirNotificaciones();
+        setActivo(false);
+      } else {
+        await suscribirNotificaciones(usuarioEmail);
+        setActivo(true);
+      }
+    } catch (err) {
+      showToast(err.message || "No se pudo cambiar el estado de las notificaciones");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={alternar}
+      disabled={cargando}
+      title={activo ? "Desactivar notificaciones push" : "Activar notificaciones push (citas nuevas, correos)"}
+      style={{ background: "none", border: "none", cursor: cargando ? "default" : "pointer", padding: 6, display: "flex", alignItems: "center", color: activo ? "#D4A94A" : "#7C8AA0" }}
+    >
+      {activo ? <Bell size={19} /> : <BellOff size={19} />}
+    </button>
   );
 }
 
@@ -6203,6 +6249,7 @@ export default function HowriaAdmin() {
         <LogoHowria height={44} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
+          <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
             <div>{user.nombre}</div>
             <div style={{ fontSize: 11, color: "#9BAAB8", textTransform: "capitalize" }}>{user.rol}</div>

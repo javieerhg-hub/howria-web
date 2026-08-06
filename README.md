@@ -50,6 +50,8 @@ howria.cl (DNS en Cloudflare).
 Para el frontend (Vite, expuestas al navegador):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_KEY` (publishable/anon key, no la secret key)
+- `VITE_VAPID_PUBLIC_KEY` — llave pública VAPID para notificaciones push
+  (ver sección "Notificaciones push" más abajo).
 
 Para las funciones serverless en `api/` (solo server-side, nunca al navegador):
 - `SUPABASE_URL` — misma URL del proyecto que `VITE_SUPABASE_URL`.
@@ -61,6 +63,8 @@ Para las funciones serverless en `api/` (solo server-side, nunca al navegador):
 - `RESEND_API_KEY` — API key de [Resend](https://resend.com), para el
   correo de confirmación de citas y (vía SMTP) los links mágicos de
   Supabase Auth.
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — mismo par de llaves VAPID,
+  para firmar los envíos de push (ver abajo).
 
 ## Cómo correrlo local
 
@@ -69,6 +73,34 @@ npm install
 cp .env.example .env   # completar con las credenciales reales de Supabase
 npm run dev
 ```
+
+## Notificaciones push
+
+El panel (`/admin`) puede avisar al staff por notificación push del
+navegador (aunque el panel esté cerrado) cuando: llega una nueva solicitud
+de cita desde `/agendar` o `/agendaadiestrador`, o llega un correo nuevo a
+`contacto@howria.cl`. Es opt-in por persona/navegador: cada usuario la
+activa con el ícono de campana en el header del panel (`BotonNotificacionesPush`
+en `HowriaAdmin.jsx`).
+
+Piezas:
+- `public/sw.js` — service worker que recibe el push y muestra la
+  notificación.
+- `src/lib/pushNotificaciones.js` — pide permiso, suscribe el navegador y
+  guarda la suscripción en la tabla `push_subscriptions` (Supabase).
+- `api/_lib/enviarPush.js` — helper server-side (usa `web-push`) que le
+  manda el push a todas las suscripciones guardadas; se llama desde
+  `api/cliente-agenda.js` (POST) y `api/correo-entrante.js`. Si una
+  suscripción ya no existe (410/404), se borra sola.
+
+Setup, además de las variables de entorno de arriba:
+1. Correr `database/push_subscriptions.sql` en el SQL Editor de Supabase
+   (crea la tabla y sus políticas RLS).
+2. Generar el par de llaves VAPID una sola vez: `npx web-push generate-vapid-keys`.
+   La pública va en `VITE_VAPID_PUBLIC_KEY` y `VAPID_PUBLIC_KEY` (mismo
+   valor, dos variables porque una la lee el navegador y la otra el
+   servidor), la privada solo en `VAPID_PRIVATE_KEY` — nunca en una
+   variable `VITE_*` (quedaría expuesta al navegador).
 
 ## Notas importantes
 
