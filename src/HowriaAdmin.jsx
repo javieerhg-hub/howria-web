@@ -518,10 +518,25 @@ function useRegistroPaseosSincronizado(clientes) {
           const r = next[key];
           const estado = r.cancelado ? "cancelado" : r.realizado ? "realizado" : (r.nota ? "pendiente" : null);
           if (estado) {
+            const anterior = prev[key];
+            // El builder de supabase-js es "thenable perezoso": si no se
+            // encadena/espera, nunca dispara el fetch. Sin este .then() el
+            // upsert no se mandaba nunca — el estado local quedaba "hecho"
+            // hasta el próximo reload, que lo revertía sin avisar.
             supabase.from("registro_paseos").upsert(
               { cliente_id: cliente._dbId, fecha, estado, nota: r.nota || null, paseador_nombre: cliente.paseadorNombre || null },
               { onConflict: "cliente_id,fecha" }
-            );
+            ).then(({ error }) => {
+              if (error) {
+                showToast(`No se pudo guardar el paseo: ${error.message}`);
+                setRegistroState((cur) => {
+                  const copia = { ...cur };
+                  if (anterior === undefined) delete copia[key];
+                  else copia[key] = anterior;
+                  return copia;
+                });
+              }
+            });
           }
         }
       });
