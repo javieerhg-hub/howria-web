@@ -12,6 +12,36 @@ import {
 } from "./lib/calculosBoletas.js";
 import { jsPDF } from "jspdf";
 
+// Sin esto, si algo revienta al renderizar una pestaña, React desmonta
+// todo el árbol y la pantalla queda en blanco sin ningún aviso (header y
+// barra de navegación incluidos). Con esto al menos se ve un mensaje y se
+// puede volver a Inicio en vez de quedar con una pantalla muerta. El
+// key={tab} en el llamador reinicia este estado al cambiar de pestaña.
+class LimiteDeError extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Error al renderizar la pestaña:", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Algo salió mal en esta sección</h2>
+          <p style={hint}>Prueba recargando la página. Si sigue pasando después de recargar, avísale al equipo técnico.</p>
+          <button onClick={this.props.onVolver} style={{ ...botonPrincipal, width: "auto", padding: "10px 20px" }}>Volver a Inicio</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ============================================================
 // CONEXIÓN A SUPABASE — clientes, boletas y registro de paseos
 // ============================================================
@@ -5667,7 +5697,7 @@ function fmtFechaCorreo(iso) {
 function construirHilos(correos) {
   const porContraparte = new Map();
   for (const c of correos) {
-    const contraparte = (c.direccion === "entrante" ? c.remitente : c.destinatario).toLowerCase();
+    const contraparte = (c.direccion === "entrante" ? c.remitente : c.destinatario)?.toLowerCase() || "desconocido";
     if (!porContraparte.has(contraparte)) porContraparte.set(contraparte, []);
     porContraparte.get(contraparte).push(c);
   }
@@ -6623,6 +6653,7 @@ export default function HowriaAdmin() {
       </div>
 
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
+      <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
@@ -6639,6 +6670,7 @@ export default function HowriaAdmin() {
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
+      </LimiteDeError>
       </div>
       <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
     </div>
