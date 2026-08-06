@@ -5239,7 +5239,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
         </div>
       )}
 
-      <div className="howria-g4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+      <div className="howria-inicio-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <button onClick={() => setTab("mis-paseos")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
           <p style={{ ...label, marginBottom: 8 }}>Paseos de hoy</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{realizadosHoy} / {clientesHoy.length}</p>
@@ -5284,7 +5284,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
           ) : (
             <div style={{ marginTop: 8 }}>
               {prospectosVencidos.map((p) => (
-                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
+                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
                   <span>{p.nombre}</span>
                   <span style={{ color: RUST, fontSize: 12 }}>{p.origen}</span>
                 </div>
@@ -5300,7 +5300,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
           ) : (
             <div style={{ marginTop: 8 }}>
               {proximasCitas.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
                   <span>{c.clienteNombre} · {c.adiestrador}</span>
                   <span style={{ color: "#8A7E5C", fontSize: 12 }}>{new Date(c.fechaISO).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
@@ -5319,9 +5319,9 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
             {clientesHoy.map((c) => {
               const hecho = !!registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado;
               return (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
                   <span>{c.nombre} · 🐾 {c.perro} <span style={{ color: "#8A7E5C" }}>· {c.paseadorNombre || "sin paseador"}</span></span>
-                  <span style={{ fontWeight: 600, color: hecho ? "#2F6A46" : "#B0A587" }}>{hecho ? "✓ Realizado" : "Pendiente"}</span>
+                  <span style={{ fontWeight: 600, color: hecho ? "#2F6A46" : "#B0A587", flexShrink: 0 }}>{hecho ? "✓ Realizado" : "Pendiente"}</span>
                 </div>
               );
             })}
@@ -6509,6 +6509,7 @@ export default function HowriaAdmin() {
           .howria-launcher-mobile { display: block !important; }
           .howria-home-btn { display: flex !important; }
           .howria-fab-mobile { display: block !important; }
+          .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
