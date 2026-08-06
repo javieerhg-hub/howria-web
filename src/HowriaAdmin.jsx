@@ -1053,22 +1053,15 @@ function BotonNotificacionesPush({ usuarioEmail }) {
 }
 
 // ---------- Login ----------
-function BulletBienvenida({ Icono, titulo, texto }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-      <div style={{ width: 44, height: 44, borderRadius: 12, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", color: NAVY }}>
-        <Icono size={20} />
-      </div>
-      <div>
-        <p style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: NAVY }}>{titulo}</p>
-        <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>{texto}</p>
-      </div>
-    </div>
-  );
-}
+const SLIDES_INTRO = [
+  { foto: "/images-home/hero-tres-perros.jpg", titulo: "Comienza a pasear perritos", texto: "Registra cada paseo del día y llévales el seguimiento a tus clientes." },
+  { foto: "/images-home/nosotros-pastor.jpg", titulo: "Únete al equipo", texto: "Coordina turnos, boletas y tareas junto al resto del equipo Howria." },
+  { foto: "/images-home/galeria-3.jpg", titulo: "Conecta con tus clientes", texto: "Agenda, boletas y mensajes con cada tutor, todo en un solo lugar." },
+];
 
 function Login({ onLogin, usuarios }) {
-  const [paso, setPaso] = useState("bienvenida"); // "bienvenida" | "form"
+  const [paso, setPaso] = useState("intro"); // "intro" | "form"
+  const [slideIntro, setSlideIntro] = useState(0);
   const [nombre, setNombre] = useState("");
   const [passwordEquipo, setPasswordEquipo] = useState("");
   const [errorLogin, setErrorLogin] = useState("");
@@ -1118,31 +1111,41 @@ function Login({ onLogin, usuarios }) {
     onLogin(perfil);
   }
 
-  if (paso === "bienvenida") {
+  if (paso === "intro") {
+    const slide = SLIDES_INTRO[slideIntro];
     return (
-      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 28px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}>
-            <LogoHowria height={64} />
+      <div onClick={() => setSlideIntro((s) => (s + 1) % SLIDES_INTRO.length)}
+        style={{ minHeight: "100vh", position: "relative", overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+        <div style={{
+          position: "absolute", inset: 0,
+          backgroundImage: `linear-gradient(180deg, rgba(18,42,64,0.35) 0%, rgba(18,42,64,0.6) 55%, rgba(18,42,64,0.94) 100%), url(${slide.foto})`,
+          backgroundSize: "cover", backgroundPosition: "center",
+        }} />
+        <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "24px 28px 0", display: "flex", justifyContent: "center" }}>
+            <LogoHowria height={40} />
           </div>
-          <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 30, fontWeight: 700, color: NAVY, textAlign: "center", lineHeight: 1.25, margin: "0 0 40px" }}>
-            Cuida y pasea perritos con cariño real
-          </h1>
-          <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-            <BulletBienvenida Icono={Footprints} titulo="Comienza a pasear perritos" texto="Registra y sigue cada paseo del día" />
-            <BulletBienvenida Icono={Users} titulo="Únete al equipo" texto="Coordina turnos, boletas y tareas con todos" />
-            <BulletBienvenida Icono={Dog} titulo="Conecta con tus clientes" texto="Agenda, boletas y mensajes en un solo lugar" />
+          <div style={{ flex: 1 }} />
+          <div style={{ padding: "0 28px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", textAlign: "center" }}>
+            <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 27, fontWeight: 700, color: CREAM, lineHeight: 1.25, margin: "0 0 10px" }}>{slide.titulo}</h1>
+            <p style={{ fontSize: 14, color: "#D8CDB4", margin: 0, lineHeight: 1.5 }}>{slide.texto}</p>
           </div>
-        </div>
-        <div style={{ padding: "20px 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
-          <button onClick={() => { setModo("cliente"); setPaso("form"); }}
-            style={{ flex: "0 0 auto", padding: "14px 22px", borderRadius: 999, border: "none", background: CREAM_SOFT, color: NAVY, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
-            Soy cliente
-          </button>
-          <button onClick={() => { setModo("equipo"); setPaso("form"); }}
-            style={{ flex: 1, padding: "14px 22px", borderRadius: 999, border: "none", background: NAVY, color: CREAM, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
-            Iniciar sesión
-          </button>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "22px 0" }}>
+            {SLIDES_INTRO.map((_, i) => (
+              <button key={i} onClick={(e) => { e.stopPropagation(); setSlideIntro(i); }} aria-label={`Ir a la pantalla ${i + 1}`}
+                style={{ width: i === slideIntro ? 20 : 7, height: 7, borderRadius: 4, border: "none", padding: 0, cursor: "pointer", background: i === slideIntro ? GOLD : "rgba(255,255,255,0.35)", transition: "width .2s ease" }} />
+            ))}
+          </div>
+          <div onClick={(e) => e.stopPropagation()} style={{ padding: "0 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
+            <button onClick={() => { setModo("cliente"); setPaso("form"); }}
+              style={{ flex: "0 0 auto", padding: "14px 22px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.1)", color: CREAM, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
+              Soy cliente
+            </button>
+            <button onClick={() => { setModo("equipo"); setPaso("form"); }}
+              style={{ flex: 1, padding: "14px 22px", borderRadius: 999, border: "none", background: GOLD, color: NAVY, fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
+              Iniciar sesión
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1151,7 +1154,7 @@ function Login({ onLogin, usuarios }) {
   return (
     <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
       <div style={{ padding: "18px 20px 0" }}>
-        <button onClick={() => setPaso("bienvenida")}
+        <button onClick={() => setPaso("intro")}
           style={{ border: "none", background: "none", color: NAVY, fontSize: 14, cursor: "pointer", padding: 8, display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
           ← Volver
         </button>
