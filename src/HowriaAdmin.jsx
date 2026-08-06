@@ -606,7 +606,7 @@ const TODOS_LOS_TABS = [
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
 ];
 const ORDEN_GRUPOS = ["Trabajo diario", "Clientes y boletas", "Equipo", "Prospección"];
-const ROLES_APP = ["entrenador", "coordinador", "administrador"];
+const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrador"];
 
 // Un ícono por pestaña, para el launcher tipo "app" de la pantalla de
 // Inicio en mobile (ver Inicio() más abajo). "inicio" no necesita uno —
@@ -3479,7 +3479,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
   const [borrarId, setBorrarId] = useState(null);
-  const [nuevo, setNuevo] = useState({ nombre: "", rol: "coordinador" });
+  const [nuevo, setNuevo] = useState({ nombre: "", rol: "paseador" });
   const [creando, setCreando] = useState(false);
   const [credencialesNuevo, setCredencialesNuevo] = useState(null);
   const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
@@ -3559,7 +3559,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     }
     setUsuarios((prev) => [...prev, { id: Date.now(), nombre: nombreNuevo, rol: nuevo.rol, email }]);
     setCredencialesNuevo({ nombre: nombreNuevo, email, password });
-    setNuevo({ nombre: "", rol: "coordinador" });
+    setNuevo({ nombre: "", rol: "paseador" });
     setCreando(false);
   }
 
@@ -3577,12 +3577,12 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
         return;
       }
-      setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "entrenador", email }]);
+      setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "paseador", email }]);
       const { error: errorUpdate } = await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
       if (errorUpdate) showToast(`La cuenta se creó, pero no se pudo marcar la solicitud como aprobada: ${errorUpdate.message}`);
       setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
       setCredencialesNuevo({ nombre: s.nombre, email, password });
-      showToast(`${s.nombre} fue aprobado con rol "entrenador" — ajusta el rol en la lista de arriba si corresponde otro.`);
+      showToast(`${s.nombre} fue aprobado con rol "paseador" — ajusta el rol en la lista de arriba si corresponde otro.`);
     } catch (err) {
       showToast(`No se pudo aprobar la solicitud: ${err.message || "error desconocido"}`);
     } finally {
@@ -3731,6 +3731,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                       Capacitación {(u.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {capacitacionAbiertaId === u.id ? "▴" : "▾"}
                     </button>
                     <select value={u.rol} onChange={(e) => actualizarRol(u.id, e.target.value)} style={{ ...input, marginBottom: 0, width: 170, padding: "8px 10px", fontSize: 13 }}>
+                      <option value="paseador">Paseador</option>
                       <option value="entrenador">Entrenador</option>
                       <option value="coordinador">Coordinador</option>
                       <option value="administrador">Administrador general</option>
@@ -3781,8 +3782,9 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input placeholder="Nombre completo" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={{ ...input, flex: 1, minWidth: 200, marginBottom: 0 }} />
           <select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={{ ...input, marginBottom: 0, width: 190 }}>
-            <option value="coordinador">Coordinador</option>
+            <option value="paseador">Paseador</option>
             <option value="entrenador">Entrenador</option>
+            <option value="coordinador">Coordinador</option>
             <option value="administrador">Administrador general</option>
           </select>
           <button onClick={agregar} disabled={!nuevo.nombre.trim() || creando} style={{ ...botonPrincipal, width: "auto", padding: "0 22px", opacity: !nuevo.nombre.trim() || creando ? 0.5 : 1 }}>
@@ -3804,7 +3806,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
           <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Solicitudes de registro pendientes ({solicitudesRegistro.length})</h2>
           <p style={{ fontSize: 13, color: "#2E5C41", marginTop: -8, marginBottom: 14 }}>
-            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login. Aprobar crea su cuenta (rol "entrenador" por defecto, lo puedes cambiar después en la lista de arriba).
+            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login. Aprobar crea su cuenta (rol "paseador" por defecto, lo puedes cambiar después en la lista de arriba).
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {solicitudesRegistro.map((s) => (
@@ -5072,7 +5074,7 @@ function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp
 // ---------- Ingreso de personal nuevo ----------
 function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) {
   const [nombre, setNombre] = useState("");
-  const [rol, setRol] = useState("entrenador");
+  const [rol, setRol] = useState("paseador");
   const [fotoUrl, setFotoUrl] = useState(null);
   const [fechaInicio, setFechaInicio] = useState("");
   const [banco, setBanco] = useState("");
@@ -5112,7 +5114,7 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
   }, 0);
 
   async function registrar() {
-    if (!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0) || registrando) return;
+    if (!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando) return;
     setRegistrando(true);
     const nombreNuevo = nombre.trim();
     const email = slugEmailUsuario(nombreNuevo);
@@ -5127,7 +5129,7 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
     setClientes((prev) => prev.map((c) => (seleccionados.includes(c.id) ? { ...c, paseadorNombre: nuevoUsuario.nombre } : c)));
     const detalleClientes = clientesElegidos.length > 0 ? ` con ${clientesElegidos.length} cliente(s) asignado(s)` : "";
     setCredenciales({ nombre: nombreNuevo, email, password, detalleClientes });
-    setNombre(""); setFotoUrl(null); setSeleccionados([]); setRol("entrenador"); setFechaInicio(""); setBanco(""); setNumeroCuenta("");
+    setNombre(""); setFotoUrl(null); setSeleccionados([]); setRol("paseador"); setFechaInicio(""); setBanco(""); setNumeroCuenta("");
     setRegistrando(false);
   }
 
@@ -5160,7 +5162,8 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
           <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <input placeholder="Nombre del paseador" value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...input, marginBottom: 0 }} />
             <select value={rol} onChange={(e) => setRol(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-              <option value="entrenador">Paseador / Entrenador</option>
+              <option value="paseador">Paseador</option>
+              <option value="entrenador">Entrenador</option>
               <option value="coordinador">Coordinador</option>
               <option value="administrador">Administrador general</option>
             </select>
@@ -5233,7 +5236,7 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
         </div>
       )}
 
-      <button onClick={registrar} disabled={!nombre.trim() || (rol === "entrenador" && clientesElegidos.length === 0) || registrando}
+      <button onClick={registrar} disabled={!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando}
         style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || clientesElegidos.length === 0 || registrando ? 0.45 : 1 }}>
         {registrando ? "Creando cuenta..." : "Registrar paseador y asignar clientes"}
       </button>
@@ -6847,11 +6850,15 @@ export default function HowriaAdmin() {
   if (verificandoSesion) {
     return <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>Cargando...</div>;
   }
-  if (!user) return <Login usuarios={usuarios} onLogin={(u) => { setUser(u); if (u.rol === "entrenador") setTab("mis-paseos"); }} />;
+  if (!user) return <Login usuarios={usuarios} onLogin={(u) => { setUser(u); if (u.rol === "entrenador" || u.rol === "paseador") setTab("mis-paseos"); }} />;
 
   const esAdmin = user.rol === "administrador";
   const esCoordinador = user.rol === "coordinador";
-  const esPaseador = user.rol === "entrenador";
+  // "esPaseador" agrupa a quienes trabajan en terreno (paseos y/o
+  // adiestramiento) — se usa para simplificar su vista (menos avisos,
+  // arranca en Mis paseos), no para permisos: qué pestañas ve cada rol se
+  // define aparte en permisos_roles.
+  const esPaseador = user.rol === "entrenador" || user.rol === "paseador";
   const puedeVerFinanzas = esAdmin || esCoordinador;
   const tabsPermitidosRol = permisosRoles?.[user.rol] || [];
   const tabs = TODOS_LOS_TABS.filter((t) => tabsPermitidosRol.includes(t.id));
