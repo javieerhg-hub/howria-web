@@ -1897,7 +1897,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>Dogsitter</span>
         </label>
         {dogsitterActivo && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
+          <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
             <div>
               <label style={label} htmlFor="boleta-dogsitter-precio">Precio</label>
               <input id="boleta-dogsitter-precio" type="number" min="0" placeholder="$" value={dogsitterPrecio} onChange={(e) => { setDogsitterPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
@@ -1918,7 +1918,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>Paseo largo</span>
         </label>
         {paseoLargoActivo && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
+          <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, paddingLeft: 24 }}>
             <div>
               <label style={label} htmlFor="boleta-paseolargo-precio">Precio</label>
               <input id="boleta-paseolargo-precio" type="number" min="0" placeholder="$" value={paseoLargoPrecio} onChange={(e) => { setPaseoLargoPrecio(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
@@ -2366,24 +2366,24 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
       )}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18, marginBottom: 4 }}>
-        <div style={{ position: "relative", flex: "0 1 300px" }}>
+        <div style={{ position: "relative", flex: "1 1 220px" }}>
           <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
           <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
             style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
         </div>
-        <select value={filtroPaseador} onChange={(e) => setFiltroPaseador(e.target.value)} style={{ ...input, margin: 0, width: 190 }}>
+        <select value={filtroPaseador} onChange={(e) => setFiltroPaseador(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 170px" }}>
           <option value="todos">Todos los paseadores</option>
           {paseadoresDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ ...input, margin: 0, width: 160 }}>
+        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 150px" }}>
           <option value="todos">Todos los estados</option>
           <option value="activo">Activo</option>
           <option value="pausado">Pausado</option>
           <option value="baja">Baja</option>
         </select>
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", flex: "1 1 190px" }}>
           <ArrowUpDown size={14} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-          <select value={orden} onChange={(e) => setOrden(e.target.value)} style={{ ...input, margin: 0, width: 210, paddingLeft: 34 }}>
+          <select value={orden} onChange={(e) => setOrden(e.target.value)} style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }}>
             <option value="nombre-asc">Nombre (A-Z)</option>
             <option value="nombre-desc">Nombre (Z-A)</option>
             <option value="perro-asc">Perro (A-Z)</option>
