@@ -67,7 +67,7 @@ function clienteToDb(c) {
     lng: c.lng,
     tipo_servicio: c.tipoServicio || [],
     estado_cliente: c.estadoCliente,
-    fecha_inicio: c.fechaInicio,
+    fecha_inicio: c.fechaInicio || null,
   };
 }
 
@@ -2283,6 +2283,8 @@ const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoR
 
 function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  const formInvalido = !form.nombre.trim() || !form.perro.trim();
 
   function toggleDiaHabitual(dow) {
     setForm((f) => ({ ...f, diasHabituales: f.diasHabituales.includes(dow) ? f.diasHabituales.filter((d) => d !== dow) : [...f.diasHabituales, dow].sort() }));
@@ -2306,7 +2308,8 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
   }
 
   function guardar() {
-    if (!form.nombre || !form.perro) return;
+    setIntentoGuardar(true);
+    if (formInvalido) return;
     onGuardar(form);
   }
 
@@ -2402,8 +2405,11 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
       </div>
       <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente. Para reasignar paseadores en bloque, usa la pestaña "Asignaciones".</p>
 
+      {intentoGuardar && formInvalido && (
+        <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
+      )}
       <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0 }}>Guardar ficha</button>
+        <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0, opacity: intentoGuardar && formInvalido ? 0.6 : 1 }}>Guardar ficha</button>
         <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
       </div>
     </div>
@@ -6671,6 +6677,22 @@ const botonSecundario = { padding: "10px 18px", background: "transparent", color
 const tarjeta = { background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 14, padding: 24, boxShadow: "0 1px 3px rgba(20,33,61,0.05)" };
 
 // ---------- Confirmación de borrado (dos pasos) ----------
+// Spinner giratorio genérico — trae su propio @keyframes así funciona sin
+// depender del <style> global (que solo se monta después del login), por
+// eso sirve también para la pantalla de carga inicial.
+function Spinner({ size = 22, color = GOLD, pista = "rgba(255,255,255,0.25)" }) {
+  return (
+    <>
+      <span style={{
+        display: "inline-block", width: size, height: size, borderRadius: "50%",
+        border: `${Math.max(2, size / 9)}px solid ${pista}`, borderTopColor: color,
+        animation: "howria-spin 0.7s linear infinite",
+      }} />
+      <style>{"@keyframes howria-spin { to { transform: rotate(360deg); } }"}</style>
+    </>
+  );
+}
+
 function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
   const [confirmando, setConfirmando] = useState(false);
   if (confirmando) {
@@ -7058,7 +7080,12 @@ export default function HowriaAdmin() {
   }
 
   if (verificandoSesion) {
-    return <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>Cargando...</div>;
+    return (
+      <div style={{ minHeight: "100vh", background: NAVY, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>
+        <Spinner size={28} />
+        Cargando...
+      </div>
+    );
   }
   if (!user) return <Login usuarios={usuarios} onLogin={(u) => { setUser(u); if (u.rol === "entrenador" || u.rol === "paseador") setTab("mis-paseos"); }} />;
 
