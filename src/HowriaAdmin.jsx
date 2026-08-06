@@ -3570,19 +3570,24 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
   async function aprobarSolicitud(s) {
     if (gestionandoSolicitudId) return;
     setGestionandoSolicitudId(s.id);
-    const email = slugEmailUsuario(s.nombre);
-    const { password, error } = await crearCuentaAcceso(email);
-    if (error) {
-      showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
+    try {
+      const email = slugEmailUsuario(s.nombre);
+      const { password, error } = await crearCuentaAcceso(email);
+      if (error) {
+        showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
+        return;
+      }
+      setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "entrenador", email }]);
+      const { error: errorUpdate } = await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
+      if (errorUpdate) showToast(`La cuenta se creó, pero no se pudo marcar la solicitud como aprobada: ${errorUpdate.message}`);
+      setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
+      setCredencialesNuevo({ nombre: s.nombre, email, password });
+      showToast(`${s.nombre} fue aprobado con rol "entrenador" — ajusta el rol en la lista de arriba si corresponde otro.`);
+    } catch (err) {
+      showToast(`No se pudo aprobar la solicitud: ${err.message || "error desconocido"}`);
+    } finally {
       setGestionandoSolicitudId(null);
-      return;
     }
-    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "entrenador", email }]);
-    await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
-    setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
-    setCredencialesNuevo({ nombre: s.nombre, email, password });
-    setGestionandoSolicitudId(null);
-    showToast(`${s.nombre} fue aprobado con rol "entrenador" — ajusta el rol en la lista de arriba si corresponde otro.`);
   }
 
   async function rechazarSolicitud(s) {
