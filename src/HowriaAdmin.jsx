@@ -5573,10 +5573,81 @@ function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick }) {
   );
 }
 
+// Inicio del paseador/entrenador: a diferencia del dashboard administrativo
+// de abajo, acá lo único que importa es "¿quién soy y a quién le doy el
+// paseo hoy?" — perfil arriba, clientes asignados abajo, y un acceso directo
+// a "Mis paseos" para marcarlos como hechos sin tener que navegar más.
+function InicioPaseador({ clientes, usuarios, user, setTab }) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const miUsuario = usuarios.find((u) => u.email === user.email) || user;
+  const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
+  const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
+  let diasPaseando = null;
+  if (miUsuario.fechaInicio) {
+    const inicio = new Date(miUsuario.fechaInicio + "T00:00:00");
+    if (!isNaN(inicio)) diasPaseando = Math.max(0, Math.floor((hoy - inicio) / 86400000));
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 20 }}>
+      <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", flex: "none", background: miUsuario.fotoUrl ? `url(${miUsuario.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
+            {!miUsuario.fotoUrl && <span style={{ color: CREAM, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
+            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
+            {diasPaseando !== null && (
+              <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
+                {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Paseo asignado</h2>
+        {misClientes.length === 0 ? (
+          <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados. En cuanto el equipo te asigne uno, va a aparecer acá.</p>
+        ) : (
+          <>
+            <p style={{ ...hint, marginTop: 8 }}>Estos son los clientes que están a tu cargo — revisa el nombre y el perro antes de salir a pasear.</p>
+            <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+              {misClientes.map((c) => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, border: "1px solid #E4DBC3", background: "#FFFDF7" }}>
+                  <div style={{ width: 42, height: 42, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
+                      🐾 {c.perro}{(c.diasHabituales || []).length > 0 ? ` · ${c.diasHabituales.map((d) => DIAS_SEMANA[d]).join(" ")}` : ""}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8A6A1E", background: "rgba(201,162,75,0.2)", padding: "4px 10px", borderRadius: 20, flex: "none" }}>Tuyo</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <button onClick={() => setTab("mis-paseos")}
+          style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Footprints size={18} /> Ir a Mis paseos de hoy
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Inicio (dashboard) ----------
 function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
+  if (user.rol === "paseador" || user.rol === "entrenador") {
+    return <InicioPaseador clientes={clientes} usuarios={usuarios} user={user} setTab={setTab} />;
+  }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
 
   const [descartados, setDescartados] = useState(() => {
