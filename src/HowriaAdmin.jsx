@@ -578,6 +578,11 @@ const ROLES_APP = ["entrenador", "coordinador", "administrador"];
 // guardados en la tabla permisos_roles.
 function usePermisosRoles(sessionVersion) {
   const [permisos, setPermisosState] = useState(null); // null mientras carga
+  // Encadena los guardados por rol: si se marcan varias pestañas seguidas
+  // del mismo rol, cada update() espera a que termine el anterior en vez de
+  // viajar en paralelo — si no, pueden llegar a la base en otro orden y el
+  // último en aterrizar pisa en silencio un cambio posterior.
+  const colaPorRol = useRef({});
 
   useEffect(() => {
     (async () => {
@@ -590,7 +595,7 @@ function usePermisosRoles(sessionVersion) {
     })();
   }, [sessionVersion]);
 
-  async function actualizarPermiso(rol, tabId, activo) {
+  function actualizarPermiso(rol, tabId, activo) {
     let nuevos;
     setPermisosState((prev) => {
       const actuales = new Set(prev?.[rol] || []);
@@ -599,19 +604,23 @@ function usePermisosRoles(sessionVersion) {
       return { ...prev, [rol]: nuevos };
     });
 
-    const { data, error } = await supabase.from("permisos_roles").update({ tabs: nuevos }).eq("rol", rol).select();
-    // Un update sin error pero sin filas devueltas significa que no existe
-    // fila para ese rol en permisos_roles (o RLS la dejó fuera) — en
-    // cualquiera de los dos casos el cambio no quedó guardado de verdad,
-    // aunque no haya un "error" explícito.
-    if (error || !data?.length) {
-      setPermisosState((prev) => {
-        const actuales = new Set(prev?.[rol] || []);
-        if (activo) actuales.delete(tabId); else actuales.add(tabId);
-        return { ...prev, [rol]: [...actuales] };
-      });
-      showToast(`No se pudo guardar el permiso de "${rol}": ${error?.message || "no existe una fila para ese rol en permisos_roles"}`);
-    }
+    const previa = colaPorRol.current[rol] || Promise.resolve();
+    const siguiente = previa.then(async () => {
+      const { data, error } = await supabase.from("permisos_roles").update({ tabs: nuevos }).eq("rol", rol).select();
+      // Un update sin error pero sin filas devueltas significa que no existe
+      // fila para ese rol en permisos_roles (o RLS la dejó fuera) — en
+      // cualquiera de los dos casos el cambio no quedó guardado de verdad,
+      // aunque no haya un "error" explícito.
+      if (error || !data?.length) {
+        setPermisosState((prev) => {
+          const actuales = new Set(prev?.[rol] || []);
+          if (activo) actuales.delete(tabId); else actuales.add(tabId);
+          return { ...prev, [rol]: [...actuales] };
+        });
+        showToast(`No se pudo guardar el permiso de "${rol}": ${error?.message || "no existe una fila para ese rol en permisos_roles"}`);
+      }
+    });
+    colaPorRol.current[rol] = siguiente;
   }
 
   return [permisos, actualizarPermiso];
