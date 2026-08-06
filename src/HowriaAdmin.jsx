@@ -5534,7 +5534,7 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
                   const fila = disponibilidad.find((d) => d.adiestrador === objetivo && d.diaSemana === dow)
                     || { activo: false, horaInicio: "09:00", horaFin: "18:00" };
                   return (
-                    <div key={dow} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid #EDE4CE" }}>
+                    <div key={dow} className="howria-horario-fila" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid #EDE4CE" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 8, width: 130, fontSize: 13.5, color: NAVY, cursor: "pointer" }}>
                         <input type="checkbox" checked={fila.activo} onChange={(e) => actualizarDisponibilidad(objetivo, dow, { activo: e.target.checked })} />
                         {nombreDia}
@@ -6396,6 +6396,9 @@ export default function HowriaAdmin() {
           table { font-size: 12.5px !important; }
           .howria-tabs-desktop { display: none !important; }
           .howria-tabs-mobile { display: block !important; }
+          .howria-horario-fila { flex-wrap: wrap; row-gap: 8px; }
+          .howria-horario-fila > label { width: 100% !important; }
+          .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
