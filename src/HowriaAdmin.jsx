@@ -1166,12 +1166,21 @@ function Login({ onLogin, usuarios }) {
     setErrorLogin("");
     const email = slugEmailUsuario(nombre);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: passwordEquipo });
-    setEntrando(false);
     if (error || !data.session) {
+      setEntrando(false);
       setErrorLogin("Nombre o contraseña incorrectos.");
       return;
     }
-    const perfil = usuarios.find((u) => u.email === email);
+    let perfil = usuarios.find((u) => u.email === email);
+    if (!perfil) {
+      // La lista de usuarios puede no haber terminado de cargar todavía
+      // (llegar acá justo al abrir la página, antes de que el fetch de
+      // arriba responda) — se confirma directo contra la base antes de
+      // rechazar el login, para no mostrar un error falso.
+      const { data: fila } = await supabase.from("usuarios_seguro").select("*").eq("email", email).maybeSingle();
+      if (fila) perfil = dbToUsuario(fila);
+    }
+    setEntrando(false);
     if (!perfil) {
       setErrorLogin("Tu cuenta no tiene un perfil asociado. Avisa al administrador.");
       await supabase.auth.signOut();
