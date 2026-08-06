@@ -2713,7 +2713,7 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
       </div>
 
       <p style={label}>Ingresos por tipo de servicio {etiquetaPeriodo} (un cliente puede contar en más de un tipo)</p>
-      <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 26 }}>
+      <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 26 }}>
         {porTipoServicio.map((t) => (
           <div key={t.tipo} style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
             <p style={{ ...label, marginBottom: 6 }}>{t.tipo}</p>
@@ -3554,7 +3554,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                     <span style={{ fontSize: 12.5, color: "#6B6248" }}>{clientesDe(u.nombre)} cliente(s) asignado(s)</span>
                     <button onClick={() => setCapacitacionAbiertaId(capacitacionAbiertaId === u.id ? null : u.id)}
                       style={{ border: "1px solid #E4DBC3", background: "none", color: NAVY, borderRadius: 6, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
@@ -3849,7 +3849,7 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
         ))}
       </div>
       <p style={{ ...hint, marginBottom: 6 }}>Período: <b style={{ color: NAVY }}>{etiqueta}</b></p>
-      <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 20 }}>
         <p style={{ ...hint, margin: 0 }}>💚 Asegurado (cliente ya pagó): <b style={{ color: "#2F6A46" }}>{fmtCLP(totalAsegurado)}</b></p>
         <p style={{ ...hint, margin: 0 }}>🕓 Proyectado (falta cobrar/confirmar): <b style={{ color: "#8A6A1E" }}>{fmtCLP(totalProyectado)}</b></p>
       </div>
@@ -3917,10 +3917,9 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
       ) : (
         <div>
           {historial.map((p) => (
-            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-              <span style={{ color: INK }}>{p.paseador} · {p.periodo === "semana" ? "semana" : "mes"} {p.etiqueta} · pagado el {p.fechaPago}</span>
-              <b style={{ color: NAVY }}>{fmtCLP(p.monto)}</b>
-            </div>
+            <FilaLista key={p.id} Icono={Banknote} titulo={p.paseador}
+              subtitulo={`${p.periodo === "semana" ? "Semana" : "Mes"} ${p.etiqueta} · pagado el ${p.fechaPago}`}
+              valor={fmtCLP(p.monto)} valorColor={NAVY} />
           ))}
         </div>
       )}
@@ -4415,7 +4414,7 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
 
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Control diario y semanal</h2>
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 18 }}>
+        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 18 }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9BAAB8" }}>Programados hoy</p>
             <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{clientesHoy.length}</p>
@@ -5215,10 +5214,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
         </div>
         <p style={label}>Por persona</p>
         {progresoPorPersona.map((p) => (
-          <div key={p.persona} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-            <span style={{ color: INK }}>{p.persona}</span>
-            <span style={{ color: "#8A7E5C" }}>{p.hechas} / {p.total} tareas</span>
-          </div>
+          <FilaLista key={p.persona} Icono={Users} titulo={p.persona} valor={`${p.hechas} / ${p.total} tareas`} />
         ))}
       </div>
     </div>
@@ -6642,6 +6638,7 @@ export default function HowriaAdmin() {
           .howria-bottom-nav { display: flex !important; }
           .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-finanzas-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .howria-stats-3 { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
