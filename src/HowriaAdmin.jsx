@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map, Calendar, Mail as MailIcon, Dog, Receipt,
-  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, X,
+  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid,
 } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -514,6 +514,7 @@ const GOLD = "#C9A24B";
 const INK = "#332E22";
 const RUST = "#A85C3B";
 const NAVY_LOGO = "#102A41"; // mismo color de fondo que el logo, usado en el encabezado de las boletas (canvas)
+const PANEL_BG = "#F1EFE9"; // fondo del panel del staff — más claro y neutro que CREAM, para que las tarjetas blancas resalten más y se sienta más liviano
 
 const CLIENTES_INICIAL = [
   { id: 1, nombre: "María José Reyes", perro: "Toby", telefono: "+56 9 1234 5678", valorPaseoRef: 8000, raza: "Golden Retriever", pesoKg: 28, fotoUrl: null, diasHabituales: [0,1,2,3,4], planHabitual: "LV", objetivos: "Bajar nivel de energía y mejorar caminata con correa.", paseadorNombre: "Pedro Vidal", tarifaPaseador: 5000, direccion: "Av. Providencia 1650, Providencia", lat: -33.4260, lng: -70.6100, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "2026-03-01" },
@@ -6276,35 +6277,56 @@ export function ToastHost() {
   );
 }
 
-// Botón flotante de navegación en mobile (estilo el WhatsApp flotante de
-// Home.jsx, pero abre un menú en vez de un link) — deja saltar a cualquier
-// sección desde donde sea, sin depender del selector desplegable ni de
-// volver primero a Inicio.
-function MenuFlotanteMobile({ tabs, tab, setTab }) {
-  const [abierto, setAbierto] = useState(false);
+// Qué secciones van fijas en la barra inferior (además de Inicio, que
+// siempre va primero) — las que no entran quedan agrupadas bajo "Más".
+const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "boletas-adiestramiento", "ingreso-personal", "usuarios"];
+
+function ItemBarraNav({ activo, Icono, label, onClick }) {
+  if (activo) {
+    return (
+      <button onClick={onClick}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 10px", borderRadius: 999, background: NAVY, border: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0 }}>
+        <Icono size={17} color={CREAM} style={{ flex: "none" }} />
+        <span style={{ fontSize: 12, color: CREAM, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+      </button>
+    );
+  }
+  return (
+    <button onClick={onClick}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "7px 4px", border: "none", background: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0 }}>
+      <Icono size={18} color="#8A7E5C" />
+      <span style={{ fontSize: 9.5, color: "#8A7E5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
+    </button>
+  );
+}
+
+// Barra de navegación flotante en mobile, tipo apps nativas: Inicio + las
+// secciones más usadas (PRIORIDAD_BARRA_NAV), y "Más" agrupa el resto por
+// categoría en un panel arriba de la barra.
+function BarraNavegacionMobile({ tabs, tab, setTab }) {
+  const [masAbierto, setMasAbierto] = useState(false);
   if (!tabs) return null;
+
+  const otras = tabs.filter((t) => t.id !== "inicio");
+  const destacadas = PRIORIDAD_BARRA_NAV.map((id) => otras.find((t) => t.id === id)).filter(Boolean).slice(0, 3);
+  const resto = otras.filter((t) => !destacadas.includes(t));
 
   function ir(tabId) {
     setTab(tabId);
-    setAbierto(false);
+    setMasAbierto(false);
   }
 
   return (
-    <div className="howria-fab-mobile" style={{ display: "none", position: "fixed", right: 18, bottom: 18, zIndex: 70 }}>
-      {abierto && (
+    <div className="howria-bottom-nav" style={{ display: "none", position: "fixed", left: 12, right: 12, bottom: 12, zIndex: 70, justifyContent: "center" }}>
+      {masAbierto && (
         <>
-          <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
-          <div style={{ position: "absolute", bottom: 66, right: 0, width: 250, maxHeight: "65vh", overflowY: "auto", background: "#FFFFFF", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
-            <button onClick={() => ir("inicio")}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: tab === "inicio" ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit", marginBottom: 4 }}>
-              <Home size={17} color={NAVY} />
-              <span style={{ fontSize: 13.5, color: INK, fontWeight: tab === "inicio" ? 700 : 400 }}>Inicio</span>
-            </button>
+          <div onClick={() => setMasAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
+          <div style={{ position: "absolute", bottom: 66, left: 0, right: 0, maxHeight: "60vh", overflowY: "auto", background: "#FFFFFF", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
             {ORDEN_GRUPOS.map((grupo) => {
-              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+              const tabsDelGrupo = resto.filter((t) => t.grupo === grupo);
               if (tabsDelGrupo.length === 0) return null;
               return (
-                <div key={grupo} style={{ marginTop: 6 }}>
+                <div key={grupo} style={{ marginBottom: 6 }}>
                   <p style={{ margin: "4px 0 2px 8px", fontSize: 10.5, color: "#B0A587", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>{grupo}</p>
                   {tabsDelGrupo.map((t) => {
                     const Icono = ICONOS_TAB[t.id] || Home;
@@ -6323,10 +6345,16 @@ function MenuFlotanteMobile({ tabs, tab, setTab }) {
           </div>
         </>
       )}
-      <button onClick={() => setAbierto((v) => !v)} title="Navegar"
-        style={{ width: 56, height: 56, borderRadius: "50%", background: NAVY, border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", cursor: "pointer", position: "relative", zIndex: 70 }}>
-        {abierto ? <X size={24} color={CREAM} /> : <LayoutGrid size={22} color={CREAM} />}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#FFFFFF", borderRadius: 999, boxShadow: "0 8px 24px rgba(20,33,61,0.18)", padding: 6, position: "relative", zIndex: 70, maxWidth: 380, width: "100%" }}>
+        <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />
+        {destacadas.map((t) => {
+          const Icono = ICONOS_TAB[t.id] || Home;
+          return <ItemBarraNav key={t.id} activo={tab === t.id} Icono={Icono} label={t.label} onClick={() => ir(t.id)} />;
+        })}
+        {resto.length > 0 && (
+          <ItemBarraNav activo={masAbierto} Icono={LayoutGrid} label="Más" onClick={() => setMasAbierto((v) => !v)} />
+        )}
+      </div>
     </div>
   );
 }
@@ -6483,7 +6511,7 @@ export default function HowriaAdmin() {
   const tabs = TODOS_LOS_TABS.filter((t) => tabsPermitidosRol.includes(t.id));
 
   return (
-    <div style={{ minHeight: "100vh", background: CREAM, fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: PANEL_BG, fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
       <style>{`
         .howria-card { transition: box-shadow .18s ease, transform .18s ease; }
         .howria-card:hover { box-shadow: 0 6px 18px rgba(20,33,61,0.09); }
@@ -6511,28 +6539,20 @@ export default function HowriaAdmin() {
           .howria-card { padding: 16px !important; }
           .howria-header { padding: 12px 16px !important; }
           .howria-header h1, .howria-header-logo { height: 30px !important; }
-          .howria-main { padding: 16px !important; }
+          .howria-main { padding: 16px 16px 100px !important; }
           table { font-size: 12.5px !important; }
           .howria-tabs-desktop { display: none !important; }
-          .howria-tabs-mobile { display: block !important; }
           .howria-horario-fila { flex-wrap: wrap; row-gap: 8px; }
           .howria-horario-fila > label { width: 100% !important; }
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
           .howria-launcher-mobile { display: block !important; }
-          .howria-home-btn { display: flex !important; }
-          .howria-fab-mobile { display: block !important; }
+          .howria-bottom-nav { display: flex !important; }
           .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={44} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {tab !== "inicio" && (
-            <button onClick={() => setTab("inicio")} className="howria-home-btn" title="Volver a Inicio"
-              style={{ display: "none", alignItems: "center", background: "none", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 6, padding: 6, color: CREAM, cursor: "pointer" }}>
-              <Home size={18} />
-            </button>
-          )}
           {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
@@ -6602,23 +6622,6 @@ export default function HowriaAdmin() {
         })}
       </div>
 
-      <div className="howria-tabs-mobile" style={{ display: "none", padding: "12px 16px", background: "#FFFFFF", borderBottom: "1px solid #EDE4CE" }}>
-        <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }} htmlFor="tab-movil">Sección</label>
-        <select id="tab-movil" value={tab} onChange={(e) => setTab(e.target.value)}
-          style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${NAVY}`, background: CREAM_SOFT, color: NAVY, fontSize: 15, fontWeight: 600 }}>
-          {tabs.filter((t) => t.grupo === "").map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          {ORDEN_GRUPOS.map((grupo) => {
-            const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
-            if (tabsDelGrupo.length === 0) return null;
-            return (
-              <optgroup key={grupo} label={grupo}>
-                {tabsDelGrupo.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </optgroup>
-            );
-          })}
-        </select>
-      </div>
-
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
@@ -6637,7 +6640,7 @@ export default function HowriaAdmin() {
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
-      <MenuFlotanteMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
+      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
     </div>
   );
 }
