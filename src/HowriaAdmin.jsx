@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Search, ArrowUpDown, Bell, BellOff } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
-import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones } from "./lib/pushNotificaciones.js";
+import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
 import {
   diasDelMes, FERIADOS_CHILE, RECARGO_FIN_SEMANA_FERIADO_DEFAULT, esFinDeSemanaOFeriado,
   valorConRecargo, diasSegunPlan, calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
@@ -880,6 +880,10 @@ function BotonNotificacionesPush({ usuarioEmail }) {
 
   async function alternar() {
     if (cargando) return;
+    if (!activo && esIOSFueraDeApp()) {
+      showToast('En iPhone/iPad hay que agregar Howria a la pantalla de inicio primero: toca Compartir → "Agregar a pantalla de inicio", abre Howria desde ese ícono y activa las notificaciones desde ahí.');
+      return;
+    }
     setCargando(true);
     try {
       if (activo) {

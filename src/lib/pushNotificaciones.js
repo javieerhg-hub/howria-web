@@ -10,6 +10,17 @@ export function soportaPush() {
   return "serviceWorker" in navigator && "PushManager" in window && !!VAPID_PUBLIC_KEY;
 }
 
+// iOS/iPadOS expone las APIs de push en el navegador normal, pero Apple
+// deniega el permiso en silencio (sin mostrar diálogo) a menos que el sitio
+// esté agregado a la pantalla de inicio y corriendo como "app" standalone.
+// Pedirlo igual arriesga dejar el permiso en "denied" de forma persistente,
+// así que hay que detectarlo antes y explicarle al usuario qué hacer.
+export function esIOSFueraDeApp() {
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const enModoApp = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  return esIOS && !enModoApp;
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
