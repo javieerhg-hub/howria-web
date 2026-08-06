@@ -4176,6 +4176,8 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [notaAbiertaId, setNotaAbiertaId] = useState(null);
   const [notaTexto, setNotaTexto] = useState("");
+  const [mostrarClientes, setMostrarClientes] = useState(false);
+  const [mostrarCapacitacion, setMostrarCapacitacion] = useState(false);
 
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -4336,10 +4338,8 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
-            <h2 style={sectionTitle}>Mis paseos</h2>
-            <p style={hint}>
-              {misClientes.length} cliente(s) asignado(s) · Capacitación {(miUsuario.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length}
-            </p>
+            <h2 style={sectionTitle}>Esta semana</h2>
+            <p style={hint}>{misClientes.length} cliente(s) asignado(s)</p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => setSemanaOffset((s) => s - 1)} style={botonSecundario}>← Semana anterior</button>
@@ -4478,52 +4478,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
       </div>
 
       <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Mis clientes y horarios ({misClientes.length})</h2>
-        <p style={hint}>Tu horario completo, para tenerlo siempre a mano.</p>
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
-                <th style={{ padding: "8px 10px" }}>Cliente</th>
-                <th style={{ padding: "8px 10px" }}>Perro</th>
-                <th style={{ padding: "8px 10px" }}>Días</th>
-                <th style={{ padding: "8px 10px" }}>Hora</th>
-                <th style={{ padding: "8px 10px" }}>Dirección</th>
-              </tr>
-            </thead>
-            <tbody>
-              {misClientes.map((c) => (
-                <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
-                  <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
-                  <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
-                  <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
-                  <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
-                  <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Mi capacitación</h2>
-        <p style={hint}>La marca tu coordinador o administrador a medida que la vas completando.</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          {PASOS_CAPACITACION.map((paso) => {
-            const hecho = (miUsuario.capacitacionCompletada || []).includes(paso.id);
-            return (
-              <div key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: hecho ? "#2F6A46" : "#8A7E5C" }}>
-                <span>{hecho ? "✓" : "○"}</span>
-                {paso.texto}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Resumen del mes — {MESES[mesActual]} {anioActual}</h2>
+        <h2 style={sectionTitle}>Tu pago — {MESES[mesActual]} {anioActual}</h2>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
@@ -4550,6 +4505,72 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
+        <button onClick={() => setMostrarClientes((v) => !v)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+          <span>
+            <h2 style={{ ...sectionTitle, marginBottom: mostrarClientes ? 6 : 0 }}>Mis clientes y horarios ({misClientes.length})</h2>
+            {!mostrarClientes && <p style={{ ...hint, margin: 0 }}>Tu horario completo, para tenerlo siempre a mano.</p>}
+          </span>
+          <span style={{ fontSize: 13, color: "#8A7E5C", flex: "none", marginLeft: 10 }}>{mostrarClientes ? "▴" : "▾"}</span>
+        </button>
+        {mostrarClientes && (
+          <>
+            <p style={hint}>Tu horario completo, para tenerlo siempre a mano.</p>
+            <div style={{ overflowX: "auto", marginTop: 12 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
+                    <th style={{ padding: "8px 10px" }}>Cliente</th>
+                    <th style={{ padding: "8px 10px" }}>Perro</th>
+                    <th style={{ padding: "8px 10px" }}>Días</th>
+                    <th style={{ padding: "8px 10px" }}>Hora</th>
+                    <th style={{ padding: "8px 10px" }}>Dirección</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {misClientes.map((c) => (
+                    <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
+                      <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
+                      <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
+                      <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
+                      <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
+                      <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
+        <button onClick={() => setMostrarCapacitacion((v) => !v)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+          <h2 style={{ ...sectionTitle, marginBottom: 0 }}>Mi capacitación</h2>
+          <span style={{ fontSize: 12.5, color: "#8A7E5C", flex: "none", marginLeft: 10, fontWeight: 600 }}>
+            {(miUsuario.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {mostrarCapacitacion ? "▴" : "▾"}
+          </span>
+        </button>
+        {mostrarCapacitacion && (
+          <>
+            <p style={{ ...hint, marginTop: 6 }}>La marca tu coordinador o administrador a medida que la vas completando.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+              {PASOS_CAPACITACION.map((paso) => {
+                const hecho = (miUsuario.capacitacionCompletada || []).includes(paso.id);
+                return (
+                  <div key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: hecho ? "#2F6A46" : "#8A7E5C" }}>
+                    <span>{hecho ? "✓" : "○"}</span>
+                    {paso.texto}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
