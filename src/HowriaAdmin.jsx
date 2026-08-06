@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map, Calendar, Mail as MailIcon, Dog, Receipt,
-  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target,
+  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, X,
 } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -6264,6 +6264,61 @@ export function ToastHost() {
   );
 }
 
+// Botón flotante de navegación en mobile (estilo el WhatsApp flotante de
+// Home.jsx, pero abre un menú en vez de un link) — deja saltar a cualquier
+// sección desde donde sea, sin depender del selector desplegable ni de
+// volver primero a Inicio.
+function MenuFlotanteMobile({ tabs, tab, setTab }) {
+  const [abierto, setAbierto] = useState(false);
+  if (!tabs) return null;
+
+  function ir(tabId) {
+    setTab(tabId);
+    setAbierto(false);
+  }
+
+  return (
+    <div className="howria-fab-mobile" style={{ display: "none", position: "fixed", right: 18, bottom: 18, zIndex: 70 }}>
+      {abierto && (
+        <>
+          <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
+          <div style={{ position: "absolute", bottom: 66, right: 0, width: 250, maxHeight: "65vh", overflowY: "auto", background: "#FFFFFF", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
+            <button onClick={() => ir("inicio")}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: tab === "inicio" ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit", marginBottom: 4 }}>
+              <Home size={17} color={NAVY} />
+              <span style={{ fontSize: 13.5, color: INK, fontWeight: tab === "inicio" ? 700 : 400 }}>Inicio</span>
+            </button>
+            {ORDEN_GRUPOS.map((grupo) => {
+              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+              if (tabsDelGrupo.length === 0) return null;
+              return (
+                <div key={grupo} style={{ marginTop: 6 }}>
+                  <p style={{ margin: "4px 0 2px 8px", fontSize: 10.5, color: "#B0A587", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>{grupo}</p>
+                  {tabsDelGrupo.map((t) => {
+                    const Icono = ICONOS_TAB[t.id] || Home;
+                    const activo = tab === t.id;
+                    return (
+                      <button key={t.id} onClick={() => ir(t.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: activo ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
+                        <Icono size={17} color={NAVY} />
+                        <span style={{ fontSize: 13.5, color: INK, fontWeight: activo ? 700 : 400 }}>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <button onClick={() => setAbierto((v) => !v)} title="Navegar"
+        style={{ width: 56, height: 56, borderRadius: "50%", background: NAVY, border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", cursor: "pointer", position: "relative", zIndex: 70 }}>
+        {abierto ? <X size={24} color={CREAM} /> : <LayoutGrid size={22} color={CREAM} />}
+      </button>
+    </div>
+  );
+}
+
 const USUARIOS_INICIAL = [
   { id: 1, nombre: "Camila Soto", rol: "coordinador", fotoUrl: null },
   { id: 2, nombre: "Pedro Vidal", rol: "entrenador", fotoUrl: null },
@@ -6453,6 +6508,7 @@ export default function HowriaAdmin() {
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
           .howria-launcher-mobile { display: block !important; }
           .howria-home-btn { display: flex !important; }
+          .howria-fab-mobile { display: block !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
@@ -6568,6 +6624,7 @@ export default function HowriaAdmin() {
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
+      <MenuFlotanteMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
     </div>
   );
 }
