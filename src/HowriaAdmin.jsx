@@ -1,6 +1,9 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Search, ArrowUpDown, Bell, BellOff } from "lucide-react";
+import {
+  Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map, Calendar, Mail as MailIcon, Dog, Receipt,
+  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target,
+} from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
 import {
@@ -573,6 +576,27 @@ const TODOS_LOS_TABS = [
 ];
 const ORDEN_GRUPOS = ["Trabajo diario", "Clientes y boletas", "Equipo", "Prospección"];
 const ROLES_APP = ["entrenador", "coordinador", "administrador"];
+
+// Un ícono por pestaña, para el launcher tipo "app" de la pantalla de
+// Inicio en mobile (ver Inicio() más abajo). "inicio" no necesita uno —
+// ya estás ahí.
+const ICONOS_TAB = {
+  "mis-paseos": Footprints,
+  coordinacion: MapPinned,
+  mapa: Map,
+  agenda: Calendar,
+  mail: MailIcon,
+  clientes: Dog,
+  boletas: Receipt,
+  "boletas-adiestramiento": GraduationCap,
+  facturas: FileText,
+  finanzas: TrendingUp,
+  pagos: Banknote,
+  equipo: Users,
+  "ingreso-personal": UserPlus,
+  usuarios: ShieldCheck,
+  seguimiento: Target,
+};
 
 // Carga y sincroniza los permisos por rol (qué pestañas ve cada uno)
 // guardados en la tabla permisos_roles.
@@ -5122,7 +5146,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
@@ -5171,6 +5195,34 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
         <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 22, position: "relative" }}>Hola, {user.nombre.split(" ")[0]} 🐾</h2>
         <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: 0, textTransform: "capitalize", position: "relative" }}>{fechaLarga}</p>
       </div>
+
+      {tabs && (
+        <div className="howria-launcher-mobile" style={{ display: "none" }}>
+          {ORDEN_GRUPOS.map((grupo) => {
+            const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+            if (tabsDelGrupo.length === 0) return null;
+            return (
+              <div key={grupo} className="howria-card" style={{ ...tarjeta, marginBottom: 14 }}>
+                <p style={{ ...label, marginBottom: 12 }}>{grupo}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                  {tabsDelGrupo.map((t) => {
+                    const Icono = ICONOS_TAB[t.id] || Home;
+                    return (
+                      <button key={t.id} onClick={() => setTab(t.id)}
+                        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 2px", border: "none", background: "none", cursor: "pointer", font: "inherit" }}>
+                        <span style={{ width: 46, height: 46, borderRadius: 14, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", color: NAVY, flex: "none" }}>
+                          <Icono size={20} />
+                        </span>
+                        <span style={{ fontSize: 11, color: INK, textAlign: "center", lineHeight: 1.25 }}>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {avisos.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
@@ -6399,6 +6451,7 @@ export default function HowriaAdmin() {
           .howria-horario-fila { flex-wrap: wrap; row-gap: 8px; }
           .howria-horario-fila > label { width: 100% !important; }
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
+          .howria-launcher-mobile { display: block !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
@@ -6491,7 +6544,7 @@ export default function HowriaAdmin() {
       </div>
 
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
