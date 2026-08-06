@@ -5598,7 +5598,7 @@ function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick }) {
 // de abajo, acá lo único que importa es "¿quién soy y a quién le doy el
 // paseo hoy?" — perfil arriba, clientes asignados abajo, y un acceso directo
 // a "Mis paseos" para marcarlos como hechos sin tener que navegar más.
-function InicioPaseador({ clientes, usuarios, user, setTab }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -5609,6 +5609,30 @@ function InicioPaseador({ clientes, usuarios, user, setTab }) {
     const inicio = new Date(miUsuario.fechaInicio + "T00:00:00");
     if (!isNaN(inicio)) diasPaseando = Math.max(0, Math.floor((hoy - inicio) / 86400000));
   }
+
+  const dowHoy = (hoy.getDay() + 6) % 7;
+  const clientesHoy = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
+  const pendientesHoy = clientesHoy.filter((c) => {
+    const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`];
+    return !r?.realizado && !r?.cancelado;
+  });
+
+  function resolverPaseo(clienteId, cambios) {
+    const key = `${clienteId}_${fechaKey(hoy)}`;
+    setRegistroPaseos((prev) => ({ ...prev, [key]: { ...prev[key], ...cambios } }));
+  }
+
+  const inicioSemanaVista = inicioSemana(hoy);
+  const diasSemanaVista = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(inicioSemanaVista);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const resumenSemana = diasSemanaVista.map((d, i) => {
+    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(i));
+    const realizados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.realizado).length;
+    return { fecha: d, total: clientesDia.length, realizados };
+  });
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -5630,32 +5654,51 @@ function InicioPaseador({ clientes, usuarios, user, setTab }) {
         </div>
       </div>
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Paseo asignado</h2>
-        {misClientes.length === 0 ? (
-          <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados. En cuanto el equipo te asigne uno, va a aparecer acá.</p>
-        ) : (
-          <>
-            <p style={{ ...hint, marginTop: 8 }}>Estos son los clientes que están a tu cargo — revisa el nombre y el perro antes de salir a pasear.</p>
-            <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
-              {misClientes.map((c) => (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, border: "1px solid #E4DBC3", background: "#FFFDF7" }}>
-                  <div style={{ width: 42, height: 42, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
-                    <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
-                      🐾 {c.perro}{(c.diasHabituales || []).length > 0 ? ` · ${c.diasHabituales.map((d) => DIAS_SEMANA[d]).join(" ")}` : ""}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}
-                    </p>
-                  </div>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8A6A1E", background: "rgba(201,162,75,0.2)", padding: "4px 10px", borderRadius: 20, flex: "none" }}>Tuyo</span>
+      {clientesHoy.length > 0 && pendientesHoy.length > 0 && (
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Paseo de hoy</h2>
+          <p style={{ ...hint, marginTop: 8 }}>Confirma o rechaza — al tocar, desaparece de la lista.</p>
+          <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+            {pendientesHoy.map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid #E4DBC3", background: "#FFFDF7" }}>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>🐾 {c.perro}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}</p>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  <button onClick={() => resolverPaseo(c.id, { realizado: true, cancelado: false })} title="Confirmar"
+                    style={{ width: 38, height: 38, borderRadius: 8, border: "none", cursor: "pointer", background: "#2F6A46", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <CircleCheck size={19} />
+                  </button>
+                  <button onClick={() => resolverPaseo(c.id, { cancelado: true, realizado: false })} title="Rechazar"
+                    style={{ width: 38, height: 38, borderRadius: 8, border: "none", cursor: "pointer", background: "rgba(168,92,59,0.15)", color: RUST, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <CircleX size={19} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Calendario exprés</h2>
+        <p style={{ ...hint, marginTop: 8 }}>Tus paseos programados esta semana.</p>
+        <div className="howria-week" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginTop: 10 }}>
+          {resumenSemana.map((d, i) => {
+            const esHoyCol = fechaKey(d.fecha) === fechaKey(hoy);
+            return (
+              <div key={i} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
+                <p style={{ margin: 0, fontSize: 10.5, color: esHoyCol ? "#9BAAB8" : "#8A7E5C" }}>{DIAS_SEMANA[i]} {d.fecha.getDate()}</p>
+                <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 700, color: esHoyCol ? CREAM : NAVY }}>{d.realizados}/{d.total}</p>
+              </div>
+            );
+          })}
+        </div>
         <button onClick={() => setTab("mis-paseos")}
           style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <Footprints size={18} /> Ir a Mis paseos de hoy
+          <Footprints size={18} /> Ir a Mis paseos
         </button>
       </div>
     </div>
@@ -5663,11 +5706,11 @@ function InicioPaseador({ clientes, usuarios, user, setTab }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} usuarios={usuarios} user={user} setTab={setTab} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
 
@@ -7146,7 +7189,7 @@ export default function HowriaAdmin() {
 
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
