@@ -1,8 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import {
   Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map, Calendar, Mail as MailIcon, Dog, Receipt,
-  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid,
+  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
 } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -3932,6 +3932,17 @@ function fechaKey(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// Fila de la leyenda junto al anillo de "Hoy" en Mis paseos.
+function FilaAnilloLeyenda({ Icono, label, valor, color }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <Icono size={16} color={color || NAVY} />
+      <span style={{ fontSize: 12.5, color: "#8A7E5C", flex: 1 }}>{label}</span>
+      <b style={{ fontSize: 14, color: color || NAVY }}>{valor}</b>
+    </div>
+  );
+}
+
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -4011,6 +4022,25 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const totalProgramadosMes = resumenMensual.reduce((acc, r) => acc + r.programados, 0);
   const totalMontoMes = resumenMensual.reduce((acc, r) => acc + r.monto, 0);
 
+  // Anillo de "Hoy" (siempre el día real, no el día que se esté mirando en
+  // el detalle de abajo — mismo criterio que el "Today" de un dashboard).
+  const dowHoy = (hoy.getDay() + 6) % 7;
+  const clientesHoyAnillo = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
+  let hechosHoy = 0, canceladosHoy = 0;
+  clientesHoyAnillo.forEach((c) => {
+    const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`] || {};
+    if (r.realizado) hechosHoy++;
+    else if (r.cancelado) canceladosHoy++;
+  });
+  const pendientesHoy = clientesHoyAnillo.length - hechosHoy - canceladosHoy;
+  const datosAnillo = clientesHoyAnillo.length === 0
+    ? [{ value: 1, color: "#EDE4CE" }]
+    : [
+        { value: hechosHoy, color: "#2F6A46" },
+        { value: pendientesHoy, color: "#EDE4CE" },
+        { value: canceladosHoy, color: RUST },
+      ].filter((d) => d.value > 0);
+
   if (misClientes.length === 0) {
     return (
       <div className="howria-card" style={tarjeta}>
@@ -4037,7 +4067,29 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
           </div>
         </div>
 
-        <p style={{ ...label, marginTop: 18 }}>Mi semana</p>
+        <p style={{ ...label, marginTop: 18 }}>Hoy</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", marginTop: 10, marginBottom: 22 }}>
+          <div style={{ width: 150, height: 150, position: "relative", flex: "none" }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie data={datosAnillo} dataKey="value" innerRadius="72%" outerRadius="100%" startAngle={90} endAngle={-270} stroke="none" isAnimationActive={false}>
+                  {datosAnillo.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+              <span style={{ fontSize: 30, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{clientesHoyAnillo.length === 0 ? "—" : pendientesHoy}</span>
+              <span style={{ fontSize: 11, color: "#8A7E5C" }}>{clientesHoyAnillo.length === 0 ? "Sin paseos hoy" : "Pendientes"}</span>
+            </div>
+          </div>
+          <div style={{ flex: "1 1 160px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <FilaAnilloLeyenda Icono={Flag} label="Programados" valor={clientesHoyAnillo.length} />
+            <FilaAnilloLeyenda Icono={CircleCheck} label="Realizados" valor={hechosHoy} color="#2F6A46" />
+            {canceladosHoy > 0 && <FilaAnilloLeyenda Icono={CircleX} label="Cancelados" valor={canceladosHoy} color={RUST} />}
+          </div>
+        </div>
+
+        <p style={label}>Mi semana</p>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 14 }}>
             <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#9BAAB8" }}>Programados</p>
