@@ -3216,6 +3216,17 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     setLoginsPendientes((prev) => prev.filter((l) => l.id !== id));
   }
 
+  // Reconstruye la fila de usuarios a partir de lo que quedó guardado en
+  // logins_pendientes_borrar (nombre + email) al momento de eliminarlo. Su
+  // cuenta de acceso en Supabase Auth no se borró (eliminar acá nunca la
+  // toca, ver nota más abajo), así que solo hace falta el perfil — no se
+  // crea una cuenta nueva ni se le cambia la contraseña.
+  function restaurarLogin(l) {
+    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: l.nombre, rol: "coordinador", email: l.email }]);
+    quitarLoginPendiente(l.id);
+    showToast(`${l.nombre} fue restaurado — ajusta su rol en la lista de arriba si "coordinador" no es el que le corresponde.`);
+  }
+
   async function agregar() {
     if (!nuevo.nombre.trim() || creando) return;
     setCreando(true);
@@ -3403,10 +3414,16 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                   <b style={{ color: NAVY }}>{l.nombre}</b> · {l.email}
                   <span style={{ color: "#8A7E5C", fontSize: 12 }}> · eliminado el {new Date(l.eliminadoEn).toLocaleDateString("es-CL")}</span>
                 </span>
-                <button onClick={() => quitarLoginPendiente(l.id)} title="Ya lo borré en Supabase"
-                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                  Ya lo borré, quitar de la lista
-                </button>
+                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  <button onClick={() => restaurarLogin(l)} title="Lo eliminé por error — recrear su perfil con este correo"
+                    style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    Restaurar
+                  </button>
+                  <button onClick={() => quitarLoginPendiente(l.id)} title="Ya lo borré en Supabase"
+                    style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    Ya lo borré, quitar de la lista
+                  </button>
+                </div>
               </div>
             ))}
           </div>
