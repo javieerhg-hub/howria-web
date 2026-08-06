@@ -1054,9 +1054,9 @@ function BotonNotificacionesPush({ usuarioEmail }) {
 
 // ---------- Login ----------
 const SLIDES_INTRO = [
-  { foto: "/images-home/hero-tres-perros.jpg", titulo: "Comienza a pasear perritos", texto: "Registra cada paseo del día y llévales el seguimiento a tus clientes." },
-  { foto: "/images-home/nosotros-pastor.jpg", titulo: "Únete al equipo", texto: "Coordina turnos, boletas y tareas junto al resto del equipo Howria." },
-  { foto: "/images-home/galeria-3.jpg", titulo: "Conecta con tus clientes", texto: "Agenda, boletas y mensajes con cada tutor, todo en un solo lugar." },
+  { foto: "/images-home/intro-paseo-calle.jpg", titulo: "Comienza a pasear perritos", texto: "Registra cada paseo del día y llévales el seguimiento a tus clientes." },
+  { foto: "/images-home/intro-pastor-aleman.jpg", titulo: "Únete al equipo", texto: "Coordina turnos, boletas y tareas junto al resto del equipo Howria." },
+  { foto: "/images-home/intro-border-collie.jpg", titulo: "Conecta con tus clientes", texto: "Agenda, boletas y mensajes con cada tutor, todo en un solo lugar." },
 ];
 
 function Login({ onLogin, usuarios }) {
@@ -1134,17 +1134,24 @@ function Login({ onLogin, usuarios }) {
         onTouchStart={empezarDeslize} onTouchEnd={terminarDeslize}
         onMouseDown={empezarDeslize} onMouseUp={terminarDeslize}
         style={{ minHeight: "100vh", position: "relative", overflow: "hidden", touchAction: "pan-y", userSelect: "none", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
-        <div style={{
-          position: "absolute", inset: 0,
-          backgroundImage: `linear-gradient(180deg, rgba(18,42,64,0.35) 0%, rgba(18,42,64,0.6) 55%, rgba(18,42,64,0.94) 100%), url(${slide.foto})`,
-          backgroundSize: "cover", backgroundPosition: "center",
-        }} />
+        <style>{`
+          @keyframes howriaIntroFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        `}</style>
+        {SLIDES_INTRO.map((s, i) => (
+          <div key={i} style={{
+            position: "absolute", inset: 0,
+            backgroundImage: `linear-gradient(180deg, rgba(18,42,64,0.35) 0%, rgba(18,42,64,0.6) 55%, rgba(18,42,64,0.94) 100%), url(${s.foto})`,
+            backgroundSize: "cover", backgroundPosition: "center",
+            opacity: i === slideIntro ? 1 : 0,
+            transition: "opacity 0.7s ease",
+          }} />
+        ))}
         <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "24px 28px 0", display: "flex", justifyContent: "center" }}>
             <LogoHowria height={40} />
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ padding: "0 28px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", textAlign: "center" }}>
+          <div key={slideIntro} style={{ padding: "0 28px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", textAlign: "center", animation: "howriaIntroFade 0.5s ease" }}>
             <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 27, fontWeight: 700, color: CREAM, lineHeight: 1.25, margin: "0 0 10px" }}>{slide.titulo}</h1>
             <p style={{ fontSize: 14, color: "#D8CDB4", margin: 0, lineHeight: 1.5 }}>{slide.texto}</p>
           </div>
