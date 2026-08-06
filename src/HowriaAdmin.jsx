@@ -5187,13 +5187,21 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
   const proximasCitas = citasAgenda.filter((c) => c.estado === "agendada" && new Date(c.fechaISO) >= hoy).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)).slice(0, 4);
 
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  const iconoStat = { width: 34, height: 34, borderRadius: 10, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, color: NAVY };
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
-        <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 22, position: "relative" }}>Hola, {user.nombre.split(" ")[0]} 🐾</h2>
-        <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: 0, textTransform: "capitalize", position: "relative" }}>{fechaLarga}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+          <div style={{ width: 52, height: 52, borderRadius: "50%", flex: "none", background: user.fotoUrl ? `url(${user.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
+            {!user.fotoUrl && <span style={{ color: CREAM, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
+          </div>
+          <div>
+            <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 22, margin: 0 }}>Hola, {user.nombre.split(" ")[0]} 🐾</h2>
+            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 0", textTransform: "capitalize" }}>{fechaLarga}</p>
+          </div>
+        </div>
       </div>
 
       {tabs && (
@@ -5241,18 +5249,22 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
 
       <div className="howria-inicio-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <button onClick={() => setTab("mis-paseos")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
+          <div style={iconoStat}><Footprints size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Paseos de hoy</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{realizadosHoy} / {clientesHoy.length}</p>
         </button>
         <button onClick={() => setTab("facturas")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
+          <div style={iconoStat}><Receipt size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Boletas por cobrar</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(montoPendiente)}</p>
         </button>
         <button onClick={() => setTab("agenda")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
+          <div style={iconoStat}><Calendar size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Evaluaciones agendadas</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{citasAgenda.filter((c) => c.estado === "agendada").length}</p>
         </button>
         <button onClick={() => setTab("seguimiento")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
+          <div style={iconoStat}><Target size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Prospectos por seguir</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{prospectosVencidos.length}</p>
         </button>
