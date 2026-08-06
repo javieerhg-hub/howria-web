@@ -877,6 +877,28 @@ function useCorreos(sessionVersion) {
   return [correos, setCorreos, cargando];
 }
 
+// Solicitudes de "Registro de cuenta" pendientes de revisión (ver
+// api/solicitud-registro.js) — solo trae las que siguen en estado
+// "pendiente"; aprobar/rechazar las saca de esta lista.
+function useSolicitudesRegistro(sessionVersion) {
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("solicitudes_registro").select("*").eq("estado", "pendiente").order("creado_en").then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudieron cargar las solicitudes de registro: ${error.message}`);
+      else if (data) setSolicitudes(data);
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  return [solicitudes, setSolicitudes, cargando];
+}
+
 function boletaDemo(diasAtras, numero, cliente, perro, cantidad, valorPaseo, estado = "no_enviada") {
   const f = new Date();
   f.setDate(f.getDate() - diasAtras);
@@ -1060,7 +1082,7 @@ const SLIDES_INTRO = [
 ];
 
 function Login({ onLogin, usuarios }) {
-  const [paso, setPaso] = useState("intro"); // "intro" | "form"
+  const [paso, setPaso] = useState("intro"); // "intro" | "form" | "registro"
   const [slideIntro, setSlideIntro] = useState(0);
   const [nombre, setNombre] = useState("");
   const [passwordEquipo, setPasswordEquipo] = useState("");
@@ -1070,6 +1092,34 @@ function Login({ onLogin, usuarios }) {
   const [emailCliente, setEmailCliente] = useState("");
   const [enviandoLink, setEnviandoLink] = useState(false);
   const [linkEnviado, setLinkEnviado] = useState(false);
+
+  const [formRegistro, setFormRegistro] = useState({ nombre: "", email: "", telefono: "", mensaje: "" });
+  const [enviandoRegistro, setEnviandoRegistro] = useState(false);
+  const [errorRegistro, setErrorRegistro] = useState("");
+  const [registroEnviado, setRegistroEnviado] = useState(false);
+
+  async function enviarSolicitudRegistro() {
+    if (!formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro) return;
+    setEnviandoRegistro(true);
+    setErrorRegistro("");
+    try {
+      const resp = await fetch("/api/solicitud-registro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formRegistro),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setErrorRegistro(resultado.error || "No se pudo enviar la solicitud.");
+        return;
+      }
+      setRegistroEnviado(true);
+    } catch {
+      setErrorRegistro("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setEnviandoRegistro(false);
+    }
+  }
 
   // Deslizar entre las 3 fotos de bienvenida (izquierda/derecha) — funciona
   // con dedo (touch) y con mouse (arrastrar), sin depender de una librería.
@@ -1162,15 +1212,66 @@ function Login({ onLogin, usuarios }) {
             ))}
           </div>
           <div style={{ padding: "0 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
-            <button onClick={() => { setModo("cliente"); setPaso("form"); }}
+            <button onClick={() => setPaso("registro")}
               style={{ flex: "0 0 auto", padding: "14px 22px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.1)", color: CREAM, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
-              Soy cliente
+              Registro de cuenta
             </button>
             <button onClick={() => { setModo("equipo"); setPaso("form"); }}
               style={{ flex: 1, padding: "14px 22px", borderRadius: 999, border: "none", background: GOLD, color: NAVY, fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
               Iniciar sesión
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (paso === "registro") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+        <div style={{ padding: "18px 20px 0" }}>
+          <button onClick={() => setPaso("intro")}
+            style={{ border: "none", background: "none", color: NAVY, fontSize: 14, cursor: "pointer", padding: 8, display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+            ← Volver
+          </button>
+        </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "10px 28px 60px", maxWidth: 380, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
+            <LogoHowria height={56} />
+          </div>
+          {registroEnviado ? (
+            <div style={{ background: "#D8ECDE", borderRadius: 14, padding: "20px 18px", textAlign: "center" }}>
+              <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, color: "#2F6A46" }}>¡Solicitud enviada!</p>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#2F6A46", lineHeight: 1.6 }}>El equipo Howria va a revisar tus datos y te va a contactar para darte acceso.</p>
+            </div>
+          ) : (
+            <>
+              <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, fontWeight: 700, color: NAVY, textAlign: "center", lineHeight: 1.3, margin: "0 0 8px" }}>
+                Únete al equipo Howria
+              </h1>
+              <p style={{ fontSize: 13, color: "#8A7E5C", textAlign: "center", margin: "0 0 24px", lineHeight: 1.5 }}>
+                Cuéntanos de ti — un administrador va a revisar tu solicitud antes de darte acceso a la app.
+              </p>
+              <label style={labelPill} htmlFor="registro-nombre">Nombre completo</label>
+              <input id="registro-nombre" value={formRegistro.nombre} onChange={(e) => setFormRegistro((f) => ({ ...f, nombre: e.target.value }))}
+                placeholder="Tu nombre" style={inputPill} autoFocus />
+              <label style={labelPill} htmlFor="registro-email">Correo de contacto</label>
+              <input id="registro-email" type="email" value={formRegistro.email} onChange={(e) => setFormRegistro((f) => ({ ...f, email: e.target.value }))}
+                placeholder="tu@correo.com" style={inputPill} />
+              <label style={labelPill} htmlFor="registro-telefono">Teléfono (opcional)</label>
+              <input id="registro-telefono" value={formRegistro.telefono} onChange={(e) => setFormRegistro((f) => ({ ...f, telefono: e.target.value }))}
+                placeholder="+56 9..." style={inputPill} />
+              <label style={labelPill} htmlFor="registro-mensaje">Cuéntanos de tu experiencia (opcional)</label>
+              <textarea id="registro-mensaje" value={formRegistro.mensaje} onChange={(e) => setFormRegistro((f) => ({ ...f, mensaje: e.target.value }))}
+                placeholder="Ej. experiencia paseando o adiestrando perros..." rows={3}
+                style={{ ...inputPill, resize: "vertical", fontFamily: "inherit" }} />
+              {errorRegistro && <p style={{ margin: "0 0 16px 6px", fontSize: 12.5, color: RUST }}>{errorRegistro}</p>}
+              <button onClick={enviarSolicitudRegistro} disabled={!formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro}
+                style={{ ...botonPill, opacity: !formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro ? 0.45 : 1 }}>
+                {enviandoRegistro ? "Enviando..." : "Enviar solicitud"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -3373,7 +3474,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
 }
 
 // ---------- Panel admin (usuarios) ----------
-function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes }) {
+function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro }) {
   const [busqueda, setBusqueda] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
@@ -3382,6 +3483,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
   const [creando, setCreando] = useState(false);
   const [credencialesNuevo, setCredencialesNuevo] = useState(null);
   const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
+  const [gestionandoSolicitudId, setGestionandoSolicitudId] = useState(null);
 
   const filtrados = usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
@@ -3459,6 +3561,41 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     setCredencialesNuevo({ nombre: nombreNuevo, email, password });
     setNuevo({ nombre: "", rol: "coordinador" });
     setCreando(false);
+  }
+
+  // Aprobar crea la cuenta de acceso exactamente igual que agregar() de
+  // arriba (mismo slug de correo, mismo flujo de contraseña temporal) —
+  // la diferencia es que el nombre/correo de contacto vienen del
+  // formulario público en vez de escribirlos el administrador a mano.
+  async function aprobarSolicitud(s) {
+    if (gestionandoSolicitudId) return;
+    setGestionandoSolicitudId(s.id);
+    const email = slugEmailUsuario(s.nombre);
+    const { password, error } = await crearCuentaAcceso(email);
+    if (error) {
+      showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
+      setGestionandoSolicitudId(null);
+      return;
+    }
+    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "entrenador", email }]);
+    await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
+    setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
+    setCredencialesNuevo({ nombre: s.nombre, email, password });
+    setGestionandoSolicitudId(null);
+    showToast(`${s.nombre} fue aprobado con rol "entrenador" — ajusta el rol en la lista de arriba si corresponde otro.`);
+  }
+
+  async function rechazarSolicitud(s) {
+    if (gestionandoSolicitudId) return;
+    setGestionandoSolicitudId(s.id);
+    const { error } = await supabase.from("solicitudes_registro").update({ estado: "rechazada" }).eq("id", s.id);
+    if (error) {
+      showToast(`No se pudo rechazar la solicitud: ${error.message}`);
+      setGestionandoSolicitudId(null);
+      return;
+    }
+    setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
+    setGestionandoSolicitudId(null);
   }
 
   return (
@@ -3657,6 +3794,40 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           </div>
         )}
       </div>
+
+      {esAdmin && solicitudesRegistro.length > 0 && (
+        <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
+          <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Solicitudes de registro pendientes ({solicitudesRegistro.length})</h2>
+          <p style={{ fontSize: 13, color: "#2E5C41", marginTop: -8, marginBottom: 14 }}>
+            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login. Aprobar crea su cuenta (rol "entrenador" por defecto, lo puedes cambiar después en la lista de arriba).
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {solicitudesRegistro.map((s) => (
+              <div key={s.id} style={{ background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <b style={{ color: NAVY, fontSize: 14 }}>{s.nombre}</b>
+                    <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
+                      {s.email}{s.telefono ? ` · ${s.telefono}` : ""} · {new Date(s.creado_en).toLocaleDateString("es-CL")}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                    <button onClick={() => aprobarSolicitud(s)} disabled={gestionandoSolicitudId === s.id}
+                      style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      {gestionandoSolicitudId === s.id ? "Aprobando..." : "Aprobar"}
+                    </button>
+                    <button onClick={() => rechazarSolicitud(s)} disabled={gestionandoSolicitudId === s.id}
+                      style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+                {s.mensaje && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#5C5442", fontStyle: "italic" }}>"{s.mensaje}"</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {esAdmin && loginsPendientes.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#FBF6E9", border: `1px solid ${GOLD}` }}>
@@ -6642,6 +6813,7 @@ export default function HowriaAdmin() {
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
+  const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [enfoqueEmailProspecto, setEnfoqueEmailProspecto] = useState(null);
   const correosNoLeidos = correos.filter((c) => c.direccion === "entrante" && !c.leido).length;
@@ -6810,7 +6982,7 @@ export default function HowriaAdmin() {
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}
       </LimiteDeError>
       </div>
       <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
