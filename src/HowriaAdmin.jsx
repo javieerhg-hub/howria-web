@@ -5196,7 +5196,11 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
     if (confirmandoId) return;
     setConfirmandoId(cita.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // refreshSession() en vez de getSession(): fuerza un token nuevo en
+      // vez de reusar uno que puede haber vencido mientras la pestaña
+      // estuvo inactiva (típico en el "app" instalada en el celular, que
+      // no siempre alcanza a renovarlo sola en segundo plano).
+      const { data: { session } } = await supabase.auth.refreshSession();
       const resp = await fetch("/api/confirmar-cita", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
@@ -5560,7 +5564,9 @@ function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVerClient
     setEnviando(true);
     setErrorEnvio("");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // Ver comentario en Agenda.confirmar(): refreshSession() en vez de
+      // getSession() para no mandar un token vencido.
+      const { data: { session } } = await supabase.auth.refreshSession();
       const resp = await fetch("/api/responder-correo", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
