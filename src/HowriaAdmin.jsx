@@ -1071,6 +1071,22 @@ function Login({ onLogin, usuarios }) {
   const [enviandoLink, setEnviandoLink] = useState(false);
   const [linkEnviado, setLinkEnviado] = useState(false);
 
+  // Deslizar entre las 3 fotos de bienvenida (izquierda/derecha) — funciona
+  // con dedo (touch) y con mouse (arrastrar), sin depender de una librería.
+  const inicioDeslizeX = useRef(null);
+  function empezarDeslize(e) {
+    inicioDeslizeX.current = (e.touches ? e.touches[0] : e).clientX;
+  }
+  function terminarDeslize(e) {
+    if (inicioDeslizeX.current === null) return;
+    const finX = (e.changedTouches ? e.changedTouches[0] : e).clientX;
+    const deltaX = finX - inicioDeslizeX.current;
+    inicioDeslizeX.current = null;
+    if (Math.abs(deltaX) < 40) return; // toque corto, no cuenta como deslize
+    if (deltaX < 0) setSlideIntro((s) => Math.min(s + 1, SLIDES_INTRO.length - 1));
+    else setSlideIntro((s) => Math.max(s - 1, 0));
+  }
+
   const inputPill = { width: "100%", boxSizing: "border-box", padding: "13px 18px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 999, fontSize: 14.5, background: "#F7F5F0", fontFamily: "inherit", color: INK };
   const labelPill = { display: "block", fontSize: 12, color: "#8A7E5C", fontWeight: 600, marginBottom: 6, marginLeft: 6 };
   const botonPill = { width: "100%", padding: "14px", background: NAVY, color: CREAM, border: "none", borderRadius: 999, fontSize: 14.5, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" };
@@ -1114,8 +1130,10 @@ function Login({ onLogin, usuarios }) {
   if (paso === "intro") {
     const slide = SLIDES_INTRO[slideIntro];
     return (
-      <div onClick={() => setSlideIntro((s) => (s + 1) % SLIDES_INTRO.length)}
-        style={{ minHeight: "100vh", position: "relative", overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+      <div
+        onTouchStart={empezarDeslize} onTouchEnd={terminarDeslize}
+        onMouseDown={empezarDeslize} onMouseUp={terminarDeslize}
+        style={{ minHeight: "100vh", position: "relative", overflow: "hidden", touchAction: "pan-y", userSelect: "none", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
         <div style={{
           position: "absolute", inset: 0,
           backgroundImage: `linear-gradient(180deg, rgba(18,42,64,0.35) 0%, rgba(18,42,64,0.6) 55%, rgba(18,42,64,0.94) 100%), url(${slide.foto})`,
@@ -1132,11 +1150,11 @@ function Login({ onLogin, usuarios }) {
           </div>
           <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "22px 0" }}>
             {SLIDES_INTRO.map((_, i) => (
-              <button key={i} onClick={(e) => { e.stopPropagation(); setSlideIntro(i); }} aria-label={`Ir a la pantalla ${i + 1}`}
+              <button key={i} onClick={() => setSlideIntro(i)} aria-label={`Ir a la pantalla ${i + 1}`}
                 style={{ width: i === slideIntro ? 20 : 7, height: 7, borderRadius: 4, border: "none", padding: 0, cursor: "pointer", background: i === slideIntro ? GOLD : "rgba(255,255,255,0.35)", transition: "width .2s ease" }} />
             ))}
           </div>
-          <div onClick={(e) => e.stopPropagation()} style={{ padding: "0 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
+          <div style={{ padding: "0 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
             <button onClick={() => { setModo("cliente"); setPaso("form"); }}
               style={{ flex: "0 0 auto", padding: "14px 22px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.1)", color: CREAM, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
               Soy cliente
