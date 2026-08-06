@@ -2045,7 +2045,7 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>Mostrar desglose de IVA (19%) en la boleta</span>
         </label>
 
-        <div style={{ marginTop: 8, padding: "16px 18px", background: CREAM_SOFT, borderRadius: 8 }}>
+        <div style={{ marginTop: 8, padding: "18px 20px", background: PANEL_BG, borderRadius: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK }}>
             <span>{diasNormales.length} paseos día hábil × {fmtCLP(valorPaseo)}</span>
             <span>{fmtCLP(diasNormales.length * Number(valorPaseo || 0))}</span>
@@ -2508,23 +2508,27 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
           <p style={{ ...hint, gridColumn: "1 / -1" }}>Cargando clientes…</p>
         ) : (
           <>
-            {filtrados.map((c) => (
-              <button key={c.id} onClick={() => setPerfilId(c.id)} style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: 16, cursor: "pointer", font: "inherit" }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
-                  <div>
-                    <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
-                    <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
+            {filtrados.map((c) => {
+              const estado = ESTADOS_CLIENTE.find((e) => e.id === (c.estadoCliente || "activo"));
+              return (
+                <button key={c.id} onClick={() => setPerfilId(c.id)} className="howria-card" style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 14, padding: 16, cursor: "pointer", font: "inherit", position: "relative" }}>
+                  <span style={{ position: "absolute", top: 14, right: 14, fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", paddingRight: 70 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
+                    <div>
+                      <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
+                      <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
+                    </div>
                   </div>
-                </div>
-                <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
-                  {c.telefono || "Sin teléfono"}<br />
-                  Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
-                  Paseador: {c.paseadorNombre || "sin asignar"}
-                  {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
-                </div>
-              </button>
-            ))}
+                  <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
+                    {c.telefono || "Sin teléfono"}<br />
+                    Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
+                    Paseador: {c.paseadorNombre || "sin asignar"}
+                    {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
+                  </div>
+                </button>
+              );
+            })}
             {filtrados.length === 0 && (
               <p style={{ ...hint, gridColumn: "1 / -1" }}>
                 {clientes.length === 0 ? "No hay clientes registrados todavía." : `No se encontraron clientes con "${busqueda}".`}
@@ -2671,7 +2675,7 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
         ))}
       </div>
 
-      <div className="howria-g4" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 26 }}>
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
@@ -2739,10 +2743,7 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
           ) : (
             <div>
               {porCliente.map((c, i) => (
-                <div key={c.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 14 }}>
-                  <span style={{ color: INK }}>{i === 0 && "🏅 "}{c.nombre}</span>
-                  <b style={{ color: NAVY }}>{fmtCLP(c.total)}</b>
-                </div>
+                <FilaLista key={c.nombre} Icono={Dog} titulo={`${i === 0 ? "🏅 " : ""}${c.nombre}`} valor={fmtCLP(c.total)} valorColor={NAVY} />
               ))}
             </div>
           )}
@@ -2755,10 +2756,7 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
           ) : (
             <div>
               {clientesSinBoletaEsteMes.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 14 }}>
-                  <span style={{ color: INK }}>{c.nombre} · {c.perro}</span>
-                  <span style={{ color: RUST, fontSize: 12.5 }}>Pendiente</span>
-                </div>
+                <FilaLista key={c.id} Icono={Dog} titulo={c.nombre} subtitulo={c.perro} valor="Pendiente" valorColor={RUST} />
               ))}
             </div>
           )}
@@ -3106,7 +3104,7 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
           <input id="badiestramiento-mensaje" type="text" placeholder="ej. ¡Nos vemos en la próxima clase!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
         </div>
 
-        <div style={{ marginTop: 20, padding: "16px 18px", background: CREAM_SOFT, borderRadius: 8 }}>
+        <div style={{ marginTop: 20, padding: "18px 20px", background: PANEL_BG, borderRadius: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK }}>
             <span>{numClases} clase(s) × {fmtCLP(precioClase)}</span>
             <span>{fmtCLP(subtotalClases)}</span>
@@ -5227,6 +5225,24 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
   );
 }
 
+// Fila de lista con ícono a la izquierda + título/subtítulo + valor a la
+// derecha — mismo patrón en toda la sección "de un vistazo" de Inicio.
+function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick }) {
+  return (
+    <button onClick={onClick} disabled={!onClick} type="button"
+      style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "9px 0", border: "none", borderBottom: "1px solid #F1EAD9", background: "none", cursor: onClick ? "pointer" : "default", font: "inherit", textAlign: "left" }}>
+      <div style={{ width: 36, height: 36, borderRadius: 10, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", color: NAVY }}>
+        <Icono size={16} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</p>
+        {subtitulo && <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subtitulo}</p>}
+      </div>
+      {valor && <span style={{ fontSize: 11.5, fontWeight: 600, color: valorColor || "#8A7E5C", flex: "none" }}>{valor}</span>}
+    </button>
+  );
+}
+
 // ---------- Inicio (dashboard) ----------
 function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -5376,12 +5392,10 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
           {prospectosVencidos.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>Ninguno vencido — al día.</p>
           ) : (
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 6 }}>
               {prospectosVencidos.map((p) => (
-                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
-                  <span>{p.nombre}</span>
-                  <span style={{ color: RUST, fontSize: 12 }}>{p.origen}</span>
-                </div>
+                <FilaLista key={p.id} Icono={Target} titulo={p.nombre} subtitulo="Prospecto vencido"
+                  valor={p.origen} valorColor={RUST} onClick={() => setTab("seguimiento")} />
               ))}
             </div>
           )}
@@ -5392,12 +5406,11 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
           {proximasCitas.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>No hay citas próximas.</p>
           ) : (
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 6 }}>
               {proximasCitas.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "8px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13 }}>
-                  <span>{c.clienteNombre} · {c.adiestrador}</span>
-                  <span style={{ color: "#8A7E5C", fontSize: 12 }}>{new Date(c.fechaISO).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                </div>
+                <FilaLista key={c.id} Icono={Calendar} titulo={c.clienteNombre} subtitulo={c.adiestrador}
+                  valor={new Date(c.fechaISO).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  onClick={() => setTab("agenda")} />
               ))}
             </div>
           )}
@@ -5409,14 +5422,13 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, objet
         {clientesHoy.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>No hay paseos programados para hoy.</p>
         ) : (
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginTop: 6 }}>
             {clientesHoy.map((c) => {
               const hecho = !!registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado;
               return (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                  <span>{c.nombre} · 🐾 {c.perro} <span style={{ color: "#8A7E5C" }}>· {c.paseadorNombre || "sin paseador"}</span></span>
-                  <span style={{ fontWeight: 600, color: hecho ? "#2F6A46" : "#B0A587", flexShrink: 0 }}>{hecho ? "✓ Realizado" : "Pendiente"}</span>
-                </div>
+                <FilaLista key={c.id} Icono={Dog} titulo={c.nombre} subtitulo={`🐾 ${c.perro} · ${c.paseadorNombre || "sin paseador"}`}
+                  valor={hecho ? "✓ Realizado" : "Pendiente"} valorColor={hecho ? "#2F6A46" : "#B0A587"}
+                  onClick={() => setTab("mis-paseos")} />
               );
             })}
           </div>
@@ -6629,6 +6641,7 @@ export default function HowriaAdmin() {
           .howria-launcher-mobile { display: block !important; }
           .howria-bottom-nav { display: flex !important; }
           .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .howria-finanzas-stats { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
