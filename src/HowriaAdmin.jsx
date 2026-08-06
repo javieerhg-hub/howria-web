@@ -2426,6 +2426,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
   const totalHistorico = historialVentas.reduce((acc, b) => acc + b.total, 0);
   const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
   const [linkCopiado, setLinkCopiado] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
   function copiarLinkAgenda() {
     const link = `${window.location.origin}/agendaadiestrador?c=${cliente._dbId}`;
@@ -2469,9 +2470,21 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
               <button onClick={copiarLinkAgenda} style={botonSecundario}>{linkCopiado ? "¡Copiado!" : "Copiar link de agenda"}</button>
             )}
             <button onClick={onEditar} style={botonSecundario}>Editar</button>
-            {puedeEliminar && <BotonEliminar onConfirm={onEliminar} style={{ ...botonSecundario, borderColor: RUST, color: RUST }} />}
+            {puedeEliminar && (
+              <button onClick={() => setConfirmandoEliminar(true)} style={{ ...botonSecundario, borderColor: RUST, color: RUST }}>Eliminar</button>
+            )}
           </div>
         </div>
+
+        {confirmandoEliminar && (
+          <ModalConfirmacion
+            titulo={`¿Eliminar a ${cliente.nombre}?`}
+            mensaje={`Se borra la ficha de ${cliente.nombre} y de su perro ${cliente.perro} — boletas, historial y datos de contacto quedan asociados a un cliente que ya no vas a poder ver ni editar.`}
+            textoConfirmar="Eliminar cliente"
+            onConfirmar={() => { onEliminar(); setConfirmandoEliminar(false); }}
+            onCancelar={() => setConfirmandoEliminar(false)}
+          />
+        )}
 
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 26 }}>
           <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
@@ -2661,7 +2674,7 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14, marginTop: 14 }}>
         {cargandoClientes ? (
-          <p style={{ ...hint, gridColumn: "1 / -1" }}>Cargando clientes…</p>
+          <p style={{ ...hint, gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando clientes…</p>
         ) : (
           <>
             {filtrados.map((c) => {
@@ -3443,7 +3456,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
           </thead>
           <tbody>
             {cargandoBoletas ? (
-              <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>Cargando facturas…</td></tr>
+              <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando facturas…</span></td></tr>
             ) : (
               <>
                 {lista.map((b) => {
@@ -3638,7 +3651,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           Marca o desmarca las pestañas que puede ver cada rol. Los cambios se aplican al instante — la próxima vez que esa persona entre (o recargue la página) va a ver el menú actualizado.
         </p>
         {!permisosRoles ? (
-          <p style={{ fontSize: 13, color: "#8A7E5C" }}>Cargando permisos...</p>
+          <p style={{ fontSize: 13, color: "#8A7E5C", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando permisos...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
@@ -3680,7 +3693,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           Marca o desmarca qué rol recibe cada notificación. Solo le llega a quien además haya activado las notificaciones en su navegador (el ícono de campana del header).
         </p>
         {!notificacionesRoles ? (
-          <p style={{ fontSize: 13, color: "#8A7E5C" }}>Cargando notificaciones...</p>
+          <p style={{ fontSize: 13, color: "#8A7E5C", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando notificaciones...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
@@ -3719,7 +3732,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         <input placeholder="Buscar por nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginBottom: 16, maxWidth: 320 }} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {cargandoUsuarios && <p style={{ color: "#8A7E5C", fontSize: 13.5 }}>Cargando usuarios…</p>}
+          {cargandoUsuarios && <p style={{ color: "#8A7E5C", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando usuarios…</p>}
           {!cargandoUsuarios && filtrados.map((u) => {
             const esUsuarioActual = usuarioActual && u.email === usuarioActual.email;
             return (
@@ -3763,18 +3776,11 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                       <option value="coordinador">Coordinador</option>
                       <option value="administrador">Administrador general</option>
                     </select>
-                    {borrarId === u.id ? (
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => confirmarBorrar(u)} style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer" }}>Confirmar</button>
-                        <button onClick={() => setBorrarId(null)} style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer" }}>Cancelar</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setBorrarId(u.id)} disabled={esUsuarioActual}
-                        title={esUsuarioActual ? "No puedes eliminar tu propia cuenta" : "Eliminar"}
-                        style={{ border: "none", background: "none", color: esUsuarioActual ? "#C9BFA0" : RUST, cursor: esUsuarioActual ? "not-allowed" : "pointer", fontSize: 12.5 }}>
-                        Eliminar
-                      </button>
-                    )}
+                    <button onClick={() => setBorrarId(u.id)} disabled={esUsuarioActual}
+                      title={esUsuarioActual ? "No puedes eliminar tu propia cuenta" : "Eliminar"}
+                      style={{ border: "none", background: "none", color: esUsuarioActual ? "#C9BFA0" : RUST, cursor: esUsuarioActual ? "not-allowed" : "pointer", fontSize: 12.5 }}>
+                      Eliminar
+                    </button>
                   </div>
                 </div>
                 {capacitacionAbiertaId === u.id && (
@@ -3818,6 +3824,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
             {creando ? "Creando cuenta..." : "Agregar"}
           </button>
         </div>
+        {!nuevo.nombre.trim() && <p style={{ color: "#8A7E5C", fontSize: 12.5, margin: "8px 0 0" }}>Ingresa el nombre para poder agregar.</p>}
         {credencialesNuevo && (
           <div style={{ marginTop: 14, padding: "14px 16px", background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, fontSize: 13, color: "#2F6A46", lineHeight: 1.6 }}>
             <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ Cuenta creada para {credencialesNuevo.nombre} — pásale estos datos para que pueda entrar:</p>
@@ -3891,6 +3898,20 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           </div>
         </div>
       )}
+
+      {borrarId && (() => {
+        const u = usuarios.find((x) => x.id === borrarId);
+        if (!u) return null;
+        return (
+          <ModalConfirmacion
+            titulo={`¿Eliminar a ${u.nombre}?`}
+            mensaje="Pierde el acceso a la app al instante. Su cuenta de acceso en Supabase no se borra sola — queda anotada abajo, en 'Logins pendientes de borrar', para que te acuerdes de borrarla ahí también."
+            textoConfirmar="Eliminar usuario"
+            onConfirmar={() => confirmarBorrar(u)}
+            onCancelar={() => setBorrarId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -4144,7 +4165,7 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
 
       <p style={label}>Historial de pagos realizados</p>
       {cargandoPagos ? (
-        <p style={{ ...hint, marginTop: 8 }}>Cargando historial de pagos…</p>
+        <p style={{ ...hint, marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando historial de pagos…</p>
       ) : historial.length === 0 ? (
         <p style={{ ...hint, marginTop: 8 }}>Todavía no se ha marcado ningún pago.</p>
       ) : (
@@ -5338,8 +5359,13 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
         </div>
       )}
 
+      {!registrando && (!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0)) && (
+        <p style={{ color: "#8A7E5C", fontSize: 12.5, margin: "0 0 10px" }}>
+          {!nombre.trim() ? "Ingresa el nombre para poder registrar." : "Selecciona al menos un cliente para asignar."}
+        </p>
+      )}
       <button onClick={registrar} disabled={!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando}
-        style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || clientesElegidos.length === 0 || registrando ? 0.45 : 1 }}>
+        style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando ? 0.45 : 1 }}>
         {registrando ? "Creando cuenta..." : "Registrar paseador y asignar clientes"}
       </button>
     </div>
@@ -5425,7 +5451,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
   const objetivosCumplidos = objetivosSemana.filter((o) => o.cumplido).length;
 
   if (cargando) {
-    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando equipo…</p></div>;
+    return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando equipo…</p></div>;
   }
 
   return (
@@ -5452,7 +5478,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <input placeholder="Agregar persona al equipo" value={nuevoMiembro} onChange={(e) => setNuevoMiembro(e.target.value)} style={{ ...input, marginBottom: 0, maxWidth: 260 }} />
-          <button onClick={agregarMiembro} style={{ ...botonSecundario, padding: "8px 16px" }}>Agregar</button>
+          <button onClick={agregarMiembro} disabled={!nuevoMiembro.trim()} style={{ ...botonSecundario, padding: "8px 16px", opacity: !nuevoMiembro.trim() ? 0.5 : 1 }}>Agregar</button>
         </div>
       </div>
 
@@ -5489,7 +5515,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
                 <option value="">Equipo (todos)</option>
                 {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
-              <button onClick={agregarObjetivo} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
+              <button onClick={agregarObjetivo} disabled={!nuevoObjetivo.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevoObjetivo.trim() ? 0.5 : 1 }}>Agregar</button>
             </div>
           </>
         ) : (
@@ -5516,7 +5542,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
                 <option value="">Equipo (todos)</option>
                 {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
-              <button onClick={agregarObjetivoMes} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
+              <button onClick={agregarObjetivoMes} disabled={!nuevoObjetivoMes.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevoObjetivoMes.trim() ? 0.5 : 1 }}>Agregar</button>
             </div>
           </>
         )}
@@ -5563,7 +5589,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
             {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
           </select>
           <input placeholder="Enlace a documento (opcional)" value={enlaceTarea} onChange={(e) => setEnlaceTarea(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-          <button onClick={agregarTarea} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0 }}>Agregar</button>
+          <button onClick={agregarTarea} disabled={!nuevaTarea.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevaTarea.trim() ? 0.5 : 1 }}>Agregar</button>
         </div>
       </div>
 
@@ -6000,7 +6026,7 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
   const historial = citasFiltradas.filter((c) => !["agendada", "pendiente"].includes(c.estado)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
 
   if (cargando) {
-    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando agenda…</p></div>;
+    return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando agenda…</p></div>;
   }
 
   return (
@@ -6365,7 +6391,7 @@ function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVerClient
   }
 
   if (cargando) {
-    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando correo…</p></div>;
+    return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando correo…</p></div>;
   }
 
   return (
@@ -6448,6 +6474,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
   const [filtroEstado, setFiltroEstado] = useState("activos");
   const [busqueda, setBusqueda] = useState("");
   const [notaNueva, setNotaNueva] = useState({});
+  const [intentoCrear, setIntentoCrear] = useState(false);
 
   useEffect(() => {
     if (!enfoqueEmail) return;
@@ -6456,10 +6483,12 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
   }, [enfoqueEmail]);
 
   function crearProspecto() {
+    setIntentoCrear(true);
     if (!form.nombre.trim()) return;
     setProspectos((prev) => [...prev, { ...form, id: Date.now(), nombre: form.nombre.trim() }]);
     setForm(PROSPECTO_VACIO);
     setMostrarForm(false);
+    setIntentoCrear(false);
   }
 
   function actualizarCampo(id, campo, valor) {
@@ -6506,7 +6535,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
     .sort((a, b) => (a.proximoSeguimiento || "9999").localeCompare(b.proximoSeguimiento || "9999"));
 
   if (cargando) {
-    return <div className="howria-card" style={tarjeta}><p style={hint}>Cargando prospectos…</p></div>;
+    return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando prospectos…</p></div>;
   }
 
   return (
@@ -6517,7 +6546,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
             <h2 style={sectionTitle}>Seguimiento de prospectos</h2>
             <p style={hint}>Para no perder el hilo de una conversación de venta — cada contacto de campaña queda con su estado y notas.</p>
           </div>
-          <button onClick={() => setMostrarForm((v) => !v)} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>
+          <button onClick={() => { setMostrarForm((v) => !v); setIntentoCrear(false); }} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>
             {mostrarForm ? "Cancelar" : "+ Nuevo prospecto"}
           </button>
         </div>
@@ -6548,7 +6577,10 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
                 </button>
               ))}
             </div>
-            <button onClick={crearProspecto} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", marginTop: 0 }}>Guardar prospecto</button>
+            {intentoCrear && !form.nombre.trim() && (
+              <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del prospecto — es obligatorio para guardar.</p>
+            )}
+            <button onClick={crearProspecto} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", marginTop: 0, opacity: intentoCrear && !form.nombre.trim() ? 0.6 : 1 }}>Guardar prospecto</button>
           </div>
         )}
 
@@ -6676,7 +6708,6 @@ const botonPrincipal = { width: "100%", padding: "12px", background: NAVY, color
 const botonSecundario = { padding: "10px 18px", background: "transparent", color: NAVY, border: `1.5px solid ${NAVY}`, borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600, flex: 1, fontFamily: "'Inter', sans-serif", transition: "background .12s" };
 const tarjeta = { background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 14, padding: 24, boxShadow: "0 1px 3px rgba(20,33,61,0.05)" };
 
-// ---------- Confirmación de borrado (dos pasos) ----------
 // Spinner giratorio genérico — trae su propio @keyframes así funciona sin
 // depender del <style> global (que solo se monta después del login), por
 // eso sirve también para la pantalla de carga inicial.
@@ -6693,6 +6724,7 @@ function Spinner({ size = 22, color = GOLD, pista = "rgba(255,255,255,0.25)" }) 
   );
 }
 
+// ---------- Confirmación de borrado (dos pasos) ----------
 function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
   const [confirmando, setConfirmando] = useState(false);
   if (confirmando) {
@@ -6710,6 +6742,36 @@ function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
     );
   }
   return <button onClick={() => setConfirmando(true)} style={style}>{label}</button>;
+}
+
+// Modal real (overlay + tarjeta centrada) para las acciones irreversibles
+// más delicadas — eliminar un usuario o un cliente. El resto de los
+// borrados (boletas, tareas, objetivos) se quedan con BotonEliminar, el
+// confirmar/cancelar inline, porque son de bajo riesgo y reversibles a
+// mano; esto es solo para lo que de verdad conviene que cueste un poco
+// más tocar por error, sobre todo en el celular.
+function ModalConfirmacion({ titulo, mensaje, textoConfirmar = "Eliminar", onConfirmar, onCancelar }) {
+  useEffect(() => {
+    function alEscape(e) { if (e.key === "Escape") onCancelar(); }
+    window.addEventListener("keydown", alEscape);
+    return () => window.removeEventListener("keydown", alEscape);
+  }, [onCancelar]);
+  return (
+    <div onClick={onCancelar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-confirmacion-titulo"
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <h3 id="modal-confirmacion-titulo" style={{ margin: "0 0 10px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{titulo}</h3>
+        <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "#6B6248", lineHeight: 1.55 }}>{mensaje}</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancelar} style={{ ...botonSecundario, flex: "none" }}>Cancelar</button>
+          <button onClick={onConfirmar} autoFocus
+            style={{ border: "none", background: RUST, color: "#fff", borderRadius: 999, padding: "10px 20px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+            {textoConfirmar}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------- Acciones compartidas sobre boletas (paseo o adiestramiento) ----------
