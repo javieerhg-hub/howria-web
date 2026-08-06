@@ -6452,11 +6452,18 @@ export default function HowriaAdmin() {
           .howria-horario-fila > label { width: 100% !important; }
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
           .howria-launcher-mobile { display: block !important; }
+          .howria-home-btn { display: flex !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={44} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {tab !== "inicio" && (
+            <button onClick={() => setTab("inicio")} className="howria-home-btn" title="Volver a Inicio"
+              style={{ display: "none", alignItems: "center", background: "none", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 6, padding: 6, color: CREAM, cursor: "pointer" }}>
+              <Home size={18} />
+            </button>
+          )}
           {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
