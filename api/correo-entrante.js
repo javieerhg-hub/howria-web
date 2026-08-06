@@ -80,6 +80,7 @@ export default async function handler(req, res) {
     titulo: "Nuevo correo",
     cuerpo: parsed.subject ? `${remitente}: ${parsed.subject}` : `De ${remitente}`,
     url: "/admin",
+    evento: "correo",
   });
 
   res.status(200).json({ ok: true });

@@ -626,6 +626,56 @@ function usePermisosRoles(sessionVersion) {
   return [permisos, actualizarPermiso];
 }
 
+const EVENTOS_NOTIFICACION = [
+  { id: "cita", label: "Nueva solicitud de cita" },
+  { id: "correo", label: "Nuevo correo entrante" },
+];
+
+// Igual que usePermisosRoles pero para notificaciones_roles (qué rol recibe
+// qué aviso push) — misma cola por rol para que marcar varias seguidas no
+// se pise entre sí.
+function useNotificacionesRoles(sessionVersion) {
+  const [notificaciones, setNotificacionesState] = useState(null); // null mientras carga
+  const colaPorRol = useRef({});
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.from("notificaciones_roles").select("*");
+      if (!error && data) {
+        const mapa = {};
+        data.forEach((r) => { mapa[r.rol] = r.eventos || []; });
+        setNotificacionesState(mapa);
+      }
+    })();
+  }, [sessionVersion]);
+
+  function actualizarNotificacion(rol, eventoId, activo) {
+    let nuevos;
+    setNotificacionesState((prev) => {
+      const actuales = new Set(prev?.[rol] || []);
+      if (activo) actuales.add(eventoId); else actuales.delete(eventoId);
+      nuevos = [...actuales];
+      return { ...prev, [rol]: nuevos };
+    });
+
+    const previa = colaPorRol.current[rol] || Promise.resolve();
+    const siguiente = previa.then(async () => {
+      const { data, error } = await supabase.from("notificaciones_roles").update({ eventos: nuevos }).eq("rol", rol).select();
+      if (error || !data?.length) {
+        setNotificacionesState((prev) => {
+          const actuales = new Set(prev?.[rol] || []);
+          if (activo) actuales.delete(eventoId); else actuales.add(eventoId);
+          return { ...prev, [rol]: [...actuales] };
+        });
+        showToast(`No se pudo guardar la notificación de "${rol}": ${error?.message || "no existe una fila para ese rol en notificaciones_roles"}`);
+      }
+    });
+    colaPorRol.current[rol] = siguiente;
+  }
+
+  return [notificaciones, actualizarNotificacion];
+}
+
 // Carga y sincroniza ajustes generales del negocio (ej. el % de recargo
 // de fin de semana/feriado), guardados en la tabla configuracion.
 function useConfiguracion(sessionVersion) {
@@ -3191,7 +3241,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
 }
 
 // ---------- Panel admin (usuarios) ----------
-function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes }) {
+function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes }) {
   const [busqueda, setBusqueda] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
@@ -3312,6 +3362,46 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                             title={bloqueado ? "El administrador siempre necesita ver Usuarios, para no perder acceso a esta pantalla" : ""}
                             onChange={(e) => actualizarPermisoRol(r, t.id, e.target.checked)}
                             style={{ width: 16, height: 16, cursor: bloqueado ? "not-allowed" : "pointer" }} />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Notificaciones por rol — qué aviso push recibe cada uno</h2>
+        <p style={{ fontSize: 13, color: "#6B6248", marginTop: -8, marginBottom: 16 }}>
+          Marca o desmarca qué rol recibe cada notificación. Solo le llega a quien además haya activado las notificaciones en su navegador (el ícono de campana del header).
+        </p>
+        {!notificacionesRoles ? (
+          <p style={{ fontSize: 13, color: "#8A7E5C" }}>Cargando notificaciones...</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "6px 10px", color: "#8A7E5C", fontWeight: 600, borderBottom: "1px solid #E4DBC3" }}>Aviso</th>
+                  {ROLES_APP.map((r) => (
+                    <th key={r} style={{ textAlign: "center", padding: "6px 10px", color: NAVY, fontWeight: 700, borderBottom: "1px solid #E4DBC3", textTransform: "capitalize" }}>{r}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {EVENTOS_NOTIFICACION.map((ev) => (
+                  <tr key={ev.id}>
+                    <td style={{ padding: "7px 10px", color: INK, borderBottom: "1px solid #F1EAD9" }}>{ev.label}</td>
+                    {ROLES_APP.map((r) => {
+                      const activo = notificacionesRoles[r]?.includes(ev.id);
+                      return (
+                        <td key={r} style={{ textAlign: "center", padding: "7px 10px", borderBottom: "1px solid #F1EAD9" }}>
+                          <input type="checkbox" checked={activo}
+                            onChange={(e) => actualizarNotificacionRol(r, ev.id, e.target.checked)}
+                            style={{ width: 16, height: 16, cursor: "pointer" }} />
                         </td>
                       );
                     })}
@@ -6159,6 +6249,7 @@ export default function HowriaAdmin() {
   }, []);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes);
   const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
+  const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
   const [configuracion, actualizarConfiguracion] = useConfiguracion(sessionVersion);
 
   useEffect(() => {
@@ -6412,7 +6503,7 @@ export default function HowriaAdmin() {
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} />}
       </div>
     </div>
   );

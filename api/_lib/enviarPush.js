@@ -18,18 +18,29 @@ function asegurarVapid() {
 
 // admin: cliente de Supabase con la service role key (bypassa RLS, hace
 // falta para leer las suscripciones de todo el staff, no solo las propias).
-// No lanza si falla — un aviso push que no llega no debe romper la
-// operación principal (guardar la cita/correo ya quedó hecho antes).
-export async function enviarNotificacionPush(admin, { titulo, cuerpo, url }) {
+// evento: "cita" | "correo" — filtra según qué roles lo tienen activado en
+// notificaciones_roles (pestaña Usuarios del panel). No lanza si falla — un
+// aviso push que no llega no debe romper la operación principal (guardar
+// la cita/correo ya quedó hecho antes).
+export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, evento }) {
   if (!asegurarVapid()) return;
 
-  const { data: subs, error } = await admin.from("push_subscriptions").select("id, endpoint, p256dh, auth");
+  const [{ data: config }, { data: usuarios }, { data: subs, error }] = await Promise.all([
+    admin.from("notificaciones_roles").select("rol, eventos"),
+    admin.from("usuarios").select("email, rol"),
+    admin.from("push_subscriptions").select("id, endpoint, p256dh, auth, usuario_email"),
+  ]);
   if (error || !subs || subs.length === 0) return;
+
+  const rolesQueReciben = new Set((config || []).filter((c) => (c.eventos || []).includes(evento)).map((c) => c.rol));
+  const rolPorEmail = new Map((usuarios || []).map((u) => [u.email, u.rol]));
+  const destinatarios = subs.filter((s) => rolesQueReciben.has(rolPorEmail.get(s.usuario_email)));
+  if (destinatarios.length === 0) return;
 
   const payload = JSON.stringify({ titulo, cuerpo, url });
 
   await Promise.all(
-    subs.map(async (s) => {
+    destinatarios.map(async (s) => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },

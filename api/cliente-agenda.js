@@ -245,6 +245,7 @@ export default async function handler(req, res) {
       titulo: "Nueva solicitud de cita",
       cuerpo: `${nombreSolicitante} pidió ${tipoTexto} con ${adiestrador}`,
       url: "/admin",
+      evento: "cita",
     });
 
     res.status(200).json({ ok: true });
