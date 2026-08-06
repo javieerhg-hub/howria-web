@@ -1053,7 +1053,22 @@ function BotonNotificacionesPush({ usuarioEmail }) {
 }
 
 // ---------- Login ----------
+function BulletBienvenida({ Icono, titulo, texto }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+      <div style={{ width: 44, height: 44, borderRadius: 12, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", color: NAVY }}>
+        <Icono size={20} />
+      </div>
+      <div>
+        <p style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: NAVY }}>{titulo}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>{texto}</p>
+      </div>
+    </div>
+  );
+}
+
 function Login({ onLogin, usuarios }) {
+  const [paso, setPaso] = useState("bienvenida"); // "bienvenida" | "form"
   const [nombre, setNombre] = useState("");
   const [passwordEquipo, setPasswordEquipo] = useState("");
   const [errorLogin, setErrorLogin] = useState("");
@@ -1062,6 +1077,10 @@ function Login({ onLogin, usuarios }) {
   const [emailCliente, setEmailCliente] = useState("");
   const [enviandoLink, setEnviandoLink] = useState(false);
   const [linkEnviado, setLinkEnviado] = useState(false);
+
+  const inputPill = { width: "100%", boxSizing: "border-box", padding: "13px 18px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 999, fontSize: 14.5, background: "#F7F5F0", fontFamily: "inherit", color: INK };
+  const labelPill = { display: "block", fontSize: 12, color: "#8A7E5C", fontWeight: 600, marginBottom: 6, marginLeft: 6 };
+  const botonPill = { width: "100%", padding: "14px", background: NAVY, color: CREAM, border: "none", borderRadius: 999, fontSize: 14.5, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" };
 
   async function enviarLinkCliente() {
     const email = emailCliente.trim();
@@ -1099,57 +1118,89 @@ function Login({ onLogin, usuarios }) {
     onLogin(perfil);
   }
 
-  return (
-    <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Helvetica Neue', Arial, sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 380, padding: "0 24px" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 36 }}>
-          <LogoHowria height={110} />
-        </div>
-        <div style={{ background: CREAM, borderRadius: 10, padding: "36px 32px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
-          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1.5px solid ${NAVY}`, marginBottom: 24 }}>
-            <button onClick={() => setModo("equipo")} style={{ flex: 1, padding: "10px", border: "none", cursor: "pointer", background: modo === "equipo" ? NAVY : "#FFFFFF", color: modo === "equipo" ? CREAM : NAVY, fontWeight: 600, fontSize: 13 }}>Soy del equipo</button>
-            <button onClick={() => setModo("cliente")} style={{ flex: 1, padding: "10px", border: "none", cursor: "pointer", background: modo === "cliente" ? NAVY : "#FFFFFF", color: modo === "cliente" ? CREAM : NAVY, fontWeight: 600, fontSize: 13 }}>Soy cliente</button>
+  if (paso === "bienvenida") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 28px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}>
+            <LogoHowria height={64} />
           </div>
-
-          {modo === "equipo" ? (
-            <>
-              <p style={{ margin: "0 0 24px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1.5, textAlign: "center" }}>Portal administradores</p>
-              <label style={label} htmlFor="login-nombre">Nombre</label>
-              <input id="login-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre"
-                onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
-                style={input} autoFocus />
-              <label style={label} htmlFor="login-password">Contraseña</label>
-              <input id="login-password" type="password" value={passwordEquipo} onChange={(e) => setPasswordEquipo(e.target.value)} placeholder="Tu contraseña"
-                onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
-                style={{ ...input, marginBottom: errorLogin ? 8 : 24 }} />
-              {errorLogin && <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "#A85C3B" }}>{errorLogin}</p>}
-              <button onClick={intentarLogin} disabled={entrando} style={{ ...botonPrincipal, opacity: entrando ? 0.6 : 1 }}>
-                {entrando ? "Entrando..." : "Entrar"}
-              </button>
-            </>
-          ) : (
-            <>
-              <p style={{ margin: "0 0 20px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1.5, textAlign: "center" }}>Portal del cliente</p>
-              {linkEnviado ? (
-                <p style={{ margin: 0, fontSize: 13.5, color: "#2F6A46", background: "#D8ECDE", borderRadius: 8, padding: "12px 14px", lineHeight: 1.6 }}>
-                  ✓ Te enviamos un link de acceso a <b>{emailCliente.trim()}</b>. Ábrelo desde tu correo para entrar — no hace falta contraseña.
-                </p>
-              ) : (
-                <>
-                  <label style={label} htmlFor="login-email-cliente">Tu correo</label>
-                  <input id="login-email-cliente" type="email" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} placeholder="tu@correo.com"
-                    onKeyDown={(e) => e.key === "Enter" && enviarLinkCliente()} style={input} autoFocus />
-                  <button onClick={enviarLinkCliente} disabled={!emailCliente.trim() || enviandoLink}
-                    style={{ ...botonPrincipal, opacity: !emailCliente.trim() || enviandoLink ? 0.45 : 1 }}>
-                    {enviandoLink ? "Enviando..." : "Enviarme el link de acceso"}
-                  </button>
-                  <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 10, marginBottom: 0 }}>Usa el correo que nos diste al registrarte como cliente.</p>
-                </>
-              )}
-            </>
-          )}
+          <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 30, fontWeight: 700, color: NAVY, textAlign: "center", lineHeight: 1.25, margin: "0 0 40px" }}>
+            Cuida y pasea perritos con cariño real
+          </h1>
+          <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+            <BulletBienvenida Icono={Footprints} titulo="Comienza a pasear perritos" texto="Registra y sigue cada paseo del día" />
+            <BulletBienvenida Icono={Users} titulo="Únete al equipo" texto="Coordina turnos, boletas y tareas con todos" />
+            <BulletBienvenida Icono={Dog} titulo="Conecta con tus clientes" texto="Agenda, boletas y mensajes en un solo lugar" />
+          </div>
         </div>
-        <p style={{ fontSize: 12, color: "#7E8FA0", marginTop: 18, textAlign: "center", lineHeight: 1.5 }}>
+        <div style={{ padding: "20px 28px 36px", maxWidth: 420, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 10 }}>
+          <button onClick={() => { setModo("cliente"); setPaso("form"); }}
+            style={{ flex: "0 0 auto", padding: "14px 22px", borderRadius: 999, border: "none", background: CREAM_SOFT, color: NAVY, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
+            Soy cliente
+          </button>
+          <button onClick={() => { setModo("equipo"); setPaso("form"); }}
+            style={{ flex: 1, padding: "14px 22px", borderRadius: 999, border: "none", background: NAVY, color: CREAM, fontWeight: 600, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>
+            Iniciar sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
+      <div style={{ padding: "18px 20px 0" }}>
+        <button onClick={() => setPaso("bienvenida")}
+          style={{ border: "none", background: "none", color: NAVY, fontSize: 14, cursor: "pointer", padding: 8, display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+          ← Volver
+        </button>
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "10px 28px 60px", maxWidth: 380, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
+          <LogoHowria height={56} />
+        </div>
+        <div style={{ display: "flex", borderRadius: 999, overflow: "hidden", border: `1.5px solid ${NAVY}`, marginBottom: 28 }}>
+          <button onClick={() => setModo("equipo")} style={{ flex: 1, padding: "10px", border: "none", cursor: "pointer", background: modo === "equipo" ? NAVY : "#FFFFFF", color: modo === "equipo" ? CREAM : NAVY, fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Soy del equipo</button>
+          <button onClick={() => setModo("cliente")} style={{ flex: 1, padding: "10px", border: "none", cursor: "pointer", background: modo === "cliente" ? NAVY : "#FFFFFF", color: modo === "cliente" ? CREAM : NAVY, fontWeight: 600, fontSize: 13, fontFamily: "inherit" }}>Soy cliente</button>
+        </div>
+
+        {modo === "equipo" ? (
+          <>
+            <label style={labelPill} htmlFor="login-nombre">Nombre</label>
+            <input id="login-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre"
+              onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
+              style={inputPill} autoFocus />
+            <label style={labelPill} htmlFor="login-password">Contraseña</label>
+            <input id="login-password" type="password" value={passwordEquipo} onChange={(e) => setPasswordEquipo(e.target.value)} placeholder="Tu contraseña"
+              onKeyDown={(e) => e.key === "Enter" && intentarLogin()}
+              style={{ ...inputPill, marginBottom: errorLogin ? 8 : 24 }} />
+            {errorLogin && <p style={{ margin: "0 0 16px 6px", fontSize: 12.5, color: RUST }}>{errorLogin}</p>}
+            <button onClick={intentarLogin} disabled={entrando} style={{ ...botonPill, opacity: entrando ? 0.6 : 1 }}>
+              {entrando ? "Entrando..." : "Entrar"}
+            </button>
+          </>
+        ) : (
+          <>
+            {linkEnviado ? (
+              <p style={{ margin: 0, fontSize: 13.5, color: "#2F6A46", background: "#D8ECDE", borderRadius: 14, padding: "14px 18px", lineHeight: 1.6 }}>
+                ✓ Te enviamos un link de acceso a <b>{emailCliente.trim()}</b>. Ábrelo desde tu correo para entrar — no hace falta contraseña.
+              </p>
+            ) : (
+              <>
+                <label style={labelPill} htmlFor="login-email-cliente">Tu correo</label>
+                <input id="login-email-cliente" type="email" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} placeholder="tu@correo.com"
+                  onKeyDown={(e) => e.key === "Enter" && enviarLinkCliente()} style={inputPill} autoFocus />
+                <button onClick={enviarLinkCliente} disabled={!emailCliente.trim() || enviandoLink}
+                  style={{ ...botonPill, opacity: !emailCliente.trim() || enviandoLink ? 0.45 : 1 }}>
+                  {enviandoLink ? "Enviando..." : "Enviarme el link de acceso"}
+                </button>
+                <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 10, marginBottom: 0, marginLeft: 6 }}>Usa el correo que nos diste al registrarte como cliente.</p>
+              </>
+            )}
+          </>
+        )}
+        <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 20, textAlign: "center", lineHeight: 1.5 }}>
           {modo === "equipo" ? "Acceso protegido con contraseña — solo el equipo de Howria puede entrar." : "Te mandamos un link de acceso a tu correo, sin contraseña."}
         </p>
       </div>
