@@ -1093,20 +1093,23 @@ function Login({ onLogin, usuarios }) {
   const [enviandoLink, setEnviandoLink] = useState(false);
   const [linkEnviado, setLinkEnviado] = useState(false);
 
-  const [formRegistro, setFormRegistro] = useState({ nombre: "", email: "", telefono: "", mensaje: "" });
+  const [formRegistro, setFormRegistro] = useState({ nombre: "", email: "", telefono: "", mensaje: "", password: "", passwordConfirm: "" });
   const [enviandoRegistro, setEnviandoRegistro] = useState(false);
   const [errorRegistro, setErrorRegistro] = useState("");
   const [registroEnviado, setRegistroEnviado] = useState(false);
 
+  const formRegistroValido = formRegistro.nombre.trim() && formRegistro.email.trim() && formRegistro.password.length >= 6 && formRegistro.password === formRegistro.passwordConfirm;
+
   async function enviarSolicitudRegistro() {
-    if (!formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro) return;
+    if (!formRegistroValido || enviandoRegistro) return;
     setEnviandoRegistro(true);
     setErrorRegistro("");
     try {
+      const { passwordConfirm, ...datosRegistro } = formRegistro;
       const resp = await fetch("/api/solicitud-registro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formRegistro),
+        body: JSON.stringify(datosRegistro),
       });
       const resultado = await resp.json().catch(() => ({}));
       if (!resp.ok) {
@@ -1265,9 +1268,18 @@ function Login({ onLogin, usuarios }) {
               <textarea id="registro-mensaje" value={formRegistro.mensaje} onChange={(e) => setFormRegistro((f) => ({ ...f, mensaje: e.target.value }))}
                 placeholder="Ej. experiencia paseando o adiestrando perros..." rows={3}
                 style={{ ...inputPill, resize: "vertical", fontFamily: "inherit" }} />
+              <label style={labelPill} htmlFor="registro-password">Contraseña</label>
+              <input id="registro-password" type="password" value={formRegistro.password} onChange={(e) => setFormRegistro((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Mínimo 6 caracteres" style={inputPill} autoComplete="new-password" />
+              <label style={labelPill} htmlFor="registro-password-confirm">Confirmar contraseña</label>
+              <input id="registro-password-confirm" type="password" value={formRegistro.passwordConfirm} onChange={(e) => setFormRegistro((f) => ({ ...f, passwordConfirm: e.target.value }))}
+                placeholder="Repite tu contraseña" style={inputPill} autoComplete="new-password" />
+              {formRegistro.passwordConfirm && formRegistro.password !== formRegistro.passwordConfirm && (
+                <p style={{ margin: "-8px 0 16px 6px", fontSize: 12.5, color: RUST }}>Las contraseñas no coinciden.</p>
+              )}
               {errorRegistro && <p style={{ margin: "0 0 16px 6px", fontSize: 12.5, color: RUST }}>{errorRegistro}</p>}
-              <button onClick={enviarSolicitudRegistro} disabled={!formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro}
-                style={{ ...botonPill, opacity: !formRegistro.nombre.trim() || !formRegistro.email.trim() || enviandoRegistro ? 0.45 : 1 }}>
+              <button onClick={enviarSolicitudRegistro} disabled={!formRegistroValido || enviandoRegistro}
+                style={{ ...botonPill, opacity: !formRegistroValido || enviandoRegistro ? 0.45 : 1 }}>
                 {enviandoRegistro ? "Enviando..." : "Enviar solicitud"}
               </button>
             </>
@@ -3563,26 +3575,20 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     setCreando(false);
   }
 
-  // Aprobar crea la cuenta de acceso exactamente igual que agregar() de
-  // arriba (mismo slug de correo, mismo flujo de contraseña temporal) —
-  // la diferencia es que el nombre/correo de contacto vienen del
-  // formulario público en vez de escribirlos el administrador a mano.
+  // La cuenta de acceso (Supabase Auth) ya existe desde que la persona
+  // mandó el formulario — la creó api/solicitud-registro.js con la
+  // contraseña que ella misma eligió. Aprobar solo activa su perfil en
+  // usuarios, que es lo que realmente le da entrada a la app.
   async function aprobarSolicitud(s) {
     if (gestionandoSolicitudId) return;
     setGestionandoSolicitudId(s.id);
     try {
       const email = slugEmailUsuario(s.nombre);
-      const { password, error } = await crearCuentaAcceso(email);
-      if (error) {
-        showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
-        return;
-      }
       setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "paseador", email }]);
       const { error: errorUpdate } = await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
-      if (errorUpdate) showToast(`La cuenta se creó, pero no se pudo marcar la solicitud como aprobada: ${errorUpdate.message}`);
+      if (errorUpdate) showToast(`El perfil se creó, pero no se pudo marcar la solicitud como aprobada: ${errorUpdate.message}`);
       setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
-      setCredencialesNuevo({ nombre: s.nombre, email, password });
-      showToast(`${s.nombre} fue aprobado con rol "paseador" — ajusta el rol en la lista de arriba si corresponde otro.`);
+      showToast(`${s.nombre} fue aprobado con rol "paseador" — ya puede entrar con la contraseña que eligió. Ajusta el rol en la lista de arriba si corresponde otro.`);
     } catch (err) {
       showToast(`No se pudo aprobar la solicitud: ${err.message || "error desconocido"}`);
     } finally {
@@ -3590,6 +3596,11 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
     }
   }
 
+  // Al rechazar queda una cuenta de Supabase Auth huérfana (se creó al
+  // mandar el formulario, pero nunca va a tener perfil en usuarios) —
+  // se agrega a la misma lista de "logins pendientes de borrar" que ya
+  // se usa para las cuentas eliminadas, para que el administrador se
+  // acuerde de borrarla a mano en el dashboard de Supabase.
   async function rechazarSolicitud(s) {
     if (gestionandoSolicitudId) return;
     setGestionandoSolicitudId(s.id);
@@ -3600,6 +3611,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
       return;
     }
     setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
+    setLoginsPendientes((prev) => [...prev, { id: Date.now(), nombre: s.nombre, email: slugEmailUsuario(s.nombre), eliminadoEn: new Date().toISOString() }]);
     setGestionandoSolicitudId(null);
   }
 
@@ -3806,7 +3818,7 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
         <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
           <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Solicitudes de registro pendientes ({solicitudesRegistro.length})</h2>
           <p style={{ fontSize: 13, color: "#2E5C41", marginTop: -8, marginBottom: 14 }}>
-            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login. Aprobar crea su cuenta (rol "paseador" por defecto, lo puedes cambiar después en la lista de arriba).
+            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login (ya eligieron su propia contraseña). Aprobar activa su perfil (rol "paseador" por defecto, lo puedes cambiar después en la lista de arriba). Rechazar deja pendiente borrar su cuenta de acceso — se agrega abajo a "Logins pendientes de borrar".
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {solicitudesRegistro.map((s) => (
