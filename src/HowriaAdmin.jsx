@@ -4277,8 +4277,62 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     );
   }
 
+  const hoyLargo = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
   return (
     <div style={{ display: "grid", gap: 20 }}>
+      <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+          <h2 style={{ ...sectionTitle, color: CREAM }}>Tus paseos de hoy</h2>
+          <span style={{ fontSize: 12, color: "#9BAAB8", textTransform: "capitalize" }}>{hoyLargo}</span>
+        </div>
+        {clientesHoyAnillo.length === 0 ? (
+          <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "#B7C2CE" }}>No tienes paseos asignados hoy. Disfruta el día 🐾</p>
+        ) : pendientesHoy === 0 ? (
+          <p style={{ margin: "8px 0 0", fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 ¡Completaste todos tus paseos de hoy!</p>
+        ) : (
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9BAAB8" }}>{pendientesHoy} de {clientesHoyAnillo.length} por confirmar</p>
+        )}
+        {clientesHoyAnillo.length > 0 && (
+          <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+            {clientesHoyAnillo.map((c) => {
+              const key = `${c.id}_${fechaKey(hoy)}`;
+              const registro = registroPaseos[key] || {};
+              const hecho = !!registro.realizado;
+              const cancelado = !!registro.cancelado;
+              return (
+                <div key={c.id} style={{ background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "rgba(255,255,255,0.15)", flex: "none" }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: CREAM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</div>
+                      <div style={{ fontSize: 12.5, color: "#9BAAB8" }}>🐾 {c.perro}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => toggleRealizado(c.id, hoy)} disabled={cancelado}
+                    style={{
+                      width: "100%", padding: "15px", borderRadius: 10, border: "none",
+                      cursor: cancelado ? "default" : "pointer", fontSize: 15.5, fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      background: cancelado ? "rgba(168,92,59,0.25)" : hecho ? "#2F6A46" : GOLD,
+                      color: cancelado ? "#F1DCD2" : hecho ? "#FFFFFF" : NAVY,
+                    }}>
+                    <CircleCheck size={19} />
+                    {cancelado ? "Cliente canceló" : hecho ? "Paseo confirmado" : "Confirmar paseo"}
+                  </button>
+                  {!hecho && (
+                    <button onClick={() => toggleCancelado(c.id, hoy)}
+                      style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: cancelado ? GOLD : "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
+                      {cancelado ? "Deshacer — el cliente no canceló" : "El cliente canceló"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
