@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import {
-  Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map, Calendar, Mail as MailIcon, Dog, Receipt,
+  Search, ArrowUpDown, Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
 } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
@@ -614,7 +614,7 @@ const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrador"];
 const ICONOS_TAB = {
   "mis-paseos": Footprints,
   coordinacion: MapPinned,
-  mapa: Map,
+  mapa: MapIcon,
   agenda: Calendar,
   mail: MailIcon,
   clientes: Dog,
