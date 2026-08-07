@@ -2739,9 +2739,20 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagosRegistrados = [] }) {
+function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], user }) {
   const [periodo, setPeriodo] = useState("semana");
   const hoy = new Date();
+
+  // Un paseador no debe ver las finanzas generales de Howria — solo lo
+  // que tiene que ver con los clientes que se le asignaron. Se filtran
+  // los datos de entrada acá para que el resto del cálculo (que ya
+  // trabaja sobre clientes/boletasEmitidas/etc.) quede automáticamente
+  // acotado, sin duplicar lógica.
+  const esPaseador = user?.rol === "paseador";
+  const clientes = esPaseador ? clientesProp.filter((c) => c.paseadorNombre === user.nombre) : clientesProp;
+  const boletasEmitidas = esPaseador ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c))) : boletasEmitidasProp;
+  const boletasAdiestramiento = esPaseador ? [] : boletasAdiestramientoProp;
+  const pagosRegistrados = esPaseador ? [] : pagosRegistradosProp;
 
   const todasLasBoletas = useMemo(() => [
     ...boletasEmitidas,
@@ -2841,8 +2852,12 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
       `}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2 style={sectionTitle}>Finanzas de Howria</h2>
-          <p style={hint}>Informes generados a partir de las boletas emitidas — se actualizan solos con cada boleta nueva.</p>
+          <h2 style={sectionTitle}>{esPaseador ? "Finanzas de tus clientes" : "Finanzas de Howria"}</h2>
+          <p style={hint}>
+            {esPaseador
+              ? "Informes generados a partir de las boletas de los clientes que tienes asignados — se actualizan solos con cada boleta nueva."
+              : "Informes generados a partir de las boletas emitidas — se actualizan solos con cada boleta nueva."}
+          </p>
         </div>
         <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
       </div>
@@ -2859,7 +2874,7 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
         ))}
       </div>
 
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 26 }}>
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${esPaseador ? 3 : 5}, 1fr)`, gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
@@ -2867,14 +2882,18 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
             {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
           </p>
         </div>
-        <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosPeriodo)}</p>
-        </div>
-        <div style={{ background: utilidad >= 0 ? "#E7F0EA" : "#F5E4E0", borderRadius: 10, padding: 18 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Utilidad estimada</p>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
-        </div>
+        {!esPaseador && (
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosPeriodo)}</p>
+          </div>
+        )}
+        {!esPaseador && (
+          <div style={{ background: utilidad >= 0 ? "#E7F0EA" : "#F5E4E0", borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Utilidad estimada</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
+          </div>
+        )}
         <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Boletas emitidas</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{actual.cantidad}</p>
@@ -2884,9 +2903,11 @@ function Finanzas({ boletasEmitidas, boletasAdiestramiento = [], clientes, pagos
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(promedioBoleta)}</p>
         </div>
       </div>
-      <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-        La utilidad considera solo pagos a paseadores ya registrados como pagados en esta app — no incluye otros gastos del negocio.
-      </p>
+      {!esPaseador && (
+        <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
+          La utilidad considera solo pagos a paseadores ya registrados como pagados en esta app — no incluye otros gastos del negocio.
+        </p>
+      )}
 
       <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
         <p style={{ ...label, marginBottom: 8 }}>Proyección del mes en curso (si se factura todo el plan habitual de cada cliente activo)</p>
@@ -7299,7 +7320,7 @@ export default function HowriaAdmin() {
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} />}
-        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} />}
+        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} />}
