@@ -47,7 +47,7 @@ export default function Home() {
           </a>
           <nav className="howria-nav-links">
             <a href="#servicios" className="howria-navlink" style={navLink}>Servicios</a>
-            <a href="#nosotros" className="howria-navlink" style={navLink}>Nosotros</a>
+            <a href="/nosotros" className="howria-navlink" style={navLink}>Nosotros</a>
             <a href="#galeria" className="howria-navlink" style={navLink}>Galería</a>
             <a href="#contacto" className="howria-navlink" style={navLink}>Contacto</a>
             <a href="/admin" style={{ background: GOLD, color: NAVY_LOGO, padding: "9px 18px", borderRadius: 20, fontSize: 13.5, fontWeight: 700, textDecoration: "none" }}>
@@ -63,7 +63,7 @@ export default function Home() {
         {menuAbierto && (
           <div style={{ background: NAVY_LOGO, padding: "8px 24px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
             <a href="#servicios" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Servicios</a>
-            <a href="#nosotros" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Nosotros</a>
+            <a href="/nosotros" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Nosotros</a>
             <a href="#galeria" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Galería</a>
             <a href="#contacto" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Contacto</a>
             <a href="/admin" style={{ background: GOLD, color: NAVY_LOGO, padding: "10px 18px", borderRadius: 20, fontSize: 13.5, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
@@ -152,7 +152,7 @@ export default function Home() {
               Trabajamos con respeto animal, honestidad con cada familia y disciplina profesional — jamás con miedo
               ni maltrato. El bienestar del perro siempre va primero.
             </p>
-            <a href="https://instagram.com/HowriaDogs" target="_blank" rel="noopener" style={{ color: NAVY, fontWeight: 700, fontSize: 14, textDecoration: "none", borderBottom: `2px solid ${GOLD}`, paddingBottom: 2 }}>
+            <a href="/nosotros" style={{ color: NAVY, fontWeight: 700, fontSize: 14, textDecoration: "none", borderBottom: `2px solid ${GOLD}`, paddingBottom: 2 }}>
               Conoce más sobre nosotros →
             </a>
           </div>

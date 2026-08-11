@@ -185,9 +185,97 @@
     color: #9A9384;
     font-size: 0.82rem;
   }
+  .site-header {
+    background: #102A41;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .brand-link {
+    font-family: 'Fraunces', serif;
+    font-size: 24px;
+    color: var(--cream);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a {
+    color: #C9CEDA;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: opacity .15s ease;
+  }
+  .nav-links a:hover { opacity: 0.75; }
+  .nav-links a.current, .mobile-menu a.current { color: var(--gold); }
+  .nav-links a.login-btn, .mobile-menu a.login-btn {
+    background: var(--gold);
+    color: #102A41;
+    padding: 9px 18px;
+    border-radius: 20px;
+    font-size: 13.5px;
+    font-weight: 700;
+    transition: filter .15s ease;
+  }
+  .nav-links a.login-btn:hover, .mobile-menu a.login-btn:hover { filter: brightness(0.93); opacity: 1; }
+  .menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--cream);
+    font-size: 22px;
+    cursor: pointer;
+  }
+  .mobile-menu {
+    display: none;
+    background: #102A41;
+    padding: 8px 24px 20px;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .mobile-menu a { color: #C9CEDA; text-decoration: none; font-size: 14px; font-weight: 500; }
+  .mobile-menu a.login-btn { text-align: center; }
+  .mobile-menu.open { display: flex; }
+  @media (max-width: 760px) {
+    .nav-links { display: none; }
+    .menu-toggle { display: flex; align-items: center; justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-links a, .menu-toggle { transition: none; }
+  }
 </style>
 </head>
 <body>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="/" class="brand-link">Howria</a>
+      <nav class="nav-links">
+        <a href="/#servicios">Servicios</a>
+        <a href="/nosotros" class="current">Nosotros</a>
+        <a href="/#galeria">Galería</a>
+        <a href="/#contacto">Contacto</a>
+        <a href="/admin" class="login-btn">Iniciar sesión</a>
+      </nav>
+      <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú" aria-expanded="false">☰</button>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="/#servicios">Servicios</a>
+      <a href="/nosotros" class="current">Nosotros</a>
+      <a href="/#galeria">Galería</a>
+      <a href="/#contacto">Contacto</a>
+      <a href="/admin" class="login-btn">Iniciar sesión</a>
+    </div>
+  </header>
 
   <div class="hero">
     <div class="brand">Howria</div>
@@ -252,6 +340,16 @@
   </div>
 
   <footer>Howria — Santiago, Chile</footer>
+
+  <script>
+    var menuToggle = document.getElementById('menuToggle');
+    var mobileMenu = document.getElementById('mobileMenu');
+    menuToggle.addEventListener('click', function () {
+      var isOpen = mobileMenu.classList.toggle('open');
+      menuToggle.setAttribute('aria-expanded', String(isOpen));
+      menuToggle.setAttribute('aria-label', isOpen ? 'Cerrar menú' : 'Abrir menú');
+    });
+  </script>
 
 </body>
 </html>
