@@ -47,7 +47,7 @@ export default function Home() {
           </a>
           <nav className="howria-nav-links">
             <a href="#servicios" className="howria-navlink" style={navLink}>Servicios</a>
-            <a href="/nosotros" className="howria-navlink" style={navLink}>Nosotros</a>
+            <a href="#nosotros" className="howria-navlink" style={navLink}>Nosotros</a>
             <a href="#galeria" className="howria-navlink" style={navLink}>Galería</a>
             <a href="#contacto" className="howria-navlink" style={navLink}>Contacto</a>
             <a href="/admin" style={{ background: GOLD, color: NAVY_LOGO, padding: "9px 18px", borderRadius: 20, fontSize: 13.5, fontWeight: 700, textDecoration: "none" }}>
@@ -63,7 +63,7 @@ export default function Home() {
         {menuAbierto && (
           <div style={{ background: NAVY_LOGO, padding: "8px 24px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
             <a href="#servicios" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Servicios</a>
-            <a href="/nosotros" className="howria-navlink" style={navLink}>Nosotros</a>
+            <a href="#nosotros" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Nosotros</a>
             <a href="#galeria" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Galería</a>
             <a href="#contacto" className="howria-navlink" style={navLink} onClick={() => setMenuAbierto(false)}>Contacto</a>
             <a href="/admin" style={{ background: GOLD, color: NAVY_LOGO, padding: "10px 18px", borderRadius: 20, fontSize: 13.5, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
@@ -125,11 +125,18 @@ export default function Home() {
       </section>
 
       {/* ---------- NOSOTROS (preview) ---------- */}
-      <section style={{ background: "#FFFFFF", borderTop: "1px solid #EDE4CE", borderBottom: "1px solid #EDE4CE" }}>
+      <section id="nosotros" style={{ background: "#FFFFFF", borderTop: "1px solid #EDE4CE", borderBottom: "1px solid #EDE4CE" }}>
         <div className="howria-grid-2" style={{ maxWidth: 1100, margin: "0 auto", padding: "70px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
-          <div>
-            <img src="/images-home/nosotros-pastor.jpg" alt="Pastor alemán en un paseo con Howria" loading="lazy"
-              style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", borderRadius: 14, display: "block" }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[
+              { src: "nosotros-pastor.jpg", alt: "Perro grande y cocker spaniel juntos en un paseo con Howria" },
+              { src: "intro-pastor-aleman.jpg", alt: "Pastor alemán atento durante un paseo con Howria" },
+              { src: "intro-border-collie.jpg", alt: "Border collie sonriente en el pasto durante un paseo" },
+              { src: "intro-paseo-calle.jpg", alt: "Perro paseando por una calle de Santiago con Howria" },
+            ].map((foto) => (
+              <img key={foto.src} className="howria-gallery-img" src={`/images-home/${foto.src}`} alt={foto.alt} loading="lazy"
+                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, display: "block" }} />
+            ))}
           </div>
           <div>
             <p style={{ color: GOLD_DARK, fontSize: 12.5, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>Quiénes somos</p>
@@ -145,7 +152,7 @@ export default function Home() {
               Trabajamos con respeto animal, honestidad con cada familia y disciplina profesional — jamás con miedo
               ni maltrato. El bienestar del perro siempre va primero.
             </p>
-            <a href="/nosotros" style={{ color: NAVY, fontWeight: 700, fontSize: 14, textDecoration: "none", borderBottom: `2px solid ${GOLD}`, paddingBottom: 2 }}>
+            <a href="https://instagram.com/HowriaDogs" target="_blank" rel="noopener" style={{ color: NAVY, fontWeight: 700, fontSize: 14, textDecoration: "none", borderBottom: `2px solid ${GOLD}`, paddingBottom: 2 }}>
               Conoce más sobre nosotros →
             </a>
           </div>
