@@ -2451,8 +2451,8 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
           <input type="email" placeholder="Correo (para que pueda entrar a su portal)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Nombre del perro" value={form.perro} onChange={(e) => setForm({ ...form, perro: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Raza" value={form.raza} onChange={(e) => setForm({ ...form, raza: e.target.value })} style={{ ...input, marginBottom: 0 }} />
-          <input placeholder="Peso (kg)" type="number" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
-          <input placeholder="Valor paseo referencial" type="number" value={form.valorPaseoRef} onChange={(e) => setForm({ ...form, valorPaseoRef: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Peso (kg)" type="number" min="0" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Valor paseo referencial" type="number" min="0" value={form.valorPaseoRef} onChange={(e) => setForm({ ...form, valorPaseoRef: e.target.value })} style={{ ...input, marginBottom: 0 }} />
           <input placeholder="Dirección (para la pestaña Mapa)" value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value, lat: null, lng: null })} style={{ ...input, marginBottom: 0, gridColumn: "1 / -1" }} />
         </div>
       </div>
@@ -2520,7 +2520,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
           <option value="">Sin asignar</option>
           {paseadores.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
         </select>
-        <input placeholder="Tarifa a pagar al paseador por paseo" type="number" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <input placeholder="Tarifa a pagar al paseador por paseo" type="number" min="0" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
       </div>
       <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente. Para reasignar paseadores en bloque, usa la pestaña "Asignaciones".</p>
 
@@ -3816,9 +3816,9 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
   // toca, ver nota más abajo), así que solo hace falta el perfil — no se
   // crea una cuenta nueva ni se le cambia la contraseña.
   function restaurarLogin(l) {
-    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: l.nombre, rol: "coordinador", email: l.email }]);
+    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: l.nombre, rol: "paseador", email: l.email }]);
     quitarLoginPendiente(l.id);
-    showToast(`${l.nombre} fue restaurado — ajusta su rol en la lista de arriba si "coordinador" no es el que le corresponde.`);
+    showToast(`${l.nombre} fue restaurado — ajusta su rol en la lista de arriba si "paseador" no es el que le corresponde.`);
   }
 
   async function agregar() {
@@ -4092,10 +4092,8 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                       style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                       {gestionandoSolicitudId === s.id ? "Aprobando..." : "Aprobar"}
                     </button>
-                    <button onClick={() => rechazarSolicitud(s)} disabled={gestionandoSolicitudId === s.id}
-                      style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                      Rechazar
-                    </button>
+                    <BotonEliminar onConfirm={() => rechazarSolicitud(s)} disabled={gestionandoSolicitudId === s.id} label="Rechazar"
+                      style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12, fontWeight: 600 }} />
                   </div>
                 </div>
                 {s.mensaje && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#5C5442", fontStyle: "italic" }}>"{s.mensaje}"</p>}
@@ -4319,6 +4317,10 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
     }]);
   }
 
+  function desmarcarPagado(id) {
+    setPagosRegistrados((prev) => prev.filter((p) => p.id !== id));
+  }
+
   const historial = [...pagosRegistrados].sort((a, b) => b.id - a.id);
 
   return (
@@ -4379,12 +4381,14 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                       <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12 }}>Descargar</button>
                       {pagado ? (
-                        <span style={{ fontSize: 12, color: "#2F6A46", background: "#D8ECDE", padding: "6px 12px", borderRadius: 20, fontWeight: 600 }}>Pagado el {pagado.fechaPago}</span>
+                        <>
+                          <span style={{ fontSize: 12, color: "#2F6A46", background: "#D8ECDE", padding: "6px 12px", borderRadius: 20, fontWeight: 600 }}>Pagado el {pagado.fechaPago}</span>
+                          <BotonEliminar onConfirm={() => desmarcarPagado(pagado.id)} label="Deshacer"
+                            style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, borderColor: RUST, color: RUST }} />
+                        </>
                       ) : (
-                        <button onClick={() => marcarPagado(r)} disabled={r.monto === 0}
-                          style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, opacity: r.monto === 0 ? 0.4 : 1 }}>
-                          Marcar como pagado
-                        </button>
+                        <BotonEliminar onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado"
+                          style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5 }} />
                       )}
                     </div>
                   </td>
@@ -5121,7 +5125,7 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
                           <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
                           {c.nombre}
                         </span>
-                        <button onClick={() => toggleDiaCliente(c.id, dow)} title="Quitar de este día" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 13, flexShrink: 0, marginLeft: 4 }}>×</button>
+                        <BotonEliminar onConfirm={() => toggleDiaCliente(c.id, dow)} label="×" title="Quitar de este día" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 13, flexShrink: 0, marginLeft: 4, padding: 0 }} />
                       </div>
                       <input defaultValue={registro?.nota || ""} placeholder="nota..."
                         onBlur={(e) => guardarNotaDia(c.id, fechaDia, e.target.value)}
@@ -5150,6 +5154,7 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
 
 function Asignaciones({ clientes, setClientes, usuarios }) {
   const paseadoresDisponibles = usuarios;
+  const [pendienteReasignar, setPendienteReasignar] = useState(null);
 
   function asignarPaseador(clienteId, nombre) {
     setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, paseadorNombre: nombre } : c)));
@@ -5245,11 +5250,25 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
                   <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
                   <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
                   <td style={{ padding: "10px" }}>
-                    <select value={c.paseadorNombre || ""} onChange={(e) => asignarPaseador(c.id, e.target.value)}
-                      style={{ ...input, marginBottom: 0, padding: "8px 10px", fontSize: 13 }}>
-                      <option value="">Sin asignar</option>
-                      {paseadoresDisponibles.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
-                    </select>
+                    {pendienteReasignar?.clienteId === c.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12.5, color: INK }}>¿Reasignar a {pendienteReasignar.nombre || "sin paseador"}?</span>
+                        <button onClick={() => { asignarPaseador(c.id, pendienteReasignar.nombre); setPendienteReasignar(null); }}
+                          style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+                          Confirmar
+                        </button>
+                        <button onClick={() => setPendienteReasignar(null)}
+                          style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <select value={c.paseadorNombre || ""} onChange={(e) => setPendienteReasignar({ clienteId: c.id, nombre: e.target.value })}
+                        style={{ ...input, marginBottom: 0, padding: "8px 10px", fontSize: 13 }}>
+                        <option value="">Sin asignar</option>
+                        {paseadoresDisponibles.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                      </select>
+                    )}
                   </td>
                   <td style={{ padding: "10px" }}>
                     <input type="number" value={c.tarifaPaseador || ""} onChange={(e) => actualizarTarifa(c.id, e.target.value)}
@@ -6204,6 +6223,23 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
   function agendar() {
     const cliente = clientes.find((c) => c.id === Number(clienteId));
     if (!cliente || !fechaHora || !adiestrador) return;
+    const inicioNuevo = new Date(fechaHora).getTime();
+    if (inicioNuevo <= Date.now()) {
+      showToast("La fecha y hora de la cita debe ser futura.");
+      return;
+    }
+    const duracionNueva = 60;
+    const finNuevo = inicioNuevo + duracionNueva * 60000;
+    const choca = citas.some((c) => {
+      if (c.adiestrador !== adiestrador || !["pendiente", "agendada"].includes(c.estado)) return false;
+      const oIni = new Date(c.fechaISO).getTime();
+      const oFin = oIni + (c.duracionMin || 60) * 60000;
+      return inicioNuevo < oFin && finNuevo > oIni;
+    });
+    if (choca) {
+      showToast(`${adiestrador} ya tiene otra cita agendada en ese horario.`);
+      return;
+    }
     setCitas((prev) => [...prev, {
       id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
       tipo, adiestrador, fechaISO: new Date(fechaHora).toISOString(), estado: "agendada", notas: notasNuevas.trim(), origen: "staff",
@@ -6297,7 +6333,7 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
                     style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId === c.id ? 0.6 : 1 }}>
                     {confirmandoId === c.id ? "Confirmando..." : "Confirmar"}
                   </button>
-                  <button onClick={() => rechazar(c.id)} disabled={confirmandoId === c.id} style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }}>Rechazar</button>
+                  <BotonEliminar onConfirm={() => rechazar(c.id)} disabled={confirmandoId === c.id} label="Rechazar" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
                 </div>
               </div>
             ))}
@@ -6378,7 +6414,7 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
               ) : (
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   <button onClick={() => { setEditandoId(c.id); setNotasEdit(c.notas || ""); }} style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5 }}>Marcar realizada</button>
-                  <button onClick={() => cancelar(c.id)} style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }}>Cancelar cita</button>
+                  <BotonEliminar onConfirm={() => cancelar(c.id)} label="Cancelar cita" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
                 </div>
               )}
             </div>
@@ -6708,7 +6744,11 @@ function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVerClient
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
-function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando, correos = [], enfoqueEmail, limpiarEnfoque }) {
+function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque }) {
+  // Solo tiene sentido ofrecer como "responsable" a alguien que de verdad
+  // puede entrar a esta pestaña — si permisosRoles todavía no cargó, se
+  // muestra la lista completa para no dejar el selector vacío mientras tanto.
+  const usuariosConAccesoSeguimiento = permisosRoles ? usuarios.filter((u) => permisosRoles[u.rol]?.includes("seguimiento")) : usuarios;
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(PROSPECTO_VACIO);
   const [filtroEstado, setFiltroEstado] = useState("activos");
@@ -6724,7 +6764,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
 
   function crearProspecto() {
     setIntentoCrear(true);
-    if (!form.nombre.trim()) return;
+    if (!form.nombre.trim() || !form.telefono.trim()) return;
     setProspectos((prev) => [...prev, { ...form, id: Date.now(), nombre: form.nombre.trim() }]);
     setForm(PROSPECTO_VACIO);
     setMostrarForm(false);
@@ -6803,7 +6843,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
               <input type="date" value={form.proximoSeguimiento} onChange={(e) => setForm({ ...form, proximoSeguimiento: e.target.value })} style={{ ...input, marginBottom: 0 }} />
               <select value={form.asignadoA} onChange={(e) => setForm({ ...form, asignadoA: e.target.value })} style={{ ...input, marginBottom: 0 }}>
                 <option value="">Sin asignar</option>
-                {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+                {usuariosConAccesoSeguimiento.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
               </select>
             </div>
             <p style={{ ...label, marginTop: 12 }} id="prospecto-interes-label">Interés en</p>
@@ -6817,10 +6857,12 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
                 </button>
               ))}
             </div>
-            {intentoCrear && !form.nombre.trim() && (
-              <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del prospecto — es obligatorio para guardar.</p>
+            {intentoCrear && (!form.nombre.trim() || !form.telefono.trim()) && (
+              <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>
+                {!form.nombre.trim() ? "Falta el nombre del prospecto" : "Falta el teléfono"} — es obligatorio para guardar, así queda alguna forma de contactarlo después.
+              </p>
             )}
-            <button onClick={crearProspecto} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", marginTop: 0, opacity: intentoCrear && !form.nombre.trim() ? 0.6 : 1 }}>Guardar prospecto</button>
+            <button onClick={crearProspecto} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", marginTop: 0, opacity: intentoCrear && (!form.nombre.trim() || !form.telefono.trim()) ? 0.6 : 1 }}>Guardar prospecto</button>
           </div>
         )}
 
@@ -6894,7 +6936,7 @@ function Prospectos({ prospectos, setProspectos, setClientes, usuarios, cargando
                   <select value={p.asignadoA || ""} onChange={(e) => actualizarCampo(p.id, "asignadoA", e.target.value)}
                     style={{ ...input, marginBottom: 0, padding: "6px 10px", fontSize: 12.5, width: 150 }}>
                     <option value="">Sin asignar</option>
-                    {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+                    {usuariosConAccesoSeguimiento.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
                   </select>
                 </div>
               </div>
@@ -6965,7 +7007,7 @@ function Spinner({ size = 22, color = GOLD, pista = "rgba(255,255,255,0.25)" }) 
 }
 
 // ---------- Confirmación de borrado (dos pasos) ----------
-function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
+function BotonEliminar({ onConfirm, label = "Eliminar", style, disabled = false, title }) {
   const [confirmando, setConfirmando] = useState(false);
   if (confirmando) {
     return (
@@ -6981,7 +7023,7 @@ function BotonEliminar({ onConfirm, label = "Eliminar", style }) {
       </div>
     );
   }
-  return <button onClick={() => setConfirmando(true)} style={style}>{label}</button>;
+  return <button onClick={() => setConfirmando(true)} disabled={disabled} title={title} style={{ ...style, opacity: disabled ? 0.5 : 1 }}>{label}</button>;
 }
 
 // Modal real (overlay + tarjeta centrada) para las acciones irreversibles
@@ -7389,13 +7431,11 @@ export default function HowriaAdmin() {
   if (!user) return <Login usuarios={usuarios} onLogin={(u) => { setUser(u); if (u.rol === "entrenador" || u.rol === "paseador") setTab("mis-paseos"); }} />;
 
   const esAdmin = user.rol === "administrador";
-  const esCoordinador = user.rol === "coordinador";
   // "esPaseador" agrupa a quienes trabajan en terreno (paseos y/o
   // adiestramiento) — se usa para simplificar su vista (menos avisos,
   // arranca en Mis paseos), no para permisos: qué pestañas ve cada rol se
   // define aparte en permisos_roles.
   const esPaseador = user.rol === "entrenador" || user.rol === "paseador";
-  const puedeVerFinanzas = esAdmin || esCoordinador;
   // Administrador siempre debe poder llegar a "Usuarios" — es la única
   // pantalla desde donde se arregla permisos_roles, así que si esa fila
   // llegara a quedar sin "usuarios" (edición manual, migración a medias),
@@ -7536,7 +7576,7 @@ export default function HowriaAdmin() {
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
+        {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}
       </LimiteDeError>

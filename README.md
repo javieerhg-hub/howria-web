@@ -123,8 +123,6 @@ Setup, además de las variables de entorno de arriba:
   2027 cargados — hay que seguir agregando el año siguiente ahí cuando
   corresponda (Semana Santa y algunos "puente" son movibles, calcularlos
   a partir de la fecha de Pascua de ese año).
-- Pendiente conocido: el dominio `howria.cl` todavía no está verificado en
-  Resend — mientras no lo esté, el correo de confirmación de citas
-  (`api/confirmar-cita.js`) no se puede enviar desde `citas@howria.cl` (la
-  cita queda confirmada igual, solo falla el envío del correo). Hay que
-  agregar los registros DNS que da Resend en Cloudflare.
+- El dominio `howria.cl` ya está verificado en Resend (MX, SPF, DKIM y
+  DMARC cargados en Cloudflare) — el correo de confirmación de citas
+  (`api/confirmar-cita.js`) se puede enviar desde `citas@howria.cl`.

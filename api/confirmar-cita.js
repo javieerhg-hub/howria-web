@@ -140,10 +140,13 @@ export default async function handler(req, res) {
   }
 
   // Guard atómico contra doble confirmación/doble envío: solo actualiza si
-  // seguía en 'pendiente' en este mismo instante.
+  // seguía en 'pendiente' en este mismo instante. email_enviado se deja
+  // fuera a propósito — recién se marca true más abajo, después de que
+  // Resend confirme que aceptó el correo, para que nunca quede en true
+  // sin haberse enviado de verdad.
   const { data: actualizada, error: updErr } = await admin
     .from("citas_agenda")
-    .update({ estado: "agendada", confirmada_en: new Date().toISOString(), email_enviado: true })
+    .update({ estado: "agendada", confirmada_en: new Date().toISOString() })
     .eq("id", citaId)
     .eq("estado", "pendiente")
     .select("id")
@@ -181,6 +184,8 @@ export default async function handler(req, res) {
     res.status(502).json({ error: "La cita quedó confirmada, pero el correo no se pudo enviar", detalle });
     return;
   }
+
+  await admin.from("citas_agenda").update({ email_enviado: true }).eq("id", citaId);
 
   await admin.from("correos").insert({
     direccion: "saliente",

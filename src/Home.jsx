@@ -183,8 +183,15 @@ export default function Home() {
         <p style={{ color: GOLD_DARK, fontSize: 12.5, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, textAlign: "center", marginBottom: 10 }}>Galería</p>
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, color: NAVY, textAlign: "center", marginBottom: 44 }}>Nuestros paseos y clases</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
-          {["galeria-1.jpg", "galeria-2.jpg", "galeria-3.jpg", "galeria-4.jpg", "galeria-5.jpg", "galeria-6.jpg"].map((img) => (
-            <img key={img} className="howria-gallery-img" src={`/images-home/${img}`} alt="Perro en paseo con Howria" loading="lazy"
+          {[
+            { img: "galeria-1.jpg", alt: "Cachorro con collar rosado sentado junto a un jardín en su paseo con Howria" },
+            { img: "galeria-2.jpg", alt: "Cuatro perros de distintas razas juntos en un parque durante un paseo grupal de Howria" },
+            { img: "galeria-3.jpg", alt: "Perro mestizo con arnés sentado en el pasto junto a una calle" },
+            { img: "galeria-4.jpg", alt: "Un salchicha y un chihuahua con suéter parados sobre un muro de piedra" },
+            { img: "galeria-5.jpg", alt: "Yorkshire terrier peludo parado en una vereda soleada" },
+            { img: "galeria-6.jpg", alt: "Un San Bernardo, un labrador negro y un beagle sentados juntos en el pasto" },
+          ].map(({ img, alt }) => (
+            <img key={img} className="howria-gallery-img" src={`/images-home/${img}`} alt={alt} loading="lazy"
               style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, display: "block" }} />
           ))}
         </div>
