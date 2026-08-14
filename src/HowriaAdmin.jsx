@@ -62,6 +62,7 @@ function clienteToDb(c) {
     objetivos: c.objetivos,
     paseador_nombre: c.paseadorNombre,
     tarifa_paseador: c.tarifaPaseador,
+    adiestrador_nombre: c.adiestradorNombre || null,
     direccion: c.direccion,
     lat: c.lat,
     lng: c.lng,
@@ -87,6 +88,7 @@ function dbToCliente(row) {
     objetivos: row.objetivos,
     paseadorNombre: row.paseador_nombre,
     tarifaPaseador: row.tarifa_paseador,
+    adiestradorNombre: row.adiestrador_nombre,
     direccion: row.direccion,
     lat: row.lat,
     lng: row.lng,
@@ -2396,9 +2398,9 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
 }
 
 // ---------- Formulario de registro / edición de cliente ----------
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
-function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
+function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
@@ -2521,6 +2523,13 @@ function FormularioCliente({ inicial, paseadores, onGuardar, onCancelar }) {
         <input placeholder="Tarifa a pagar al paseador por paseo" type="number" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
       </div>
       <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente. Para reasignar paseadores en bloque, usa la pestaña "Asignaciones".</p>
+
+      <p style={label}>Entrenador asignado (para clases de adiestramiento)</p>
+      <select value={form.adiestradorNombre} onChange={(e) => setForm({ ...form, adiestradorNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
+        <option value="">Sin asignar</option>
+        {entrenadores.map((e) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+      </select>
+      <p style={{ ...hint, marginTop: -10 }}>Define de quién son "sus" clientes en la Finanzas personal del entrenador.</p>
 
       {intentoGuardar && formInvalido && (
         <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
@@ -2752,6 +2761,7 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
         <FormularioCliente
           inicial={editandoId ? clientes.find((c) => c.id === editandoId) : null}
           paseadores={usuarios}
+          entrenadores={usuarios.filter((u) => u.rol === "entrenador")}
           onGuardar={guardar}
           onCancelar={() => { setMostrarForm(false); setEditandoId(null); }}
         />
@@ -2845,16 +2855,30 @@ function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento:
   const [periodo, setPeriodo] = useState("semana");
   const hoy = new Date();
 
-  // Un paseador no debe ver las finanzas generales de Howria — solo lo
-  // que tiene que ver con los clientes que se le asignaron. Se filtran
-  // los datos de entrada acá para que el resto del cálculo (que ya
-  // trabaja sobre clientes/boletasEmitidas/etc.) quede automáticamente
-  // acotado, sin duplicar lógica.
+  // Un paseador o entrenador no debe ver las finanzas generales de
+  // Howria — solo lo que tiene que ver con los clientes que se le
+  // asignaron. Se filtran los datos de entrada acá para que el resto
+  // del cálculo (que ya trabaja sobre clientes/boletasEmitidas/etc.)
+  // quede automáticamente acotado, sin duplicar lógica.
   const esPaseador = user?.rol === "paseador";
-  const clientes = esPaseador ? clientesProp.filter((c) => c.paseadorNombre === user.nombre) : clientesProp;
-  const boletasEmitidas = esPaseador ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c))) : boletasEmitidasProp;
-  const boletasAdiestramiento = esPaseador ? [] : boletasAdiestramientoProp;
-  const pagosRegistrados = esPaseador ? [] : pagosRegistradosProp;
+  const esEntrenador = user?.rol === "entrenador";
+  const vistaPersonal = esPaseador || esEntrenador;
+  const clientes = esPaseador
+    ? clientesProp.filter((c) => c.paseadorNombre === user.nombre)
+    : esEntrenador
+    ? clientesProp.filter((c) => c.adiestradorNombre === user.nombre)
+    : clientesProp;
+  const boletasEmitidas = esEntrenador
+    ? []
+    : esPaseador
+    ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
+    : boletasEmitidasProp;
+  const boletasAdiestramiento = esPaseador
+    ? []
+    : esEntrenador
+    ? boletasAdiestramientoProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
+    : boletasAdiestramientoProp;
+  const pagosRegistrados = vistaPersonal ? [] : pagosRegistradosProp;
 
   const todasLasBoletas = useMemo(() => [
     ...boletasEmitidas,
@@ -2954,9 +2978,9 @@ function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento:
       `}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2 style={sectionTitle}>{esPaseador ? "Finanzas de tus clientes" : "Finanzas de Howria"}</h2>
+          <h2 style={sectionTitle}>{vistaPersonal ? "Finanzas de tus clientes" : "Finanzas de Howria"}</h2>
           <p style={hint}>
-            {esPaseador
+            {vistaPersonal
               ? "Informes generados a partir de las boletas de los clientes que tienes asignados — se actualizan solos con cada boleta nueva."
               : "Informes generados a partir de las boletas emitidas — se actualizan solos con cada boleta nueva."}
           </p>
@@ -2976,7 +3000,7 @@ function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento:
         ))}
       </div>
 
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${esPaseador ? 3 : 5}, 1fr)`, gap: 14, marginBottom: 26 }}>
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? 3 : 5}, 1fr)`, gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
@@ -2984,13 +3008,13 @@ function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento:
             {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
           </p>
         </div>
-        {!esPaseador && (
+        {!vistaPersonal && (
           <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosPeriodo)}</p>
           </div>
         )}
-        {!esPaseador && (
+        {!vistaPersonal && (
           <div style={{ background: utilidad >= 0 ? "#E7F0EA" : "#F5E4E0", borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Utilidad estimada</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
@@ -3005,7 +3029,7 @@ function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento:
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(promedioBoleta)}</p>
         </div>
       </div>
-      {!esPaseador && (
+      {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
           La utilidad considera solo pagos a paseadores ya registrados como pagados en esta app — no incluye otros gastos del negocio.
         </p>
