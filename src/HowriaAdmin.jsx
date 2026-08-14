@@ -1872,6 +1872,7 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [diasSemanaPersonalizado, setDiasSemanaPersonalizado] = useState([]);
   const [emitida, setEmitida] = useState(null);
+  const [paraConfirmar, setParaConfirmar] = useState(null);
   const [generando, setGenerando] = useState(false);
   // Ref, no solo useState: dos clics en el mismo instante (doble clic real)
   // pueden ejecutarse ambos antes de que React vuelva a renderizar con
@@ -1955,15 +1956,13 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
   });
   const planNombre = PLANES.find((p) => p.id === planId)?.nombre ?? "Personalizado";
 
-  async function generar() {
-    if (!cliente || dias.length === 0 || generandoRef.current) return;
-    generandoRef.current = true;
-    setGenerando(true);
-    // El número de boleta lo asigna la base de datos sola (columna
-    // "numero" generada siempre por Supabase) — acá no se manda, así que
-    // no hay forma de que dos boletas terminen con el mismo número, ni
-    // aunque se hagan clic en "Generar" dos veces casi al mismo tiempo.
-    const datos = {
+  function revisar() {
+    if (!cliente || dias.length === 0) return;
+    // No se inserta todavía — se congela una foto de lo que se ve ahora
+    // (incluye subtotal/neto/iva, que no se guardan en la boleta, solo
+    // para mostrarlos en el resumen) y se muestra la pantalla de
+    // confirmación. Recién al confirmar se crea la boleta de verdad.
+    setParaConfirmar({
       clienteId: cliente._dbId,
       cliente: cliente.nombre,
       perro: cliente.perro,
@@ -1981,12 +1980,31 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
       mostrarIva,
       mensajePersonalizado: mensajePersonalizado.trim() || null,
       descuento,
+      subtotal,
+      neto,
+      iva,
+      diasConRecargo,
+      diasNormales,
       total,
       fecha: hoy.toLocaleDateString("es-CL"),
       fechaISO: hoy.toISOString(),
       estado: "no_enviada",
-    };
-    const { data, error } = await supabase.from("boletas").insert(boletaToDb(datos)).select().single();
+    });
+  }
+
+  function cancelarConfirmacion() {
+    setParaConfirmar(null);
+  }
+
+  async function confirmarEmision() {
+    if (!paraConfirmar || generandoRef.current) return;
+    generandoRef.current = true;
+    setGenerando(true);
+    // El número de boleta lo asigna la base de datos sola (columna
+    // "numero" generada siempre por Supabase) — acá no se manda, así que
+    // no hay forma de que dos boletas terminen con el mismo número, ni
+    // aunque se hagan clic en "Confirmar" dos veces casi al mismo tiempo.
+    const { data, error } = await supabase.from("boletas").insert(boletaToDb(paraConfirmar)).select().single();
     generandoRef.current = false;
     setGenerando(false);
     if (error || !data) {
@@ -1995,6 +2013,7 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
     }
     const nueva = { ...dbToBoleta(data), id: Date.now(), _dbId: data.id };
     setEmitida(nueva);
+    setParaConfirmar(null);
     onRegistrarBoleta?.(nueva);
   }
 
@@ -2085,6 +2104,49 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
     descargarPDF();
     const numero = (cliente.telefono || "").replace(/\D/g, "");
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje + " (adjunta el PDF que se acaba de descargar)")}`, "_blank");
+  }
+
+  if (paraConfirmar) {
+    const p = paraConfirmar;
+    return (
+      <div className="howria-card" style={{ ...tarjeta, maxWidth: 560, margin: "0 auto" }}>
+        <h2 style={sectionTitle}>Confirmar antes de emitir</h2>
+        <p style={hint}>Revisa que todo esté bien — al confirmar, la boleta queda registrada con su número definitivo y ya no se puede deshacer desde acá.</p>
+
+        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14, fontSize: 14, color: INK, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Cliente</span><b>{p.cliente}{p.perro ? ` · 🐾 ${p.perro}` : ""}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Período</span><b>{p.mes} {p.anio}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Plan</span><b>{p.planNombre} · {p.cantidad} paseo(s)</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Valor por paseo</span><b>{fmtCLP(p.valorPaseo)}</b></div>
+          {p.diasConRecargo > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Días con recargo ({p.recargoPct}%)</span><b>{p.diasConRecargo}</b></div>
+          )}
+          {p.dogsitter && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Dogsitter{p.dogsitter.dias ? ` (${p.dogsitter.dias})` : ""}</span><b>{fmtCLP(p.dogsitter.precio)}</b></div>
+          )}
+          {p.paseoLargo && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Paseo largo{p.paseoLargo.tiempo ? ` (${p.paseoLargo.tiempo})` : ""}</span><b>{fmtCLP(p.paseoLargo.precio)}</b></div>
+          )}
+          {p.paseosCancelados > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", color: RUST }}><span>Descuento por {p.paseosCancelados} paseo(s) cancelado(s)</span><b>- {fmtCLP(p.descuento)}</b></div>
+          )}
+          {p.mensajePersonalizado && (
+            <div style={{ marginTop: 4 }}><span style={{ color: "#8A7E5C" }}>Mensaje: </span><i>{p.mensajePersonalizado}</i></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: NAVY, marginTop: 6, paddingTop: 8, borderTop: "1px solid #DCD2B4" }}>
+            <span>Total</span><span>{fmtCLP(p.total)}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button onClick={confirmarEmision} disabled={generando}
+            style={{ ...botonPrincipal, marginTop: 0, opacity: generando ? 0.45 : 1 }}>
+            {generando ? "Emitiendo..." : "Confirmar emisión"}
+          </button>
+          <button onClick={cancelarConfirmacion} disabled={generando} style={botonSecundario}>Volver a editar</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -2303,9 +2365,9 @@ function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, act
           </div>
         </div>
 
-        <button onClick={generar} disabled={!cliente || dias.length === 0 || generando}
-          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || dias.length === 0 || generando ? 0.45 : 1 }}>
-          {generando ? "Generando..." : "Generar boleta"}
+        <button onClick={revisar} disabled={!cliente || dias.length === 0}
+          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || dias.length === 0 ? 0.45 : 1 }}>
+          Generar boleta
         </button>
       </div>
 
@@ -3151,6 +3213,7 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
   const [transporte, setTransporte] = useState(0);
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [emitida, setEmitida] = useState(null);
+  const [paraConfirmar, setParaConfirmar] = useState(null);
   const [generando, setGenerando] = useState(false);
   const generandoRef = useRef(false);
   const canvasRef = useRef(null);
@@ -3182,14 +3245,12 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
     setEmitida(null);
   }
 
-  async function generar() {
-    if (!cliente || !cliente.nombre || generandoRef.current) return;
-    generandoRef.current = true;
-    setGenerando(true);
-    // El número de boleta lo asigna la base de datos sola (columna
-    // "numero" generada siempre por Supabase) — acá no se manda, para que
-    // nunca puedan existir dos boletas con el mismo número.
-    const datos = {
+  function revisar() {
+    if (!cliente || !cliente.nombre) return;
+    // No se inserta todavía — se muestra la pantalla de confirmación con
+    // una foto de lo calculado ahora. Recién al confirmar se crea la
+    // boleta de verdad.
+    setParaConfirmar({
       clienteId: cliente._dbId,
       cliente: cliente.nombre,
       perro: cliente.perro,
@@ -3201,11 +3262,26 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
       evaluacion,
       precioEvaluacion: montoEvaluacion,
       transporte: Number(transporte || 0),
+      subtotalClases,
+      montoDescuento,
       total,
       mensajePersonalizado: mensajePersonalizado.trim() || null,
       estado: "no_enviada",
-    };
-    const { data, error } = await supabase.from("boletas_adiestramiento").insert(boletaAdiestramientoToDb(datos)).select().single();
+    });
+  }
+
+  function cancelarConfirmacion() {
+    setParaConfirmar(null);
+  }
+
+  async function confirmarEmision() {
+    if (!paraConfirmar || generandoRef.current) return;
+    generandoRef.current = true;
+    setGenerando(true);
+    // El número de boleta lo asigna la base de datos sola (columna
+    // "numero" generada siempre por Supabase) — acá no se manda, para que
+    // nunca puedan existir dos boletas con el mismo número.
+    const { data, error } = await supabase.from("boletas_adiestramiento").insert(boletaAdiestramientoToDb(paraConfirmar)).select().single();
     generandoRef.current = false;
     setGenerando(false);
     if (error || !data) {
@@ -3214,6 +3290,7 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
     }
     const nueva = { ...dbToBoletaAdiestramiento(data), id: Date.now(), _dbId: data.id };
     setEmitida(nueva);
+    setParaConfirmar(null);
     onRegistrarBoleta?.(nueva);
   }
 
@@ -3267,6 +3344,46 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
     descargarPDF();
     const numero = (cliente.telefono || "").replace(/\D/g, "");
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje + " (adjunta el PDF que se acaba de descargar)")}`, "_blank");
+  }
+
+  if (paraConfirmar) {
+    const p = paraConfirmar;
+    return (
+      <div className="howria-card" style={{ ...tarjeta, maxWidth: 560, margin: "0 auto" }}>
+        <h2 style={sectionTitle}>Confirmar antes de emitir</h2>
+        <p style={hint}>Revisa que todo esté bien — al confirmar, la boleta queda registrada con su número definitivo y ya no se puede deshacer desde acá.</p>
+
+        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14, fontSize: 14, color: INK, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Cliente</span><b>{p.cliente}{p.perro ? ` · 🐾 ${p.perro}` : ""}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Modalidad</span><b style={{ textTransform: "capitalize" }}>{p.modalidad}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Clases</span><b>{p.numClases} × {fmtCLP(p.precioClase)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Subtotal clases</span><b>{fmtCLP(p.subtotalClases)}</b></div>
+          {p.montoDescuento > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", color: RUST }}><span>Descuento pack{p.descuentoPackPct > 0 ? ` (-${p.descuentoPackPct}%)` : ""}</span><b>- {fmtCLP(p.montoDescuento)}</b></div>
+          )}
+          {p.evaluacion !== "ninguna" && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Evaluación {p.evaluacion}</span><b>{fmtCLP(p.precioEvaluacion)}</b></div>
+          )}
+          {p.transporte > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Transporte</span><b>{fmtCLP(p.transporte)}</b></div>
+          )}
+          {p.mensajePersonalizado && (
+            <div style={{ marginTop: 4 }}><span style={{ color: "#8A7E5C" }}>Mensaje: </span><i>{p.mensajePersonalizado}</i></div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: NAVY, marginTop: 6, paddingTop: 8, borderTop: "1px solid #DCD2B4" }}>
+            <span>Total</span><span>{fmtCLP(p.total)}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button onClick={confirmarEmision} disabled={generando}
+            style={{ ...botonPrincipal, marginTop: 0, opacity: generando ? 0.45 : 1 }}>
+            {generando ? "Emitiendo..." : "Confirmar emisión"}
+          </button>
+          <button onClick={cancelarConfirmacion} disabled={generando} style={botonSecundario}>Volver a editar</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -3385,9 +3502,9 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
           </div>
         </div>
 
-        <button onClick={generar} disabled={!cliente || !cliente.nombre || generando}
-          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || generando ? 0.45 : 1 }}>
-          {generando ? "Generando..." : "Generar boleta"}
+        <button onClick={revisar} disabled={!cliente || !cliente.nombre}
+          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || !cliente.nombre ? 0.45 : 1 }}>
+          Generar boleta
         </button>
       </div>
 
