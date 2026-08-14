@@ -782,8 +782,14 @@ function useConfiguracion(sessionVersion) {
   }, [sessionVersion]);
 
   function actualizarConfig(clave, valor) {
+    const anterior = config?.[clave];
     setConfigState((prev) => ({ ...prev, [clave]: valor }));
-    supabase.from("configuracion").upsert({ clave, valor }, { onConflict: "clave" });
+    supabase.from("configuracion").upsert({ clave, valor }, { onConflict: "clave" }).then(({ error }) => {
+      if (error) {
+        showToast(`No se pudo guardar "${clave}": ${error.message}`);
+        setConfigState((prev) => ({ ...prev, [clave]: anterior }));
+      }
+    });
   }
 
   return [config, actualizarConfig];
@@ -3390,7 +3396,8 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null);
+  const [pagoPendienteDbId, setPagoPendienteDbId] = useState(null);
+  const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null); // solo para mostrar el N° en el modal, no para identificar la boleta
   const [editandoBoleta, setEditandoBoleta] = useState(null);
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
@@ -3405,17 +3412,20 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
   }
 
   function cambiarEstado(boleta, estado) {
+    if (!boleta._dbId) return; // todavía guardándose, el select ya está disabled pero por las dudas
     if (estado === "pagada" && boleta._tipo === "paseo") {
+      setPagoPendienteDbId(boleta._dbId);
       setPagoPendienteNumero(boleta.numero);
       setFechaPagoForm(new Date().toISOString().slice(0, 10));
       setFormaPagoForm(FORMAS_PAGO[0]);
       return;
     }
-    editarBoleta(setterDe(boleta._tipo), boleta.numero, estado === "pagada" ? { estado } : { estado, fechaPago: undefined, formaPago: undefined });
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, estado === "pagada" ? { estado } : { estado, fechaPago: undefined, formaPago: undefined });
   }
 
   function confirmarPago() {
-    editarBoleta(setBoletasEmitidas, pagoPendienteNumero, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    editarBoleta(setBoletasEmitidas, pagoPendienteDbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    setPagoPendienteDbId(null);
     setPagoPendienteNumero(null);
   }
 
@@ -3479,7 +3489,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
         <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
       </div>
 
-      {pagoPendienteNumero && (
+      {pagoPendienteDbId && (
         <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 14, marginBottom: 14 }}>
           <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#2F6A46" }}>Confirmar pago de la boleta N°{String(pagoPendienteNumero).padStart(3, "0")}</p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -3488,7 +3498,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
               {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
             <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Confirmar</button>
-            <button onClick={() => setPagoPendienteNumero(null)} style={botonSecundario}>Cancelar</button>
+            <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
           </div>
         </div>
       )}
@@ -3516,7 +3526,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
               <>
                 {lista.map((b) => {
                   const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
-                  const claveFila = `${b._tipo}-${b.numero}`;
+                  const claveFila = `${b._tipo}-${b._dbId}`;
                   return (
                     <React.Fragment key={claveFila}>
                       <tr style={{ borderTop: "1px solid #EDE4CE" }}>
@@ -3528,27 +3538,34 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
                         <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
                         <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
                         <td style={{ padding: "10px" }}>
-                          <select value={b.estado} onChange={(e) => cambiarEstado(b, e.target.value)}
-                            style={{ border: "none", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", background: est.bg, color: est.color }}>
+                          <select value={b.estado} disabled={!b._dbId} onChange={(e) => cambiarEstado(b, e.target.value)}
+                            style={{ border: "none", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: b._dbId ? "pointer" : "default", background: est.bg, color: est.color, opacity: b._dbId ? 1 : 0.6 }}>
                             {ESTADOS_FACTURA.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                           </select>
                         </td>
                         <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
                         <td style={{ padding: "10px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            {b.estado === "no_enviada" && (
-                              <button onClick={() => aceptarBoleta(setterDe(b._tipo), b.numero)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
-                            )}
-                            <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
-                            <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b.numero)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-                          </div>
+                          {!b._dbId ? (
+                            // Todavía no vuelve el id real de Supabase — sin
+                            // él, aceptar/editar/eliminar no tienen forma
+                            // confiable de saber a cuál boleta se refieren.
+                            <span style={{ fontSize: 12, color: "#8A7E5C" }}>Guardando…</span>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              {b.estado === "no_enviada" && (
+                                <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
+                              )}
+                              <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
+                              <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                            </div>
+                          )}
                         </td>
                       </tr>
                       {editandoBoleta === claveFila && (
                         <tr>
                           <td colSpan={10} style={{ padding: "0 10px 12px" }}>
                             <EditorBoletaBasico boleta={b} tipo={b._tipo}
-                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b.numero, cambios); setEditandoBoleta(null); }}
+                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, cambios); setEditandoBoleta(null); }}
                               onCancelar={() => setEditandoBoleta(null)} />
                           </td>
                         </tr>
@@ -6835,16 +6852,26 @@ function ModalConfirmacion({ titulo, mensaje, textoConfirmar = "Eliminar", onCon
 }
 
 // ---------- Acciones compartidas sobre boletas (paseo o adiestramiento) ----------
-function aceptarBoleta(setBoletas, numero) {
-  setBoletas((prev) => prev.map((b) => (b.numero === numero ? { ...b, estado: "pendiente_pago" } : b)));
+// Identifican la boleta por _dbId (id interno, estable) y no por "numero"
+// — ese campo es editable a mano y no está garantizado único en la base,
+// así que dos boletas con el mismo número habrían aplicado la acción a
+// ambas a la vez si se matcheaba por numero. Sin dbId no hay manera
+// confiable de saber a cuál boleta se refiere (ej. recién creada, todavía
+// sin volver de Supabase) — mejor no hacer nada que arriesgar matchear de
+// más (varias boletas sin _dbId, todas comparando undefined === undefined).
+function aceptarBoleta(setBoletas, dbId) {
+  if (!dbId) return;
+  setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, estado: "pendiente_pago" } : b)));
 }
 
-function eliminarBoleta(setBoletas, numero) {
-  setBoletas((prev) => prev.filter((b) => b.numero !== numero));
+function eliminarBoleta(setBoletas, dbId) {
+  if (!dbId) return;
+  setBoletas((prev) => prev.filter((b) => b._dbId !== dbId));
 }
 
-function editarBoleta(setBoletas, numero, cambios) {
-  setBoletas((prev) => prev.map((b) => (b.numero === numero ? { ...b, ...cambios } : b)));
+function editarBoleta(setBoletas, dbId, cambios) {
+  if (!dbId) return;
+  setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, ...cambios } : b)));
 }
 
 function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
@@ -6906,7 +6933,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
   const est = ESTADOS_FACTURA.find((e) => e.id === boleta.estado) || ESTADOS_FACTURA[0];
 
   function confirmarPago() {
-    editarBoleta(setBoletas, boleta.numero, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    editarBoleta(setBoletas, boleta._dbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
     setPagoPendiente(false);
   }
 
@@ -6922,14 +6949,24 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <b style={{ color: NAVY }}>{fmtCLP(boleta.total)}</b>
-          {boleta.estado === "no_enviada" && (
-            <button onClick={() => aceptarBoleta(setBoletas, boleta.numero)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
+          {!boleta._dbId ? (
+            // Todavía no vuelve el id real de Supabase (recién se creó) —
+            // sin él, aceptar/editar/eliminar no tienen forma confiable de
+            // saber a cuál boleta se refieren, así que se espera a que
+            // termine de guardarse antes de habilitar las acciones.
+            <span style={{ fontSize: 12, color: "#8A7E5C" }}>Guardando…</span>
+          ) : (
+            <>
+              {boleta.estado === "no_enviada" && (
+                <button onClick={() => aceptarBoleta(setBoletas, boleta._dbId)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
+              )}
+              {tipo === "paseo" && boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
+                <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
+              )}
+              <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
+              <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+            </>
           )}
-          {tipo === "paseo" && boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
-            <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
-          )}
-          <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
-          <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta.numero)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
         </div>
       </div>
       {pagoPendiente && (
@@ -6944,7 +6981,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
       )}
       {editando && (
         <EditorBoletaBasico boleta={boleta} tipo={tipo}
-          onGuardar={(cambios) => { editarBoleta(setBoletas, boleta.numero, cambios); setEditando(false); }}
+          onGuardar={(cambios) => { editarBoleta(setBoletas, boleta._dbId, cambios); setEditando(false); }}
           onCancelar={() => setEditando(false)} />
       )}
     </div>
@@ -7219,7 +7256,15 @@ export default function HowriaAdmin() {
   // define aparte en permisos_roles.
   const esPaseador = user.rol === "entrenador" || user.rol === "paseador";
   const puedeVerFinanzas = esAdmin || esCoordinador;
-  const tabsPermitidosRol = permisosRoles?.[user.rol] || [];
+  // Administrador siempre debe poder llegar a "Usuarios" — es la única
+  // pantalla desde donde se arregla permisos_roles, así que si esa fila
+  // llegara a quedar sin "usuarios" (edición manual, migración a medias),
+  // esto evita que quede sin forma de recuperarse desde la propia app. El
+  // checkbox de "Permisos por rol" ya sugería esta garantía visualmente,
+  // pero antes no era real — dependía solo de lo que hubiera en la base.
+  const tabsPermitidosRol = esAdmin
+    ? Array.from(new Set([...(permisosRoles?.[user.rol] || []), "usuarios"]))
+    : (permisosRoles?.[user.rol] || []);
   const tabs = TODOS_LOS_TABS.filter((t) => tabsPermitidosRol.includes(t.id));
 
   return (
