@@ -168,6 +168,21 @@ export default async function handler(req, res) {
       return;
     }
 
+    // el precio queda "congelado" en la cita al momento de la solicitud —
+    // si el adiestrador cambia su tarifa después, no afecta lo que ya se
+    // vio y reservó. Si no hay tarifa cargada para este adiestrador/tipo,
+    // se rechaza en vez de guardar la cita con precio $0 en silencio.
+    const { data: tarifa } = await admin
+      .from("tarifas_adiestrador")
+      .select("precio_evaluacion, precio_clase")
+      .eq("adiestrador", adiestrador)
+      .maybeSingle();
+    const precio = tipo === "evaluacion" ? tarifa?.precio_evaluacion : tarifa?.precio_clase;
+    if (precio == null) {
+      res.status(409).json({ error: "Este adiestrador todavía no tiene una tarifa configurada para este tipo de cita — contáctanos directamente para coordinar." });
+      return;
+    }
+
     // re-chequeo de choque de horario (defensa contra condiciones de carrera
     // entre que se vieron los horarios libres y se envió la solicitud)
     const inicioNuevo = new Date(fechaISO).getTime();
@@ -186,16 +201,6 @@ export default async function handler(req, res) {
       res.status(409).json({ error: "Ese horario ya no está disponible — elige otro" });
       return;
     }
-
-    // el precio queda "congelado" en la cita al momento de la solicitud —
-    // si el adiestrador cambia su tarifa después, no afecta lo que ya se
-    // vio y reservó.
-    const { data: tarifa } = await admin
-      .from("tarifas_adiestrador")
-      .select("precio_evaluacion, precio_clase")
-      .eq("adiestrador", adiestrador)
-      .maybeSingle();
-    const precio = tipo === "evaluacion" ? (tarifa?.precio_evaluacion ?? 0) : (tarifa?.precio_clase ?? 0);
 
     let prospectoId = null;
     if (!cliente) {

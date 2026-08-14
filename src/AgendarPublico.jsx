@@ -92,8 +92,17 @@ export default function AgendarPublico() {
 
   const faltanDatosContacto = !clienteId && (!contactoNombre.trim() || !contactoEmail.trim() || !contactoTelefono.trim() || !contactoPerro.trim());
 
+  // Si no hay una tarifa cargada para este adiestrador+tipo, antes se
+  // ocultaba el precio en silencio y se podía reservar igual (el servidor
+  // guardaba la cita con precio $0). Ahora se avisa y se bloquea el envío
+  // — el servidor también lo rechaza, esto es solo para no dejar que
+  // alguien llegue hasta el final del formulario para recién enterarse.
+  const tarifaSeleccionada = info ? (info.tarifas || []).find((t) => t.adiestrador === adiestrador) : null;
+  const precioSeleccionado = tipo === "evaluacion" ? tarifaSeleccionada?.precioEvaluacion : tarifaSeleccionada?.precioClase;
+  const sinTarifa = !!(info && adiestrador && precioSeleccionado == null);
+
   async function enviarSolicitud() {
-    if (!horaSel || enviando || faltanDatosContacto) return;
+    if (!horaSel || enviando || faltanDatosContacto || sinTarifa) return;
     setEnviando(true);
     setErrorEnvio("");
     try {
@@ -178,15 +187,16 @@ export default function AgendarPublico() {
                 {info.adiestradores.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
 
-              {(() => {
-                const tarifa = (info.tarifas || []).find((t) => t.adiestrador === adiestrador);
-                const precio = tipo === "evaluacion" ? tarifa?.precioEvaluacion : tarifa?.precioClase;
-                return precio > 0 ? (
-                  <p style={{ margin: "0 0 14px", fontSize: 13.5, color: NAVY, fontWeight: 600 }}>
-                    Precio: {fmtCLP(precio)}
-                  </p>
-                ) : <div style={{ marginBottom: 14 }} />;
-              })()}
+              {sinTarifa ? (
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: RUST, lineHeight: 1.5 }}>
+                  Todavía no tenemos una tarifa cargada para {adiestrador} en este tipo de cita — escríbenos por
+                  WhatsApp o Instagram para coordinar directamente.
+                </p>
+              ) : precioSeleccionado > 0 ? (
+                <p style={{ margin: "0 0 14px", fontSize: 13.5, color: NAVY, fontWeight: 600 }}>
+                  Precio: {fmtCLP(precioSeleccionado)}
+                </p>
+              ) : <div style={{ marginBottom: 14 }} />}
 
               <label style={label} htmlFor="pub-fecha">Día</label>
               <input id="pub-fecha" type="date" value={fecha} min={fechaKey(manana)} max={fechaKey(limiteMax)}
@@ -217,8 +227,8 @@ export default function AgendarPublico() {
 
               {errorEnvio && <p style={{ margin: "10px 0 0", fontSize: 12.5, color: RUST }}>{errorEnvio}</p>}
 
-              <button onClick={enviarSolicitud} disabled={!horaSel || enviando || faltanDatosContacto}
-                style={{ ...botonPrincipal, opacity: !horaSel || enviando || faltanDatosContacto ? 0.45 : 1 }}>
+              <button onClick={enviarSolicitud} disabled={!horaSel || enviando || faltanDatosContacto || sinTarifa}
+                style={{ ...botonPrincipal, opacity: !horaSel || enviando || faltanDatosContacto || sinTarifa ? 0.45 : 1 }}>
                 {enviando ? "Enviando..." : "Solicitar cita"}
               </button>
             </>

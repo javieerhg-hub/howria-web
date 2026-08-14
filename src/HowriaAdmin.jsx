@@ -517,8 +517,8 @@ function useRegistroPaseosSincronizado(clientes) {
           if (!cliente || !cliente._dbId) return;
           const r = next[key];
           const estado = r.cancelado ? "cancelado" : r.realizado ? "realizado" : (r.nota ? "pendiente" : null);
+          const anterior = prev[key];
           if (estado) {
-            const anterior = prev[key];
             // El builder de supabase-js es "thenable perezoso": si no se
             // encadena/espera, nunca dispara el fetch. Sin este .then() el
             // upsert no se mandaba nunca — el estado local quedaba "hecho"
@@ -537,6 +537,25 @@ function useRegistroPaseosSincronizado(clientes) {
                 });
               }
             });
+          } else {
+            // Se deshizo un "realizado"/"cancelado" o se borró la única nota
+            // — no queda ningún estado que guardar, así que hay que borrar
+            // la fila (si existía) en vez de no hacer nada: de lo contrario
+            // la fila vieja seguía en la base y el paseo "deshecho" volvía a
+            // aparecer como confirmado en el próximo reload.
+            supabase.from("registro_paseos").delete()
+              .eq("cliente_id", cliente._dbId).eq("fecha", fecha)
+              .then(({ error }) => {
+                if (error) {
+                  showToast(`No se pudo deshacer: ${error.message}`);
+                  setRegistroState((cur) => {
+                    const copia = { ...cur };
+                    if (anterior === undefined) delete copia[key];
+                    else copia[key] = anterior;
+                    return copia;
+                  });
+                }
+              });
           }
         }
       });
@@ -6006,7 +6025,7 @@ function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad,
     const cliente = clientes.find((c) => c.id === Number(clienteId));
     if (!cliente || !fechaHora || !adiestrador) return;
     setCitas((prev) => [...prev, {
-      id: Date.now(), clienteId: cliente.id, clienteNombre: cliente.nombre, perro: cliente.perro,
+      id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
       tipo, adiestrador, fechaISO: new Date(fechaHora).toISOString(), estado: "agendada", notas: notasNuevas.trim(), origen: "staff",
     }]);
     setFechaHora(""); setNotasNuevas("");
@@ -6383,6 +6402,11 @@ function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVerClient
   function abrirHilo(hilo) {
     const yaAbierto = hiloAbierto === hilo.contraparte;
     setHiloAbierto(yaAbierto ? null : hilo.contraparte);
+    // El borrador es una sola variable compartida por todos los hilos, no
+    // una por hilo — sin este reset, un texto escrito para un cliente y
+    // nunca enviado podía terminar mandado a otro cliente distinto al
+    // abrir su hilo y tocar "Enviar respuesta".
+    setRespuesta("");
     setErrorEnvio("");
     if (yaAbierto) return;
     const idsNoLeidos = hilo.mensajes.filter((m) => m.direccion === "entrante" && !m.leido).map((m) => m.id);
