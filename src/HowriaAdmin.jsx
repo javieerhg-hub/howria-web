@@ -1836,7 +1836,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 }
 
 // ---------- Generador de boletas ----------
-function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onRegistrarBoleta, recargoPct, actualizarRecargoPct }) {
+function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, actualizarRecargoPct }) {
   const hoy = new Date();
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? null);
   const [filtroPaseador, setFiltroPaseador] = useState("todos");
@@ -1872,6 +1872,12 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [diasSemanaPersonalizado, setDiasSemanaPersonalizado] = useState([]);
   const [emitida, setEmitida] = useState(null);
+  const [generando, setGenerando] = useState(false);
+  // Ref, no solo useState: dos clics en el mismo instante (doble clic real)
+  // pueden ejecutarse ambos antes de que React vuelva a renderizar con
+  // "generando" en true, así que el useState solo no alcanza a bloquear el
+  // segundo — la ref cambia de inmediato, en el mismo tick.
+  const generandoRef = useRef(false);
   const canvasRef = useRef(null);
   const logoImgRef = useRef(null);
   const huellaImgRef = useRef(null);
@@ -1949,10 +1955,15 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
   });
   const planNombre = PLANES.find((p) => p.id === planId)?.nombre ?? "Personalizado";
 
-  function generar() {
-    if (!cliente || dias.length === 0) return;
-    const nueva = {
-      numero: correlativo,
+  async function generar() {
+    if (!cliente || dias.length === 0 || generandoRef.current) return;
+    generandoRef.current = true;
+    setGenerando(true);
+    // El número de boleta lo asigna la base de datos sola (columna
+    // "numero" generada siempre por Supabase) — acá no se manda, así que
+    // no hay forma de que dos boletas terminen con el mismo número, ni
+    // aunque se hagan clic en "Generar" dos veces casi al mismo tiempo.
+    const datos = {
       clienteId: cliente._dbId,
       cliente: cliente.nombre,
       perro: cliente.perro,
@@ -1975,8 +1986,15 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
       fechaISO: hoy.toISOString(),
       estado: "no_enviada",
     };
+    const { data, error } = await supabase.from("boletas").insert(boletaToDb(datos)).select().single();
+    generandoRef.current = false;
+    setGenerando(false);
+    if (error || !data) {
+      showToast(`No se pudo generar la boleta: ${error?.message || "error desconocido"}`);
+      return;
+    }
+    const nueva = { ...dbToBoleta(data), id: Date.now(), _dbId: data.id };
     setEmitida(nueva);
-    setCorrelativo((n) => n + 1);
     onRegistrarBoleta?.(nueva);
   }
 
@@ -2082,9 +2100,6 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
         </div>
 
         <h2 style={sectionTitle}>1. Cliente y mes</h2>
-        <label style={label} htmlFor="boleta-numero">N° de boleta</label>
-        <input id="boleta-numero" type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
-
         <p style={label} id="boleta-paseador-label">Paseador</p>
         <div role="group" aria-labelledby="boleta-paseador-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           <button type="button" onClick={() => cambiarFiltroPaseador("todos")} aria-pressed={filtroPaseador === "todos"}
@@ -2288,9 +2303,9 @@ function Boletas({ clientes, boletasEmitidas, correlativo, setCorrelativo, onReg
           </div>
         </div>
 
-        <button onClick={generar} disabled={!cliente || dias.length === 0}
-          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || dias.length === 0 ? 0.45 : 1 }}>
-          Generar boleta N°{String(correlativo).padStart(3, "0")}
+        <button onClick={generar} disabled={!cliente || dias.length === 0 || generando}
+          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || dias.length === 0 || generando ? 0.45 : 1 }}>
+          {generando ? "Generando..." : "Generar boleta"}
         </button>
       </div>
 
@@ -3121,7 +3136,7 @@ function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg) {
 }
 
 // ---------- Boletas de adiestramiento ----------
-function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegistrarBoleta }) {
+function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
   const [clienteManual, setClienteManual] = useState(false);
   const [nombreManual, setNombreManual] = useState("");
@@ -3136,6 +3151,8 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
   const [transporte, setTransporte] = useState(0);
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [emitida, setEmitida] = useState(null);
+  const [generando, setGenerando] = useState(false);
+  const generandoRef = useRef(false);
   const canvasRef = useRef(null);
   const logoImgRef = useRef(null);
   const huellaImgRef = useRef(null);
@@ -3165,11 +3182,14 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
     setEmitida(null);
   }
 
-  function generar() {
-    if (!cliente || !cliente.nombre) return;
-    const hoy = new Date();
-    const nueva = {
-      numero: correlativo,
+  async function generar() {
+    if (!cliente || !cliente.nombre || generandoRef.current) return;
+    generandoRef.current = true;
+    setGenerando(true);
+    // El número de boleta lo asigna la base de datos sola (columna
+    // "numero" generada siempre por Supabase) — acá no se manda, para que
+    // nunca puedan existir dos boletas con el mismo número.
+    const datos = {
       clienteId: cliente._dbId,
       cliente: cliente.nombre,
       perro: cliente.perro,
@@ -3184,11 +3204,16 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
       total,
       mensajePersonalizado: mensajePersonalizado.trim() || null,
       estado: "no_enviada",
-      fecha: hoy.toLocaleDateString("es-CL"),
-      fechaISO: hoy.toISOString(),
     };
+    const { data, error } = await supabase.from("boletas_adiestramiento").insert(boletaAdiestramientoToDb(datos)).select().single();
+    generandoRef.current = false;
+    setGenerando(false);
+    if (error || !data) {
+      showToast(`No se pudo generar la boleta: ${error?.message || "error desconocido"}`);
+      return;
+    }
+    const nueva = { ...dbToBoletaAdiestramiento(data), id: Date.now(), _dbId: data.id };
     setEmitida(nueva);
-    setCorrelativo((n) => n + 1);
     onRegistrarBoleta?.(nueva);
   }
 
@@ -3248,9 +3273,6 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
     <div className="howria-split" style={{ display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 28 }}>
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>1. Cliente</h2>
-        <label style={label} htmlFor="badiestramiento-numero">N° de boleta</label>
-        <input id="badiestramiento-numero" type="number" value={correlativo} onChange={(e) => setCorrelativo(Number(e.target.value) || 0)} style={{ ...input, maxWidth: 140 }} />
-
         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 14 }}>
           <input type="checkbox" checked={clienteManual} onChange={(e) => { setClienteManual(e.target.checked); setEmitida(null); }} style={{ width: 16, height: 16 }} />
           <span style={{ fontSize: 13.5, color: NAVY }}>Cliente sin registrar — escribir nombre a mano</span>
@@ -3363,9 +3385,9 @@ function BoletasAdiestramiento({ clientes, correlativo, setCorrelativo, onRegist
           </div>
         </div>
 
-        <button onClick={generar} disabled={!cliente || !cliente.nombre}
-          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente ? 0.45 : 1 }}>
-          Generar boleta N°{String(correlativo).padStart(3, "0")}
+        <button onClick={generar} disabled={!cliente || !cliente.nombre || generando}
+          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || generando ? 0.45 : 1 }}>
+          {generando ? "Generando..." : "Generar boleta"}
         </button>
       </div>
 
@@ -7115,24 +7137,11 @@ export default function HowriaAdmin() {
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [grupoAbierto, setGrupoAbierto] = useState(null);
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
-  const [correlativo, setCorrelativo] = useState(107);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", sessionVersion);
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
-  const [correlativoAdiestramiento, setCorrelativoAdiestramiento] = useState(1);
-
-  useEffect(() => {
-    supabase
-      .from("boletas_adiestramiento")
-      .select("numero")
-      .order("numero", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data[0]) setCorrelativoAdiestramiento(data[0].numero + 1);
-      });
-  }, []);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes);
   const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
   const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
@@ -7193,16 +7202,6 @@ export default function HowriaAdmin() {
     setUser(null);
   }
 
-  useEffect(() => {
-    supabase
-      .from("boletas")
-      .select("numero")
-      .order("numero", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data[0]) setCorrelativo(data[0].numero + 1);
-      });
-  }, []);
   const [equipoInterno, setEquipoInterno, cargandoEquipoInterno] = useSyncedTable("equipo_interno", equipoToDb, dbToEquipo, "nombre", sessionVersion);
   const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
@@ -7385,8 +7384,8 @@ export default function HowriaAdmin() {
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
-        {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} correlativo={correlativo} setCorrelativo={setCorrelativo} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
-        {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} correlativo={correlativoAdiestramiento} setCorrelativo={setCorrelativoAdiestramiento} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
+        {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
+        {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
