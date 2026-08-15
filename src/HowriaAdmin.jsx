@@ -2768,6 +2768,50 @@ export function ToastHost() {
   );
 }
 
+// ---------- Aviso de nueva versión disponible ----------
+// public/version.json lo regenera scripts/generar-version.mjs en cada
+// build (nunca a mano) — un valor distinto por deploy. Se guarda el que
+// tenía la pestaña al cargar y se compara contra el actual cada tanto; si
+// cambiaron, alguien desplegó una versión nueva mientras esta pestaña
+// seguía abierta. Pensado sobre todo para el PWA instalado, que la gente
+// no recarga solo como una pestaña de navegador común.
+export function AvisoNuevaVersion() {
+  const [hayNueva, setHayNueva] = useState(false);
+  const versionInicialRef = useRef(null);
+
+  useEffect(() => {
+    let activo = true;
+    async function chequear() {
+      try {
+        const resp = await fetch("/version.json", { cache: "no-store" });
+        if (!resp.ok || !activo) return;
+        const { version } = await resp.json();
+        if (!activo) return;
+        if (versionInicialRef.current === null) versionInicialRef.current = version;
+        else if (version !== versionInicialRef.current) setHayNueva(true);
+      } catch {
+        // sin internet o falló el fetch — se reintenta en el próximo chequeo
+      }
+    }
+    chequear();
+    const intervalo = setInterval(chequear, 5 * 60 * 1000);
+    function alVolverAlFrente() { if (document.visibilityState === "visible") chequear(); }
+    document.addEventListener("visibilitychange", alVolverAlFrente);
+    return () => { activo = false; clearInterval(intervalo); document.removeEventListener("visibilitychange", alVolverAlFrente); };
+  }, []);
+
+  if (!hayNueva) return null;
+  return (
+    <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", zIndex: 10000, background: NAVY, color: CREAM, padding: "12px 16px", borderRadius: 10, boxShadow: "0 4px 14px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", gap: 12, maxWidth: "90vw" }}>
+      <span style={{ fontSize: 13.5 }}>Hay una nueva versión de Howria — actualiza para verla.</span>
+      <button onClick={() => window.location.reload()}
+        style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: GOLD, color: NAVY, fontWeight: 700, fontSize: 13, cursor: "pointer", flex: "none" }}>
+        Actualizar
+      </button>
+    </div>
+  );
+}
+
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
 const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "boletas-adiestramiento", "ingreso-personal", "usuarios"];

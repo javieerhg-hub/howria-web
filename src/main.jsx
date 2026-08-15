@@ -9,7 +9,7 @@ import ReactDOM from "react-dom/client";
 // ese nombre — /agendaadiestrador es el que se comparte de ahora en más.
 const HowriaAdminBundle = React.lazy(() =>
   import("./HowriaAdmin.jsx").then((m) => ({
-    default: () => (<><m.default /><m.ToastHost /></>),
+    default: () => (<><m.default /><m.ToastHost /><m.AvisoNuevaVersion /></>),
   }))
 );
 const Home = React.lazy(() => import("./Home.jsx"));
