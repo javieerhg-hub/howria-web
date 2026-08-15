@@ -1124,7 +1124,7 @@ function NotificacionesBell({ avisos }) {
         )}
       </button>
       {abierto && (
-        <div style={{ position: "absolute", right: 0, top: "110%", width: 280, background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20 }}>
+        <div style={{ position: "absolute", left: 0, top: "110%", width: 280, maxWidth: "calc(100vw - 24px)", background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20 }}>
           <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: "#8A7E5C", textTransform: "uppercase" }}>Avisos</p>
           {avisos.length === 0 ? (
             <p style={{ margin: 0, fontSize: 13, color: "#9A9179" }}>No hay avisos pendientes.</p>
