@@ -14,6 +14,7 @@ import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
 } from "./lib/calculosBoletas.js";
+import { CalendarioMes, fechaKeyMes } from "./lib/CalendarioMes.jsx";
 import { jsPDF } from "jspdf";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -4482,7 +4483,7 @@ function ModalDetalleCita({ cita, onCerrar }) {
   );
 }
 
-export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad, actualizarDisponibilidad, tarifas, actualizarTarifas, rolActual, nombreActual }) {
+export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidadFecha, actualizarDisponibilidadFecha, aplicarPatronSemanal, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
@@ -4497,6 +4498,12 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const esEntrenador = rolActual === "entrenador";
   const [adiestradorHorario, setAdiestradorHorario] = useState(esEntrenador ? nombreActual : (adiestradores[0]?.nombre ?? ""));
   const [linkGenericoCopiado, setLinkGenericoCopiado] = useState(false);
+  const hoyDisponibilidad = new Date();
+  const [mesDisponibilidad, setMesDisponibilidad] = useState({ anio: hoyDisponibilidad.getFullYear(), mesIdx: hoyDisponibilidad.getMonth() });
+  const [diasPatron, setDiasPatron] = useState([]);
+  const [horaInicioPatron, setHoraInicioPatron] = useState("09:00");
+  const [horaFinPatron, setHoraFinPatron] = useState("18:00");
+  const [aplicandoPatron, setAplicandoPatron] = useState(false);
 
   function copiarLinkGenerico() {
     const link = `${window.location.origin}/agendaadiestrador`;
@@ -4736,8 +4743,8 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
 
       {(esEntrenador || adiestradores.length > 0) && (
         <div className="howria-card" style={tarjeta}>
-          <h2 style={sectionTitle}>Horario semanal</h2>
-          <p style={hint}>Define los días y horas en que este adiestrador queda disponible para que los tutores agenden evaluaciones y clases.</p>
+          <h2 style={sectionTitle}>Disponibilidad</h2>
+          <p style={hint}>Clic en un día para abrirlo o cerrarlo — así aparece (o no) para que los tutores agenden evaluaciones y clases ese día puntual.</p>
           {!esEntrenador && (
             <select value={adiestradorHorario} onChange={(e) => setAdiestradorHorario(e.target.value)} style={{ ...input, marginTop: 12, width: 240 }}>
               {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
@@ -4745,27 +4752,65 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
           )}
           {(() => {
             const objetivo = esEntrenador ? nombreActual : adiestradorHorario;
+            const hoyKey = fechaKey(new Date());
+
+            function estadoDia(key) {
+              if (key < hoyKey) return "pasado";
+              const fila = disponibilidadFecha.find((d) => d.adiestrador === objetivo && d.fecha === key);
+              if (!fila) return "sin-datos";
+              return fila.disponible ? "disponible" : "bloqueado";
+            }
+
+            function onClickDia(key) {
+              const fila = disponibilidadFecha.find((d) => d.adiestrador === objetivo && d.fecha === key);
+              actualizarDisponibilidadFecha(objetivo, key, { disponible: !fila?.disponible });
+            }
+
+            function toggleDiaPatron(dow) {
+              setDiasPatron((prev) => (prev.includes(dow) ? prev.filter((d) => d !== dow) : [...prev, dow]));
+            }
+
+            async function aplicarPatron() {
+              if (diasPatron.length === 0 || aplicandoPatron) return;
+              setAplicandoPatron(true);
+              const total = diasDelMes(mesDisponibilidad.mesIdx, mesDisponibilidad.anio);
+              const desde = fechaKeyMes(mesDisponibilidad.anio, mesDisponibilidad.mesIdx, 1);
+              const hasta = fechaKeyMes(mesDisponibilidad.anio, mesDisponibilidad.mesIdx, total);
+              await aplicarPatronSemanal(objetivo, diasPatron, horaInicioPatron, horaFinPatron, desde, hasta);
+              setAplicandoPatron(false);
+            }
+
             return (
               <div style={{ marginTop: 14 }}>
-                {DIAS_SEMANA_LARGO.map((nombreDia, dow) => {
-                  const fila = disponibilidad.find((d) => d.adiestrador === objetivo && d.diaSemana === dow)
-                    || { activo: false, horaInicio: "09:00", horaFin: "18:00" };
-                  return (
-                    <div key={dow} className="howria-horario-fila" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid #EDE4CE" }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 8, width: 130, fontSize: 13.5, color: NAVY, cursor: "pointer" }}>
-                        <input type="checkbox" checked={fila.activo} onChange={(e) => actualizarDisponibilidad(objetivo, dow, { activo: e.target.checked })} />
-                        {nombreDia}
-                      </label>
-                      <input type="time" value={fila.horaInicio} disabled={!fila.activo}
-                        onChange={(e) => actualizarDisponibilidad(objetivo, dow, { horaInicio: e.target.value })}
-                        style={{ ...input, marginBottom: 0, width: 120, opacity: fila.activo ? 1 : 0.5 }} />
-                      <span style={{ color: "#8A7E5C", fontSize: 13 }}>a</span>
-                      <input type="time" value={fila.horaFin} disabled={!fila.activo}
-                        onChange={(e) => actualizarDisponibilidad(objetivo, dow, { horaFin: e.target.value })}
-                        style={{ ...input, marginBottom: 0, width: 120, opacity: fila.activo ? 1 : 0.5 }} />
-                    </div>
-                  );
-                })}
+                <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <p style={{ ...label, marginBottom: 8 }}>Aplicar horario habitual a este mes</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {DIAS_SEMANA_LARGO.map((nombreDia, dow) => (
+                      <button key={dow} type="button" onClick={() => toggleDiaPatron(dow)}
+                        style={{
+                          borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          background: diasPatron.includes(dow) ? NAVY : "#FFFFFF", color: diasPatron.includes(dow) ? CREAM : "#6B6248",
+                          border: diasPatron.includes(dow) ? "none" : "1px solid #E4DBC3",
+                        }}>
+                        {nombreDia.slice(0, 3)}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <input type="time" value={horaInicioPatron} onChange={(e) => setHoraInicioPatron(e.target.value)} style={{ ...input, marginBottom: 0, width: 120 }} />
+                    <span style={{ color: "#8A7E5C", fontSize: 13 }}>a</span>
+                    <input type="time" value={horaFinPatron} onChange={(e) => setHoraFinPatron(e.target.value)} style={{ ...input, marginBottom: 0, width: 120 }} />
+                    <button onClick={aplicarPatron} disabled={diasPatron.length === 0 || aplicandoPatron}
+                      style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: diasPatron.length === 0 || aplicandoPatron ? 0.5 : 1 }}>
+                      {aplicandoPatron ? "Aplicando..." : `Aplicar a ${MESES[mesDisponibilidad.mesIdx]}`}
+                    </button>
+                  </div>
+                </div>
+                <CalendarioMes anio={mesDisponibilidad.anio} mesIdx={mesDisponibilidad.mesIdx} estadoDia={estadoDia} onClickDia={onClickDia}
+                  onCambiarMes={(delta) => setMesDisponibilidad((prev) => {
+                    const d = new Date(prev.anio, prev.mesIdx + delta, 1);
+                    return { anio: d.getFullYear(), mesIdx: d.getMonth() };
+                  })} />
               </div>
             );
           })()}

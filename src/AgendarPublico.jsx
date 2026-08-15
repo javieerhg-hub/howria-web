@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { CalendarioMes } from "./lib/CalendarioMes.jsx";
 
 // Página pública sin login, con dos modos:
 //  - howria.cl/agendaadiestrador?c=<clienteId> — el equipo la comparte
@@ -45,6 +46,9 @@ export default function AgendarPublico() {
   const [fecha, setFecha] = useState("");
   const [slots, setSlots] = useState([]);
   const [cargandoSlots, setCargandoSlots] = useState(false);
+  const [mesVisto, setMesVisto] = useState(() => { const h = new Date(); return { anio: h.getFullYear(), mesIdx: h.getMonth() }; });
+  const [mapaDisponibilidad, setMapaDisponibilidad] = useState({});
+  const [cargandoMapa, setCargandoMapa] = useState(false);
   const [horaSel, setHoraSel] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -91,6 +95,22 @@ export default function AgendarPublico() {
       .finally(() => { if (activo) setCargandoSlots(false); });
     return () => { activo = false; };
   }, [adiestrador, fecha, clienteId]);
+
+  // Mapa de disponibilidad por fecha de este adiestrador (no por día
+  // puntual) — es lo que colorea el calendario en verde/rojo antes de que
+  // el tutor elija un día.
+  useEffect(() => {
+    if (!adiestrador) { setMapaDisponibilidad({}); return; }
+    let activo = true;
+    setCargandoMapa(true);
+    const params = new URLSearchParams({ adiestrador });
+    if (clienteId) params.set("clienteId", clienteId);
+    fetch(`/api/cliente-agenda?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data) => { if (activo) setMapaDisponibilidad(data.disponibilidadFechas || {}); })
+      .finally(() => { if (activo) setCargandoMapa(false); });
+    return () => { activo = false; };
+  }, [adiestrador, clienteId]);
 
   const faltanDatosContacto = !clienteId
     ? (!contactoNombre.trim() || !contactoEmail.trim() || !contactoTelefono.trim() || !contactoPerro.trim() || !contactoDireccion.trim())
@@ -214,9 +234,24 @@ export default function AgendarPublico() {
                 </p>
               ) : <div style={{ marginBottom: 14 }} />}
 
-              <label style={label} htmlFor="pub-fecha">Día</label>
-              <input id="pub-fecha" type="date" value={fecha} min={fechaKey(manana)} max={fechaKey(limiteMax)}
-                onChange={(e) => setFecha(e.target.value)} style={{ ...input, marginBottom: 14 }} />
+              <label style={label}>Día</label>
+              <div style={{ marginBottom: 14 }}>
+                <CalendarioMes anio={mesVisto.anio} mesIdx={mesVisto.mesIdx}
+                  estadoDia={(key) => {
+                    if (key < fechaKey(manana) || key > fechaKey(limiteMax)) return "pasado";
+                    if (mapaDisponibilidad[key] === true) return "disponible";
+                    if (mapaDisponibilidad[key] === false) return "bloqueado";
+                    return "sin-datos";
+                  }}
+                  onClickDia={(key) => setFecha(key)}
+                  onCambiarMes={(delta) => setMesVisto((prev) => { const d = new Date(prev.anio, prev.mesIdx + delta, 1); return { anio: d.getFullYear(), mesIdx: d.getMonth() }; })}
+                  minMes={{ anio: manana.getFullYear(), mesIdx: manana.getMonth() }}
+                  maxMes={{ anio: limiteMax.getFullYear(), mesIdx: limiteMax.getMonth() }}
+                  seleccionado={fecha}
+                  soloDisponibleClickeable
+                />
+                {cargandoMapa && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>Cargando disponibilidad…</p>}
+              </div>
 
               {fecha && (
                 <div style={{ marginBottom: 8 }}>

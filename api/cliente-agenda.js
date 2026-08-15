@@ -10,8 +10,9 @@
 // service role key (nunca expuesta al navegador); esta función valida
 // todo del lado servidor.
 //
-// GET  ?clienteId=X (opcional)             -> datos del cliente (si hay id) + adiestradores + disponibilidad + tarifas
-// GET  ?clienteId=X&adiestrador=Y&fecha=Z  -> lo mismo, más los horarios libres ese día
+// GET  ?clienteId=X (opcional)             -> datos del cliente (si hay id) + adiestradores + tarifas
+// GET  ?clienteId=X&adiestrador=Y          -> lo mismo, más el mapa de disponibilidad por fecha de Y (para pintar el calendario)
+// GET  ?clienteId=X&adiestrador=Y&fecha=Z  -> lo mismo, más los horarios libres ese día puntual
 // POST { clienteId, adiestrador, tipo, fechaISO }                              -> cita a nombre de un cliente existente
 // POST { nombre, email, telefono, perro, adiestrador, tipo, fechaISO }         -> crea un prospecto + la cita
 import { createClient } from "@supabase/supabase-js";
@@ -31,6 +32,19 @@ function offsetChileISO(fechaStr) {
     .formatToParts(new Date(`${fechaStr}T12:00:00Z`));
   const gmt = partes.find((p) => p.type === "timeZoneName").value; // "GMT-04:00" o "GMT-03:00"
   return gmt.replace("GMT", "");
+}
+
+// Fecha/hora de Chile (no UTC) de un instante — el servidor corre en UTC,
+// así que un fechaISO de la noche puede caer en otro día calendario si se
+// lee con .slice()/getUTCDate() directo.
+function fechaChile(fechaISO) {
+  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: ZONA_CHILE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(fechaISO));
+  const obj = {};
+  partes.forEach((p) => { obj[p.type] = p.value; });
+  return `${obj.year}-${obj.month}-${obj.day}`;
+}
+function horaChile(fechaISO) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: ZONA_CHILE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(fechaISO)) + ":00";
 }
 
 function calcularSlotsDisponibles({ rango, ocupados, duracionMin = DURACION_MIN }) {
@@ -84,36 +98,46 @@ export default async function handler(req, res) {
     }
 
     const { data: usuarios } = await admin.from("usuarios").select("nombre").eq("rol", "entrenador");
-    const { data: disponibilidad } = await admin
-      .from("disponibilidad_adiestrador")
-      .select("adiestrador, dia_semana, hora_inicio, hora_fin")
-      .eq("activo", true);
     const { data: tarifas } = await admin
       .from("tarifas_adiestrador")
       .select("adiestrador, precio_evaluacion, precio_clase");
 
     let slots;
-    if (adiestrador && fecha) {
-      const dow = (new Date(`${fecha}T00:00:00Z`).getUTCDay() + 6) % 7; // 0=lunes
-      const rangoRow = (disponibilidad || []).find((d) => d.adiestrador === adiestrador && d.dia_semana === dow);
-      const { data: ocupados } = await admin
-        .from("citas_agenda")
-        .select("fecha_hora, duracion_min")
+    let disponibilidadFechas;
+    if (adiestrador) {
+      const hoyStr = fechaChile(new Date().toISOString());
+      const limite = new Date(); limite.setDate(limite.getDate() + DIAS_ADELANTE_MAX);
+      const limiteStr = fechaChile(limite.toISOString());
+      const { data: filasDisponibilidad } = await admin
+        .from("disponibilidad_fecha")
+        .select("fecha, disponible, hora_inicio, hora_fin")
         .eq("adiestrador", adiestrador)
-        .in("estado", ["pendiente", "agendada"])
-        .gte("fecha_hora", `${fecha}T00:00:00${offsetChileISO(fecha)}`)
-        .lt("fecha_hora", `${fecha}T23:59:59${offsetChileISO(fecha)}`);
-      slots = calcularSlotsDisponibles({
-        rango: rangoRow ? { fecha, horaInicio: rangoRow.hora_inicio, horaFin: rangoRow.hora_fin } : null,
-        ocupados: ocupados || [],
-      });
+        .gte("fecha", hoyStr)
+        .lte("fecha", limiteStr);
+      disponibilidadFechas = {};
+      (filasDisponibilidad || []).forEach((f) => { disponibilidadFechas[f.fecha] = f.disponible; });
+
+      if (fecha) {
+        const filaDia = (filasDisponibilidad || []).find((f) => f.fecha === fecha);
+        const { data: ocupados } = await admin
+          .from("citas_agenda")
+          .select("fecha_hora, duracion_min")
+          .eq("adiestrador", adiestrador)
+          .in("estado", ["pendiente", "agendada"])
+          .gte("fecha_hora", `${fecha}T00:00:00${offsetChileISO(fecha)}`)
+          .lt("fecha_hora", `${fecha}T23:59:59${offsetChileISO(fecha)}`);
+        slots = calcularSlotsDisponibles({
+          rango: filaDia && filaDia.disponible ? { fecha, horaInicio: filaDia.hora_inicio, horaFin: filaDia.hora_fin } : null,
+          ocupados: ocupados || [],
+        });
+      }
     }
 
     res.status(200).json({
       cliente: cliente ? { nombre: cliente.nombre, perro: cliente.perro, tipoServicio: cliente.tipo_servicio || [], direccion: cliente.direccion || "" } : null,
       puedeAgendar,
       adiestradores: (usuarios || []).map((u) => u.nombre),
-      disponibilidad: (disponibilidad || []).map((d) => ({ adiestrador: d.adiestrador, diaSemana: d.dia_semana, horaInicio: d.hora_inicio, horaFin: d.hora_fin })),
+      disponibilidadFechas,
       tarifas: (tarifas || []).map((t) => ({ adiestrador: t.adiestrador, precioEvaluacion: t.precio_evaluacion, precioClase: t.precio_clase })),
       slots,
       diasAdelanteMax: DIAS_ADELANTE_MAX,
@@ -188,6 +212,23 @@ export default async function handler(req, res) {
     const precio = tipo === "evaluacion" ? tarifa?.precio_evaluacion : tarifa?.precio_clase;
     if (precio == null) {
       res.status(409).json({ error: "Este adiestrador todavía no tiene una tarifa configurada para este tipo de cita — contáctanos directamente para coordinar." });
+      return;
+    }
+
+    // re-chequeo de que el día/hora pedido esté realmente habilitado — el
+    // calendario público ya no debería dejar elegir un día bloqueado o sin
+    // marcar, pero se valida también acá por si acaso (mismo criterio de
+    // defensa que el re-chequeo de choque de horario de más abajo).
+    const fechaSolicitada = fechaChile(fechaISO);
+    const horaSolicitada = horaChile(fechaISO);
+    const { data: filaDisponibilidad } = await admin
+      .from("disponibilidad_fecha")
+      .select("disponible, hora_inicio, hora_fin")
+      .eq("adiestrador", adiestrador)
+      .eq("fecha", fechaSolicitada)
+      .maybeSingle();
+    if (!filaDisponibilidad || !filaDisponibilidad.disponible || horaSolicitada < filaDisponibilidad.hora_inicio || horaSolicitada >= filaDisponibilidad.hora_fin) {
+      res.status(409).json({ error: "Ese día u horario ya no está disponible — elige otro" });
       return;
     }
 

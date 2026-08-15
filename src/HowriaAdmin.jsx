@@ -438,22 +438,22 @@ function dbToCita(row) {
   };
 }
 
-function disponibilidadToDb(d) {
+function disponibilidadFechaToDb(d) {
   return {
     adiestrador: d.adiestrador,
-    dia_semana: d.diaSemana,
+    fecha: d.fecha,
     hora_inicio: d.horaInicio,
     hora_fin: d.horaFin,
-    activo: d.activo,
+    disponible: d.disponible,
   };
 }
-function dbToDisponibilidad(row) {
+function dbToDisponibilidadFecha(row) {
   return {
     adiestrador: row.adiestrador,
-    diaSemana: row.dia_semana,
+    fecha: row.fecha,
     horaInicio: row.hora_inicio,
     horaFin: row.hora_fin,
-    activo: row.activo,
+    disponible: row.disponible,
     _dbId: row.id,
   };
 }
@@ -1113,55 +1113,86 @@ function useConfiguracion(sessionVersion) {
   return [config, actualizarConfig];
 }
 
-// Horario semanal por adiestrador (disponibilidad_adiestrador): una fila
-// por (adiestrador, día de semana), con upsert porque esa pareja es única
-// en la base — no hay lista libre que insertar/borrar como en las demás
-// tablas sincronizadas con useSyncedTable.
-function useDisponibilidad(sessionVersion) {
+// Disponibilidad del adiestrador por fecha concreta (disponibilidad_fecha):
+// una fila por (adiestrador, fecha) — reemplaza el horario semanal fijo que
+// tenía disponibilidad_adiestrador (028), donde todos los martes eran
+// iguales para siempre sin poder cerrar uno puntual. Con upsert porque esa
+// pareja es única en la base — no hay lista libre que insertar/borrar como
+// en las demás tablas sincronizadas con useSyncedTable.
+function useDisponibilidadFecha(sessionVersion) {
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     let activo = true;
     setCargando(true);
-    supabase.from("disponibilidad_adiestrador").select("*").then(({ data, error }) => {
+    supabase.from("disponibilidad_fecha").select("*").then(({ data, error }) => {
       if (!activo) return;
       if (error) showToast(`No se pudo cargar la disponibilidad: ${error.message}`);
-      else if (data) setFilas(data.map(dbToDisponibilidad));
+      else if (data) setFilas(data.map(dbToDisponibilidadFecha));
       setCargando(false);
     });
     return () => { activo = false; };
   }, [sessionVersion]);
 
-  async function actualizar(adiestrador, diaSemana, cambios) {
-    const actual = filas.find((f) => f.adiestrador === adiestrador && f.diaSemana === diaSemana)
-      || { adiestrador, diaSemana, horaInicio: "09:00", horaFin: "18:00", activo: false };
+  async function actualizar(adiestrador, fecha, cambios) {
+    const actual = filas.find((f) => f.adiestrador === adiestrador && f.fecha === fecha)
+      || { adiestrador, fecha, horaInicio: "09:00", horaFin: "18:00", disponible: false };
     const nueva = { ...actual, ...cambios };
     setFilas((prev) => {
-      const idx = prev.findIndex((f) => f.adiestrador === adiestrador && f.diaSemana === diaSemana);
+      const idx = prev.findIndex((f) => f.adiestrador === adiestrador && f.fecha === fecha);
       return idx >= 0 ? prev.map((f, i) => (i === idx ? nueva : f)) : [...prev, nueva];
     });
-    const { data, error } = await supabase.from("disponibilidad_adiestrador")
-      .upsert(disponibilidadToDb(nueva), { onConflict: "adiestrador,dia_semana" })
+    const { data, error } = await supabase.from("disponibilidad_fecha")
+      .upsert(disponibilidadFechaToDb(nueva), { onConflict: "adiestrador,fecha" })
       .select().single();
     if (error) {
-      showToast(`No se pudo guardar el horario: ${error.message}`);
+      showToast(`No se pudo guardar la disponibilidad: ${error.message}`);
       return;
     }
     if (data) {
-      const guardada = dbToDisponibilidad(data);
+      const guardada = dbToDisponibilidadFecha(data);
       setFilas((prev) => {
-        const idx = prev.findIndex((f) => f.adiestrador === adiestrador && f.diaSemana === diaSemana);
+        const idx = prev.findIndex((f) => f.adiestrador === adiestrador && f.fecha === fecha);
         return idx >= 0 ? prev.map((f, i) => (i === idx ? guardada : f)) : [...prev, guardada];
       });
     }
   }
 
-  return [filas, actualizar, cargando];
+  // Llena de una sola vez las fechas de un rango que caigan en los días de
+  // semana elegidos, para no tener que marcar el mes día por día.
+  async function aplicarPatronSemanal(adiestrador, diasSemana, horaInicio, horaFin, desde, hasta) {
+    const fechas = [];
+    const cursor = new Date(desde + "T00:00:00");
+    const fin = new Date(hasta + "T00:00:00");
+    while (cursor <= fin) {
+      const dow = (cursor.getDay() + 6) % 7; // 0=lunes..6=domingo, igual que el resto de la app
+      if (diasSemana.includes(dow)) fechas.push(fechaKey(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (fechas.length === 0) return;
+    const filasNuevas = fechas.map((fecha) => ({ adiestrador, fecha, horaInicio, horaFin, disponible: true }));
+    const { data, error } = await supabase.from("disponibilidad_fecha")
+      .upsert(filasNuevas.map(disponibilidadFechaToDb), { onConflict: "adiestrador,fecha" })
+      .select();
+    if (error) {
+      showToast(`No se pudo aplicar el horario: ${error.message}`);
+      return;
+    }
+    if (data) {
+      const guardadas = data.map(dbToDisponibilidadFecha);
+      setFilas((prev) => {
+        const otras = prev.filter((f) => !(f.adiestrador === adiestrador && fechas.includes(f.fecha)));
+        return [...otras, ...guardadas];
+      });
+    }
+  }
+
+  return [filas, actualizar, cargando, aplicarPatronSemanal];
 }
 
 // Precio de evaluación/clase por adiestrador (tarifas_adiestrador): una
-// fila por adiestrador, upsert igual que useDisponibilidad pero sin la
+// fila por adiestrador, upsert igual que useDisponibilidadFecha pero sin la
 // dimensión de día de semana.
 function useTarifas(sessionVersion) {
   const [filas, setFilas] = useState([]);
@@ -3135,7 +3166,7 @@ export default function HowriaAdmin() {
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
-  const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
+  const [disponibilidadFecha, actualizarDisponibilidadFecha, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
@@ -3328,7 +3359,7 @@ export default function HowriaAdmin() {
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
-        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} actualizarDisponibilidadFecha={actualizarDisponibilidadFecha} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}
