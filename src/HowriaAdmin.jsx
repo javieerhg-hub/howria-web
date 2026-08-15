@@ -2766,6 +2766,8 @@ export default function HowriaAdmin() {
           .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-finanzas-stats { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-stats-3 { grid-template-columns: repeat(2, 1fr) !important; }
+          .howria-dia-selector-movil { display: flex !important; }
+          .howria-dia-col-oculta-movil { display: none !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>

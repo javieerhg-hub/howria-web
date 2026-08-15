@@ -2983,12 +2983,80 @@ function inicioSemanaActual() {
 
 const UMBRAL_SOBRECARGA = 8;
 
+// Bloque plegable para no mostrar toda la pestaña Coordinación de una en
+// celular — "Hoy" abierto por defecto, el resto a un toque de distancia.
+function SeccionPlegable({ titulo, subtitulo, defaultAbierta, children }) {
+  const [abierta, setAbierta] = useState(!!defaultAbierta);
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <button onClick={() => setAbierta((v) => !v)}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", font: "inherit" }}>
+        <div>
+          <h2 style={sectionTitle}>{titulo}</h2>
+          {subtitulo && <p style={{ ...hint, marginTop: 4 }}>{subtitulo}</p>}
+        </div>
+        <span style={{ fontSize: 18, color: "#8A7E5C", flexShrink: 0, marginTop: 4, transform: abierta ? "rotate(180deg)" : "none", transition: "transform .15s ease" }}>▾</span>
+      </button>
+      {abierta && <div style={{ marginTop: 16 }}>{children}</div>}
+    </div>
+  );
+}
+
+// Fila de un cliente en el calendario del día: en celular se ven grandes
+// las 2 acciones más usadas (marcar hecho / cancelar) y reasignar + nota
+// quedan detrás de "Más" para no saturar.
+function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizado, onToggleCancelado, onReasignar, onGuardarNota }) {
+  const [masAbierto, setMasAbierto] = useState(false);
+  const { cliente: c, estado, nota, atrasado } = item;
+  const colorEstado = estado === "realizado" ? "#2F6A46" : estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
+  const bgEstado = estado === "realizado" ? "#D8ECDE" : estado === "cancelado" ? "#F1DCD2" : atrasado ? "#F1DCD2" : "#F3E3B4";
+  const textoEstado = estado === "realizado" ? "Realizado" : estado === "cancelado" ? "Cancelado" : atrasado ? "⚠️ Atrasado" : "Pendiente";
+
+  return (
+    <div style={{ padding: "10px 12px", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600, flexShrink: 0 }}>{c.horaHabitual || "—"}</span>
+          <span style={{ fontSize: 13, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} · 🐾 {c.perro}</span>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: bgEstado, color: colorEstado, flexShrink: 0 }}>{textoEstado}</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <button onClick={onToggleRealizado} disabled={diaVista > hoy}
+          style={{ flex: "1 1 130px", border: `1px solid ${estado === "realizado" ? "#2F6A46" : "#C7D9CC"}`, background: estado === "realizado" ? "#2F6A46" : "#fff", color: estado === "realizado" ? "#fff" : "#2F6A46", borderRadius: 7, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: diaVista > hoy ? "not-allowed" : "pointer", opacity: diaVista > hoy ? 0.5 : 1 }}>
+          {estado === "realizado" ? "✓ Hecho" : "Marcar hecho"}
+        </button>
+        <button onClick={onToggleCancelado}
+          style={{ flex: "1 1 110px", border: `1px solid ${estado === "cancelado" ? RUST : "#E7CFC2"}`, background: estado === "cancelado" ? RUST : "#fff", color: estado === "cancelado" ? "#fff" : RUST, borderRadius: 7, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          {estado === "cancelado" ? "✕ Cancelado" : "Cancelar"}
+        </button>
+        <button onClick={() => setMasAbierto((v) => !v)}
+          style={{ border: "none", background: "none", color: "#8A7E5C", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "8px 4px", flexShrink: 0 }}>
+          {masAbierto ? "Menos ▲" : "Más ▾"}
+        </button>
+      </div>
+      {masAbierto && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <select defaultValue="" onChange={(e) => { if (e.target.value) onReasignar(e.target.value); e.target.value = ""; }}
+            style={{ fontSize: 11.5, padding: "6px 8px", borderRadius: 6, border: "1px solid #E4DBC3", flex: "1 1 140px" }}>
+            <option value="">Reasignar a...</option>
+            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+          <input defaultValue={nota} placeholder="nota..." onBlur={(e) => onGuardarNota(e.target.value)}
+            style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6, flex: "1 1 140px" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   const [busqueda, setBusqueda] = useState("");
   const [diaOffset, setDiaOffset] = useState(0);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dowHoy = (hoy.getDay() + 6) % 7;
+  const [diaSemanaMovil, setDiaSemanaMovil] = useState(dowHoy);
   const inicioSemana = inicioSemanaActual();
 
   const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset]);
@@ -3101,21 +3169,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div className="howria-card" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div>
-            <h2 style={sectionTitle}>Calendario del día</h2>
-            <p style={hint}>Quién pasea a quién, a qué hora, y si ya se hizo — ordenado por paseador.</p>
-          </div>
+      <SeccionPlegable titulo="Hoy" subtitulo="Quién pasea a quién, a qué hora, y si ya se hizo." defaultAbierta>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+          <p style={{ ...hint, margin: 0 }}>
+            <b style={{ color: NAVY }}>{DIAS_LARGOS[dowVista]} {diaVista.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}</b>
+          </p>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setDiaOffset((d) => d - 1)} style={botonSecundario}>← Día anterior</button>
-            <button onClick={() => setDiaOffset(0)} disabled={diaOffset === 0} style={{ ...botonSecundario, opacity: diaOffset === 0 ? 0.5 : 1 }}>Hoy</button>
-            <button onClick={() => setDiaOffset((d) => d + 1)} style={botonSecundario}>Día siguiente →</button>
+            <button onClick={() => setDiaOffset((d) => d - 1)} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5 }}>← Anterior</button>
+            <button onClick={() => setDiaOffset(0)} disabled={diaOffset === 0} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5, opacity: diaOffset === 0 ? 0.5 : 1 }}>Hoy</button>
+            <button onClick={() => setDiaOffset((d) => d + 1)} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5 }}>Siguiente →</button>
           </div>
         </div>
-        <p style={{ ...hint, marginTop: 10 }}>
-          <b style={{ color: NAVY }}>{DIAS_LARGOS[dowVista]} {diaVista.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}</b>
-        </p>
 
         {calendarioPorPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 12 }}>No hay paseos programados este día.</p>
@@ -3132,43 +3196,21 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                     )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {items.map(({ cliente: c, estado, nota, atrasado }) => {
-                      const colorEstado = estado === "realizado" ? "#2F6A46" : estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
-                      const bgEstado = estado === "realizado" ? "#D8ECDE" : estado === "cancelado" ? "#F1DCD2" : atrasado ? "#F1DCD2" : "#F3E3B4";
-                      const textoEstado = estado === "realizado" ? "Realizado" : estado === "cancelado" ? "Cancelado" : atrasado ? "⚠️ Atrasado" : "Pendiente";
-                      return (
-                        <div key={c.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "8px 10px", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 8 }}>
-                          <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600, width: 52, flexShrink: 0 }}>{c.horaHabitual || "—"}</span>
-                          <span style={{ fontSize: 13, color: INK, flex: "1 1 160px" }}>{c.nombre} · 🐾 {c.perro}</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: bgEstado, color: colorEstado, flexShrink: 0 }}>{textoEstado}</span>
-                          <select defaultValue="" onChange={(e) => { if (e.target.value) asignarPaseadorRapido(c.id, e.target.value); e.target.value = ""; }} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid #E4DBC3", flexShrink: 0 }}>
-                            <option value="">Reasignar...</option>
-                            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
-                          </select>
-                          <button onClick={() => toggleRealizadoDia(c.id, diaVista)} disabled={diaVista > hoy}
-                            style={{ border: "none", background: "none", color: estado === "realizado" ? "#8A7E5C" : "#2F6A46", cursor: diaVista > hoy ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                            {estado === "realizado" ? "Desmarcar" : "Marcar realizado"}
-                          </button>
-                          <button onClick={() => toggleCanceladoDia(c.id, diaVista)}
-                            style={{ border: "none", background: "none", color: estado === "cancelado" ? "#8A7E5C" : RUST, cursor: "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                            {estado === "cancelado" ? "Desmarcar" : "Cancelar"}
-                          </button>
-                          <input defaultValue={nota} placeholder="nota..." onBlur={(e) => guardarNotaDia(c.id, diaVista, e.target.value)}
-                            style={{ fontSize: 11.5, padding: "4px 6px", border: "1px solid #E4DBC3", borderRadius: 6, flex: "1 1 120px", minWidth: 90 }} />
-                        </div>
-                      );
-                    })}
+                    {items.map((item) => (
+                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} diaVista={diaVista} hoy={hoy}
+                        onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
+                        onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
+                        onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
+                        onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)} />
+                    ))}
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Control diario y semanal</h2>
-        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 18 }}>
+        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginTop: 20 }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9BAAB8" }}>Programados hoy</p>
             <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{clientesHoy.length}</p>
@@ -3182,10 +3224,28 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: RUST }}>{pendientesHoy}{canceladosHoy > 0 ? ` (${canceladosHoy} cancelado(s))` : ""}</p>
           </div>
         </div>
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Semana" subtitulo="Cómo se reparte la semana y el horario fijo de cada paseador.">
+        <div className="howria-dia-selector-movil" style={{ display: "none", gap: 6, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
+          {DIAS_LARGOS.map((dia, dow) => (
+            <button key={dow} onClick={() => setDiaSemanaMovil(dow)}
+              style={{
+                flex: "0 0 auto", padding: "8px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                border: dow === diaSemanaMovil ? "none" : "1px solid #E4DBC3",
+                background: dow === diaSemanaMovil ? NAVY : "#fff",
+                color: dow === diaSemanaMovil ? CREAM : INK,
+              }}>
+              {dia.slice(0, 3)}{dow === dowHoy ? " ·" : ""}
+            </button>
+          ))}
+        </div>
+
         <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 8px" }}>Paseos programados por día, esta semana</p>
         <div className="howria-week" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginBottom: 22 }}>
           {resumenSemana.map((d, i) => (
-            <div key={i} style={{ textAlign: "center", padding: "10px 4px", borderRadius: 8, background: i === dowHoy ? NAVY : CREAM_SOFT }}>
+            <div key={i} className={i === diaSemanaMovil ? undefined : "howria-dia-col-oculta-movil"}
+              style={{ textAlign: "center", padding: "10px 4px", borderRadius: 8, background: i === dowHoy ? NAVY : CREAM_SOFT }}>
               <p style={{ margin: 0, fontSize: 11, color: i === dowHoy ? "#9BAAB8" : "#8A7E5C" }}>{d.dia.slice(0, 3)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 16, fontWeight: 700, color: i === dowHoy ? CREAM : NAVY }}>{d.total}</p>
             </div>
@@ -3193,7 +3253,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
 
         <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 8px" }}>Carga semanal por paseador (total de paseos/semana)</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
           {cargaPorPaseador.map((p) => (
             <div key={p.nombre} style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12.5, color: INK, width: 130, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nombre}</span>
@@ -3204,28 +3264,9 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             </div>
           ))}
         </div>
-      </div>
 
-      {sinPaseador.length > 0 && (
-        <div className="howria-card" style={{ ...tarjeta, background: "#FBEFE3", border: "1px solid #E8CBA0" }}>
-          <h2 style={{ ...sectionTitle, color: "#8A5A22" }}>⚠️ Clientes sin paseador ({sinPaseador.length})</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {sinPaseador.map((c) => (
-              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", borderRadius: 8, padding: "8px 12px" }}>
-                <span style={{ fontSize: 13, color: INK }}>{c.nombre} — {c.perro}</span>
-                <select defaultValue="" onChange={(e) => e.target.value && asignarPaseadorRapido(c.id, e.target.value)} style={{ fontSize: 12.5, padding: "5px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
-                  <option value="">Asignar a...</option>
-                  {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Horario semanal por paseador</h2>
-        <p style={{ fontSize: 13, color: "#6B6248", marginTop: -8, marginBottom: 14 }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Horario semanal por paseador</h3>
+        <p style={{ fontSize: 13, color: "#6B6248", marginTop: -6, marginBottom: 14 }}>
           Elige un paseador para ver y editar su horario. Agrega un cliente a un día con el selector, quítalo con la "×", o déjale una nota rápida.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
@@ -3244,7 +3285,8 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             const fechaDia = fechasSemana[dow];
             const sobrecargado = clientesDia.length > UMBRAL_SOBRECARGA;
             return (
-              <div key={dow} style={{ border: sobrecargado ? `1.5px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8, padding: 10, background: dow === dowHoy ? "#FBF6E9" : "#fff" }}>
+              <div key={dow} className={dow === diaSemanaMovil ? undefined : "howria-dia-col-oculta-movil"}
+                style={{ border: sobrecargado ? `1.5px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8, padding: 10, background: dow === dowHoy ? "#FBF6E9" : "#fff" }}>
                 <p style={{ margin: "0 0 8px", fontSize: 11.5, fontWeight: 700, color: sobrecargado ? RUST : NAVY, display: "flex", justifyContent: "space-between" }}>
                   <span>{dia.slice(0, 3)}{dow === dowHoy ? " · hoy" : ""}</span>
                   {sobrecargado && <span title={`Más de ${UMBRAL_SOBRECARGA} clientes este día`}>⚠️</span>}
@@ -3276,12 +3318,27 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             );
           })}
         </div>
-      </div>
+      </SeccionPlegable>
 
-      <div>
-        <h2 style={{ ...sectionTitle, marginBottom: 16 }}>Reasignar cliente a otro paseador</h2>
+      <SeccionPlegable titulo="Reasignar" subtitulo="Cambiar el paseador asignado a un cliente.">
+        {sinPaseador.length > 0 && (
+          <div style={{ background: "#FBEFE3", border: "1px solid #E8CBA0", borderRadius: 10, padding: 14, marginBottom: 18 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "#8A5A22" }}>⚠️ Clientes sin paseador ({sinPaseador.length})</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sinPaseador.map((c) => (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", borderRadius: 8, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 13, color: INK }}>{c.nombre} — {c.perro}</span>
+                  <select defaultValue="" onChange={(e) => e.target.value && asignarPaseadorRapido(c.id, e.target.value)} style={{ fontSize: 12.5, padding: "5px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
+                    <option value="">Asignar a...</option>
+                    {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <Asignaciones clientes={clientes} setClientes={setClientes} usuarios={usuarios} />
-      </div>
+      </SeccionPlegable>
     </div>
   );
 }
