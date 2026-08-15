@@ -3793,6 +3793,26 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
   const [credencialesNuevo, setCredencialesNuevo] = useState(null);
   const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
   const [gestionandoSolicitudId, setGestionandoSolicitudId] = useState(null);
+  const [reseteandoId, setReseteandoId] = useState(null);
+  const [passwordReseteada, setPasswordReseteada] = useState(null);
+
+  async function resetearPassword(u) {
+    if (reseteandoId || !u.email) return;
+    setReseteandoId(u.id);
+    const { data: { session } } = await supabase.auth.refreshSession();
+    const resp = await fetch("/api/reset-password-usuario", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ email: u.email }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    setReseteandoId(null);
+    if (!resp.ok) {
+      showToast(data.error || "No se pudo resetear la contraseña");
+      return;
+    }
+    setPasswordReseteada({ nombre: u.nombre, email: u.email, password: data.password });
+  }
 
   const filtrados = usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
@@ -4045,6 +4065,11 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
                       <option value="coordinador">Coordinador</option>
                       <option value="administrador">Administrador general</option>
                     </select>
+                    {esAdmin && u.email && (
+                      <BotonEliminar onConfirm={() => resetearPassword(u)} disabled={reseteandoId === u.id}
+                        label={reseteandoId === u.id ? "Reseteando..." : "Resetear contraseña"}
+                        style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5 }} />
+                    )}
                     <button onClick={() => setBorrarId(u.id)} disabled={esUsuarioActual}
                       title={esUsuarioActual ? "No puedes eliminar tu propia cuenta" : "Eliminar"}
                       style={{ border: "none", background: "none", color: esUsuarioActual ? "#C9BFA0" : RUST, cursor: esUsuarioActual ? "not-allowed" : "pointer", fontSize: 12.5 }}>
@@ -4071,8 +4096,21 @@ function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActua
           {!cargandoUsuarios && filtrados.length === 0 && <p style={{ color: "#8A7E5C", fontSize: 13.5 }}>No hay usuarios que coincidan con la búsqueda.</p>}
         </div>
 
+        {passwordReseteada && (
+          <div style={{ marginTop: 14, padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8, fontSize: 13, color: "#8A6A1E", lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ Contraseña reseteada para {passwordReseteada.nombre} — pásale estos datos:</p>
+            <p style={{ margin: 0 }}>Correo: <b>{passwordReseteada.email}</b></p>
+            <p style={{ margin: "4px 0 10px" }}>Contraseña nueva: <b style={{ fontFamily: "monospace", fontSize: 14 }}>{passwordReseteada.password}</b></p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => navigator.clipboard.writeText(`Correo: ${passwordReseteada.email}\nContraseña: ${passwordReseteada.password}`)}
+                style={{ ...botonSecundario, padding: "6px 14px", fontSize: 12 }}>Copiar datos</button>
+              <button onClick={() => setPasswordReseteada(null)} style={{ border: "none", background: "none", color: "#8A6A1E", cursor: "pointer", fontSize: 12 }}>Cerrar</button>
+            </div>
+          </div>
+        )}
+
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: 14, lineHeight: 1.5 }}>
-          Nota: eliminar aquí quita el acceso de esta persona a la app, pero su cuenta de acceso sigue existiendo en Supabase → Authentication → Users — bórrala también ahí si quieres cerrarla por completo. Para restablecer una contraseña, hazlo desde esa misma pantalla de Supabase. Cambiar el nombre (✎) no cambia su correo de acceso, así que puede seguir entrando con la misma contraseña de siempre.
+          Nota: eliminar aquí quita el acceso de esta persona a la app, pero su cuenta de acceso sigue existiendo en Supabase → Authentication → Users — bórrala también ahí si quieres cerrarla por completo. Cambiar el nombre (✎) no cambia su correo de acceso, así que puede seguir entrando con la misma contraseña de siempre.
         </p>
       </div>
 
