@@ -2231,7 +2231,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
             <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(totalMontoMes)}</p>
           </div>
         </div>
-        <p style={hint}>Los días marcados "cliente canceló" no cuentan en tu meta ni en tu pago.</p>
+        <p style={hint}>Los días marcados "cliente canceló" no cuentan en tu meta ni en tu pago. Este monto es un estimado según tus paseos marcados este mes — no es la misma cifra que ves en Finanzas, que refleja lo facturado al cliente, no lo que se te paga a ti.</p>
 
         <p style={label}>Detalle por cliente</p>
         <div>
@@ -2983,6 +2983,7 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
   const [masAbierto, setMasAbierto] = useState(false);
   if (!tabs) return null;
 
+  const tieneInicio = tabs.some((t) => t.id === "inicio");
   const otras = tabs.filter((t) => t.id !== "inicio");
   const destacadas = PRIORIDAD_BARRA_NAV.map((id) => otras.find((t) => t.id === id)).filter(Boolean).slice(0, 3);
   const resto = otras.filter((t) => !destacadas.includes(t));
@@ -3022,7 +3023,7 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
         </>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#FFFFFF", borderRadius: 999, boxShadow: "0 8px 24px rgba(20,33,61,0.18)", padding: 6, position: "relative", zIndex: 70, maxWidth: 380, width: "100%" }}>
-        <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />
+        {tieneInicio && <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />}
         {destacadas.map((t) => {
           const Icono = ICONOS_TAB[t.id] || Home;
           return <ItemBarraNav key={t.id} activo={tab === t.id} Icono={Icono} label={t.label} onClick={() => ir(t.id)} />;

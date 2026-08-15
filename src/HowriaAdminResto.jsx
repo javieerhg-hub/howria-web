@@ -1235,7 +1235,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
     ...boletasAdiestramientoCliente.map((b) => ({ ...b, _tipo: "adiestramiento" })),
   ].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  const totalHistorico = historialVentas.reduce((acc, b) => acc + b.total, 0);
+  const totalHistorico = calcularTotales(historialVentas).ingresos;
   const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
@@ -1761,6 +1761,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
           La utilidad considera solo pagos a paseadores ya registrados como pagados en esta app — no incluye otros gastos del negocio.
+        </p>
+      )}
+      {vistaPersonal && (
+        <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
+          Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.
         </p>
       )}
 
@@ -2388,7 +2393,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
       .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
   }, [todasLasBoletas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
 
-  const totalListado = lista.reduce((acc, b) => acc + b.total, 0);
+  const totalListado = calcularTotales(lista).ingresos;
   const nombresClientes = [...new Set(todasLasBoletas.map((b) => b.cliente))];
 
   return (
