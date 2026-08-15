@@ -2290,16 +2290,98 @@ export function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick
 // de abajo, acá lo único que importa es "¿quién soy y a quién le doy el
 // paseo hoy?" — perfil arriba, clientes asignados abajo, y un acceso directo
 // a "Mis paseos" para marcarlos como hechos sin tener que navegar más.
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab }) {
+function PuntoClave({ label, valor }) {
+  return (
+    <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: "8px 10px", minWidth: 0 }}>
+      <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</p>
+      <p style={{ margin: "2px 0 0", fontSize: 13, color: NAVY, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>{valor}</p>
+    </div>
+  );
+}
+
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  const esEntrenador = user.rol === "entrenador";
 
   let diasPaseando = null;
   if (miUsuario.fechaInicio) {
     const inicio = new Date(miUsuario.fechaInicio + "T00:00:00");
     if (!isNaN(inicio)) diasPaseando = Math.max(0, Math.floor((hoy - inicio) / 86400000));
+  }
+
+  const encabezado = (
+    <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", flex: "none", background: miUsuario.fotoUrl ? `url(${miUsuario.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
+          {!miUsuario.fotoUrl && <span style={{ color: CREAM, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
+          <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
+          {diasPaseando !== null && (
+            <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
+              {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (esEntrenador) {
+    // Queda en la lista desde que se acepta la cita (estado "agendada")
+    // hasta que se marca realizada en Agenda — no es una entidad nueva,
+    // solo un filtro sobre citas_agenda pensado para reconocer rápido a
+    // quién hay que atender, sin tener que ir a buscarlo en Clientes.
+    const citasPorAtender = citasAgenda
+      .filter((c) => c.adiestrador === user.nombre && c.estado === "agendada" && c.clienteId)
+      .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        {encabezado}
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Clientes por atender</h2>
+          <p style={{ ...hint, marginTop: 8 }}>Citas que ya aceptaste en Agenda — cada una queda acá hasta que la marques como realizada.</p>
+          {citasPorAtender.length === 0 ? (
+            <p style={{ ...hint, marginTop: 12 }}>No tienes citas aceptadas pendientes de atender.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+              {citasPorAtender.map((c) => {
+                const cliente = clientes.find((cl) => cl._dbId === c.clienteId);
+                if (!cliente) return null;
+                const mascota = mascotas.find((m) => m.clienteId === c.clienteId);
+                const energia = mascota?.nivelEnergia ? NIVELES_ENERGIA.find((n) => n.id === mascota.nivelEnergia)?.nombre : null;
+                const temperamento = mascota?.temperamento?.length
+                  ? mascota.temperamento.map((t) => TAGS_TEMPERAMENTO.find((x) => x.id === t)?.nombre || t).join(", ")
+                  : null;
+                const energiaTexto = [energia, temperamento].filter(Boolean).join(" · ") || "Sin datos registrados";
+                return (
+                  <div key={c.id} style={{ border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, background: "#FFFDF7" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+                      <b style={{ color: NAVY, fontSize: 15 }}>{cliente.nombre}</b>
+                      <span style={{ fontSize: 12, color: "#8A7E5C" }}>
+                        {c.tipo === "evaluacion" ? "Evaluación" : "Clase"} · {new Date(c.fechaISO).toLocaleString("es-CL", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                      <PuntoClave label="Perro" valor={`🐾 ${cliente.perro}${cliente.raza ? ` · ${cliente.raza}` : ""}`} />
+                      <PuntoClave label="Objetivo" valor={cliente.objetivos || "Sin objetivo registrado"} />
+                      <PuntoClave label="Energía / temperamento" valor={energiaTexto} />
+                      <PuntoClave label="Teléfono" valor={cliente.telefono || "Sin teléfono"} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   const dowHoy = (hoy.getDay() + 6) % 7;
@@ -2328,23 +2410,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
-      <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
-          <div style={{ width: 64, height: 64, borderRadius: "50%", flex: "none", background: miUsuario.fotoUrl ? `url(${miUsuario.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
-            {!miUsuario.fotoUrl && <span style={{ color: CREAM, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
-            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
-            {diasPaseando !== null && (
-              <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
-                {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      {encabezado}
 
       {clientesHoy.length > 0 && pendientesHoy.length > 0 && (
         <div className="howria-card" style={tarjeta}>
@@ -2398,11 +2464,11 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, setTab, user, tabs }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
 
@@ -3049,7 +3115,7 @@ export default function HowriaAdmin() {
       <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} setTab={setTab} user={user} tabs={tabs} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
