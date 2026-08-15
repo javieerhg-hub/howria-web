@@ -42,6 +42,34 @@ class LimiteDeError extends React.Component {
   }
 }
 
+// Redimensiona y recomprime una foto subida desde un <input type="file">
+// antes de guardarla como base64 en una fila de Supabase (perfil de
+// usuario, foto del perro) — sin esto, una foto de cámara de celular
+// (varios MB) se guarda entera en la tabla, y como esa tabla se descarga
+// completa en cada carga de la pestaña correspondiente, fotos grandes
+// hacen más lenta la app para todo el mundo. Si el navegador no soporta
+// createImageBitmap, se cae de vuelta a guardar el archivo tal cual.
+async function comprimirImagen(file, maxLado = 480, calidad = 0.8) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const escala = Math.min(1, maxLado / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * escala) || 1;
+    const h = Math.round(bitmap.height * escala) || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", calidad);
+  } catch {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
 // ============================================================
 // CONEXIÓN A SUPABASE — clientes, boletas y registro de paseos
 // ============================================================
@@ -216,6 +244,8 @@ function boletaAdiestramientoToDb(b) {
     total: b.total,
     mensaje_personalizado: b.mensajePersonalizado || null,
     estado: b.estado,
+    fecha_pago: b.fechaPago || null,
+    forma_pago: b.formaPago || null,
   };
 }
 
@@ -236,6 +266,8 @@ function dbToBoletaAdiestramiento(row) {
     total: row.total,
     mensajePersonalizado: row.mensaje_personalizado,
     estado: row.estado,
+    fechaPago: row.fecha_pago || undefined,
+    formaPago: row.forma_pago || undefined,
     fecha: new Date(row.fecha_hora).toLocaleDateString("es-CL"),
     fechaISO: row.fecha_hora,
   };
@@ -2418,12 +2450,11 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
     setForm((f) => ({ ...f, planHabitual: planId, diasHabituales: plan.id === "PERSONALIZADO" ? f.diasHabituales : plan.dias }));
   }
 
-  function subirFoto(e) {
+  async function subirFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setForm((f) => ({ ...f, fotoUrl: reader.result }));
-    reader.readAsDataURL(file);
+    const fotoUrl = await comprimirImagen(file);
+    setForm((f) => ({ ...f, fotoUrl }));
   }
 
   function guardar() {
@@ -3560,6 +3591,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
   const [hasta, setHasta] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [pagoPendienteDbId, setPagoPendienteDbId] = useState(null);
+  const [pagoPendienteTipo, setPagoPendienteTipo] = useState(null);
   const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null); // solo para mostrar el N° en el modal, no para identificar la boleta
   const [editandoBoleta, setEditandoBoleta] = useState(null);
   const [fechaPagoForm, setFechaPagoForm] = useState("");
@@ -3576,19 +3608,21 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
 
   function cambiarEstado(boleta, estado) {
     if (!boleta._dbId) return; // todavía guardándose, el select ya está disabled pero por las dudas
-    if (estado === "pagada" && boleta._tipo === "paseo") {
+    if (estado === "pagada") {
       setPagoPendienteDbId(boleta._dbId);
+      setPagoPendienteTipo(boleta._tipo);
       setPagoPendienteNumero(boleta.numero);
       setFechaPagoForm(new Date().toISOString().slice(0, 10));
       setFormaPagoForm(FORMAS_PAGO[0]);
       return;
     }
-    editarBoleta(setterDe(boleta._tipo), boleta._dbId, estado === "pagada" ? { estado } : { estado, fechaPago: undefined, formaPago: undefined });
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado, fechaPago: undefined, formaPago: undefined });
   }
 
   function confirmarPago() {
-    editarBoleta(setBoletasEmitidas, pagoPendienteDbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    editarBoleta(setterDe(pagoPendienteTipo), pagoPendienteDbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
     setPagoPendienteDbId(null);
+    setPagoPendienteTipo(null);
     setPagoPendienteNumero(null);
   }
 
@@ -3661,7 +3695,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
               {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
             <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Confirmar</button>
-            <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
+            <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
           </div>
         </div>
       )}
@@ -4234,7 +4268,13 @@ function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEspe
 
 function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos }) {
   const [periodo, setPeriodo] = useState("semana");
-  const [ajustes, setAjustes] = useState({});
+  // El bono/descuento se guarda en localStorage apenas se escribe (no solo
+  // al marcar el pago) para que no se pierda si alguien lo tipea y se
+  // distrae antes de confirmar — no necesita ser compartido entre
+  // dispositivos, es solo un borrador hasta que el pago quede registrado.
+  const [ajustes, setAjustes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("howria_pago_ajustes") || "{}"); } catch { return {}; }
+  });
   const hoy = new Date();
   const { desde, hasta, etiqueta } = rangoPeriodo(periodo, hoy);
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
@@ -4244,7 +4284,11 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
   }
 
   function actualizarAjuste(paseador, valor) {
-    setAjustes((prev) => ({ ...prev, [claveAjuste(paseador)]: Number(valor) || 0 }));
+    setAjustes((prev) => {
+      const next = { ...prev, [claveAjuste(paseador)]: Number(valor) || 0 };
+      try { localStorage.setItem("howria_pago_ajustes", JSON.stringify(next)); } catch {}
+      return next;
+    });
   }
 
   function descargarResumen(fila) {
@@ -4346,7 +4390,7 @@ function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos,
       </div>
 
       <div style={{ overflowX: "auto", marginBottom: 30 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+        <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse", fontSize: 13.5 }}>
           <thead>
             <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
               <th style={{ padding: "8px 10px" }}>Paseador</th>
@@ -4926,10 +4970,16 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
     return { dia: DIAS_LARGOS[i], total: clientesDia.length };
   });
 
-  // carga semanal comparada entre paseadores
+  // carga semanal comparada entre paseadores — "sobrecargado" se calcula
+  // con el mismo umbral que la vista diaria (picoDiario, el día más
+  // cargado de su semana), no con el total semanal, para que un
+  // paseador no aparezca sobrecargado acá y no en el detalle por día (o
+  // al revés).
   const cargaPorPaseador = usuarios.map((u) => {
-    const total = clientes.filter((c) => c.paseadorNombre === u.nombre).reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
-    return { nombre: u.nombre, total };
+    const clientesDe = clientes.filter((c) => c.paseadorNombre === u.nombre);
+    const total = clientesDe.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
+    const picoDiario = Math.max(0, ...Array.from({ length: 7 }, (_, dow) => clientesDe.filter((c) => c.diasHabituales?.includes(dow)).length));
+    return { nombre: u.nombre, total, picoDiario };
   }).sort((a, b) => b.total - a.total);
   const maxCarga = Math.max(1, ...cargaPorPaseador.map((p) => p.total));
 
@@ -5064,7 +5114,7 @@ function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegi
             <div key={p.nombre} style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12.5, color: INK, width: 130, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nombre}</span>
               <div style={{ flex: 1, background: CREAM_SOFT, borderRadius: 6, height: 16, overflow: "hidden" }}>
-                <div style={{ width: `${(p.total / maxCarga) * 100}%`, height: "100%", background: p.total > UMBRAL_SOBRECARGA * 5 ? RUST : NAVY, borderRadius: 6 }} />
+                <div style={{ width: `${(p.total / maxCarga) * 100}%`, height: "100%", background: p.picoDiario > UMBRAL_SOBRECARGA ? RUST : NAVY, borderRadius: 6 }} title={p.picoDiario > UMBRAL_SOBRECARGA ? `Su día más cargado tiene ${p.picoDiario} clientes` : undefined} />
               </div>
               <span style={{ fontSize: 12, color: "#8A7E5C", width: 30, textAlign: "right", flexShrink: 0 }}>{p.total}</span>
             </div>
@@ -5464,12 +5514,10 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
   const hoy = new Date();
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
 
-  function subirFoto(e) {
+  async function subirFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setFotoUrl(reader.result);
-    reader.readAsDataURL(file);
+    setFotoUrl(await comprimirImagen(file));
   }
 
   function toggleCliente(id) {
@@ -7148,7 +7196,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
         <span style={{ color: INK }}>
           N°{String(boleta.numero).padStart(3, "0")} · {tipo === "paseo" ? `${boleta.mes} ${boleta.anio} · ${boleta.cantidad} paseos` : `Adiestramiento · ${boleta.modalidad}`}
           <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
-          {tipo === "paseo" && boleta.estado === "pagada" && boleta.formaPago && (
+          {boleta.estado === "pagada" && boleta.formaPago && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>{boleta.formaPago} · {boleta.fechaPago}</span>
           )}
         </span>
@@ -7165,7 +7213,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
               {boleta.estado === "no_enviada" && (
                 <button onClick={() => aceptarBoleta(setBoletas, boleta._dbId)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
               )}
-              {tipo === "paseo" && boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
+              {boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
                 <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
               )}
               <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
