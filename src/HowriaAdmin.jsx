@@ -2812,6 +2812,89 @@ export function AvisoNuevaVersion() {
   );
 }
 
+// ---------- Deslizar hacia abajo para recargar ----------
+// El navegador ya trae este gesto nativo en una pestaña común, pero
+// desaparece en el PWA instalado (sin "chrome" del navegador que lo
+// dispare) — se reimplementa a mano, solo para recuperarlo ahí. Únicamente
+// arranca si el gesto empieza con la página ya en el tope del scroll (no
+// interrumpe un scroll normal) y no toca elementos con `touch-action: none`
+// propio (p. ej. las tarjetas arrastrables del armador de manada en Mapa),
+// para no pisarles su propio gesto táctil.
+const UMBRAL_PULL_REFRESH = 70;
+const MAX_PULL_REFRESH = 120;
+
+function tieneTouchActionPropio(el) {
+  let cur = el;
+  while (cur && cur !== document.body) {
+    if (cur.style && getComputedStyle(cur).touchAction === "none") return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+
+export function PullToRefresh() {
+  const [distancia, setDistancia] = useState(0);
+  const [arrastrando, setArrastrando] = useState(false);
+  const estadoRef = useRef({ activo: false, inicioY: 0, inicioX: 0 });
+
+  useEffect(() => {
+    function alIniciar(e) {
+      if (window.scrollY > 0 || e.touches.length !== 1 || tieneTouchActionPropio(e.target)) return;
+      estadoRef.current = { activo: true, inicioY: e.touches[0].clientY, inicioX: e.touches[0].clientX };
+      setArrastrando(true);
+    }
+    function alMover(e) {
+      if (!estadoRef.current.activo) return;
+      const dy = e.touches[0].clientY - estadoRef.current.inicioY;
+      const dx = e.touches[0].clientX - estadoRef.current.inicioX;
+      if (dy <= 0 || Math.abs(dx) > Math.abs(dy) || window.scrollY > 0) {
+        estadoRef.current.activo = false;
+        setArrastrando(false);
+        setDistancia(0);
+        return;
+      }
+      e.preventDefault();
+      setDistancia(Math.min(dy, MAX_PULL_REFRESH));
+    }
+    function alSoltar() {
+      if (!estadoRef.current.activo) { setArrastrando(false); return; }
+      estadoRef.current.activo = false;
+      setArrastrando(false);
+      setDistancia((actual) => {
+        if (actual >= UMBRAL_PULL_REFRESH) window.location.reload();
+        return 0;
+      });
+    }
+    document.addEventListener("touchstart", alIniciar, { passive: true });
+    document.addEventListener("touchmove", alMover, { passive: false });
+    document.addEventListener("touchend", alSoltar);
+    document.addEventListener("touchcancel", alSoltar);
+    return () => {
+      document.removeEventListener("touchstart", alIniciar);
+      document.removeEventListener("touchmove", alMover);
+      document.removeEventListener("touchend", alSoltar);
+      document.removeEventListener("touchcancel", alSoltar);
+    };
+  }, []);
+
+  if (distancia <= 0) return null;
+  const listo = distancia >= UMBRAL_PULL_REFRESH;
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 10001, pointerEvents: "none",
+      display: "flex", justifyContent: "center", alignItems: "flex-end",
+      height: distancia, transition: arrastrando ? "none" : "height .2s",
+    }}>
+      <div style={{
+        marginBottom: 8, padding: "6px 14px", borderRadius: 20, background: NAVY, color: CREAM,
+        fontSize: 12.5, fontWeight: 600, opacity: Math.min(distancia / 40, 1),
+      }}>
+        {listo ? "Soltá para recargar ↻" : "Deslizá para recargar"}
+      </div>
+    </div>
+  );
+}
+
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
 const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "boletas-adiestramiento", "ingreso-personal", "usuarios"];
