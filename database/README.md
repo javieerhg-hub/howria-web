@@ -72,6 +72,8 @@ no un runner de migraciones.
 | 044 | `rls_equipo_entrenador_y_tablas_muertas.sql` | 2026-08-14 | Cierra RLS de tablas sensibles restantes del audit y da acceso de Equipo al rol entrenador. |
 | 045 | `boletas_editada_por_en.sql` | 2026-08-14 | Agrega `editada_por`/`editada_en` a `boletas`/`boletas_adiestramiento` (auditoría de ediciones). |
 | 046 | `realtime_paseos_agenda_correos.sql` | 2026-08-14 | Activa Supabase Realtime para `citas_agenda`, `registro_paseos` y `correos`. |
+| 047 | `mascotas.sql` | 2026-08-15 | Crea `mascotas` y `mascota_incompatibilidades` (perfil de cada perro y matriz de compatibilidad), separado del "contrato de servicio" en `clientes`. Incluye seed no destructivo desde `clientes.perro`. |
+| 048 | `usuarios_capacidad_maxima.sql` | 2026-08-15 | Agrega `capacidad_maxima` a `usuarios` (límite de perros por paseador, nullable = sin límite configurado). |
 
 ## Nota sobre el orden 001–023
 

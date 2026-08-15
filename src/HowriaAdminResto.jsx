@@ -19,6 +19,7 @@ import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, NAVY_LOGO,
   PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, ESTADOS_CLIENTE,
+  NIVELES_ENERGIA, TAGS_TEMPERAMENTO,
   ESTADOS_FACTURA, ESTADOS_PROSPECTO, ORIGENES_PROSPECTO, ROLES_APP, TODOS_LOS_TABS,
   PASOS_CAPACITACION, LOGO_B64, HUELLA_B64,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
@@ -1103,8 +1104,131 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
   );
 }
 
+// ---------- Mascotas (perfil del perro, separado del tutor) ----------
+function FormularioMascota({ inicial, onGuardar, onCancelar }) {
+  const [form, setForm] = useState(inicial ?? { nombre: "", raza: "", pesoKg: "", nivelEnergia: "", temperamento: [], notas: "" });
+
+  function toggleTemperamento(tagId) {
+    setForm((f) => ({ ...f, temperamento: f.temperamento.includes(tagId) ? f.temperamento.filter((t) => t !== tagId) : [...f.temperamento, tagId] }));
+  }
+
+  function guardar() {
+    if (!form.nombre.trim()) return;
+    onGuardar({ ...form, pesoKg: Number(form.pesoKg) || 0 });
+  }
+
+  return (
+    <div style={{ background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: 16, marginBottom: 10 }}>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Nombre del perro" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <input placeholder="Raza" value={form.raza} onChange={(e) => setForm({ ...form, raza: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <input placeholder="Peso (kg)" type="number" min="0" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <select value={form.nivelEnergia || ""} onChange={(e) => setForm({ ...form, nivelEnergia: e.target.value })} style={{ ...input, marginBottom: 0 }}>
+          <option value="">Nivel de energía...</option>
+          {NIVELES_ENERGIA.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+        </select>
+      </div>
+      <p style={{ ...label, marginTop: 12 }} id="mascota-temperamento-label">Temperamento</p>
+      <div role="group" aria-labelledby="mascota-temperamento-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {TAGS_TEMPERAMENTO.map((t) => (
+          <button key={t.id} type="button" onClick={() => toggleTemperamento(t.id)} aria-pressed={form.temperamento.includes(t.id)}
+            style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+              border: form.temperamento.includes(t.id) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+              background: form.temperamento.includes(t.id) ? NAVY : "#FFFFFF",
+              color: form.temperamento.includes(t.id) ? CREAM : INK }}>
+            {t.nombre}
+          </button>
+        ))}
+      </div>
+      <input placeholder="Notas (opcional)" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} style={{ ...input, marginBottom: 12 }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={guardar} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Guardar</button>
+        <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// Cada perro con sus datos y, si ya tiene _dbId, un desplegable para
+// marcar con quién no se lleva bien (persiste al toque, sin botón de
+// guardar aparte — mismo criterio que el resto de los checkboxes de la app).
+function FilaMascota({ mascota, todasLasMascotas, incompatibilidades, setMascotaIncompatibilidades, onEditar, onEliminar }) {
+  const [verIncompatibles, setVerIncompatibles] = useState(false);
+  const misIncompatibles = incompatibilidades.filter((i) => i.mascotaId1 === mascota._dbId || i.mascotaId2 === mascota._dbId);
+  const idsIncompatibles = new Set(misIncompatibles.map((i) => (i.mascotaId1 === mascota._dbId ? i.mascotaId2 : i.mascotaId1)));
+  const otrasMascotas = todasLasMascotas.filter((m) => m._dbId && m._dbId !== mascota._dbId);
+
+  function toggleIncompatible(otraId) {
+    if (idsIncompatibles.has(otraId)) {
+      setMascotaIncompatibilidades((prev) => prev.filter((i) =>
+        !((i.mascotaId1 === mascota._dbId && i.mascotaId2 === otraId) || (i.mascotaId1 === otraId && i.mascotaId2 === mascota._dbId))));
+    } else {
+      setMascotaIncompatibilidades((prev) => [...prev, { id: Date.now(), mascotaId1: mascota._dbId, mascotaId2: otraId }]);
+    }
+  }
+
+  return (
+    <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <span style={{ fontWeight: 600, color: NAVY, fontSize: 13.5 }}>🐾 {mascota.nombre}</span>
+          {mascota.necesitaRevision && (
+            <span title="Puede ser más de un perro escrito junto — revisar y separar" style={{ marginLeft: 8, fontSize: 11, color: RUST, fontWeight: 600 }}>⚠️ Revisar</span>
+          )}
+          <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>
+            {mascota.raza || "raza sin especificar"}{mascota.pesoKg ? ` · ${mascota.pesoKg} kg` : ""}
+            {mascota.nivelEnergia ? ` · energía ${NIVELES_ENERGIA.find((n) => n.id === mascota.nivelEnergia)?.nombre?.toLowerCase()}` : ""}
+          </span>
+          {mascota.temperamento?.length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+              {mascota.temperamento.map((t) => (
+                <span key={t} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 20, background: "#fff", color: "#8A7E5C" }}>
+                  {TAGS_TEMPERAMENTO.find((x) => x.id === t)?.nombre || t}
+                </span>
+              ))}
+            </div>
+          )}
+          {misIncompatibles.length > 0 && (
+            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: RUST }}>
+              ⚠️ No se lleva bien con: {[...idsIncompatibles].map((id) => todasLasMascotas.find((m) => m._dbId === id)?.nombre || "?").join(", ")}
+            </p>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          {mascota._dbId && (
+            <button onClick={() => setVerIncompatibles((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12 }}>
+              {verIncompatibles ? "Cerrar" : "Incompatibilidades"}
+            </button>
+          )}
+          <button onClick={onEditar} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
+          <BotonEliminar onConfirm={onEliminar} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+        </div>
+      </div>
+      {verIncompatibles && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4DBC3" }}>
+          {otrasMascotas.length === 0 ? (
+            <p style={{ ...hint, margin: 0 }}>No hay otros perros cargados todavía.</p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {otrasMascotas.map((m) => (
+                <button key={m._dbId} onClick={() => toggleIncompatible(m._dbId)}
+                  style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, cursor: "pointer",
+                    border: idsIncompatibles.has(m._dbId) ? `1.5px solid ${RUST}` : "1px solid #DCD2B4",
+                    background: idsIncompatibles.has(m._dbId) ? RUST : "#FFFFFF",
+                    color: idsIncompatibles.has(m._dbId) ? "#FFFFFF" : INK }}>
+                  {m.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -1114,6 +1238,9 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
   const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
+  const [mostrarFormMascota, setMostrarFormMascota] = useState(false);
+  const [editandoMascotaId, setEditandoMascotaId] = useState(null);
+  const mascotasDelCliente = mascotas.filter((m) => m.clienteId === cliente._dbId);
 
   function copiarLinkAgenda() {
     const link = `${window.location.origin}/agendaadiestrador?c=${cliente._dbId}`;
@@ -1121,6 +1248,23 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
       setLinkCopiado(true);
       setTimeout(() => setLinkCopiado(false), 2500);
     });
+  }
+
+  function guardarMascota(datos) {
+    if (editandoMascotaId) {
+      setMascotas((prev) => prev.map((m) => (m.id === editandoMascotaId ? { ...datos, id: editandoMascotaId, _dbId: m._dbId, clienteId: cliente._dbId } : m)));
+    } else {
+      setMascotas((prev) => [...prev, { ...datos, id: Date.now(), clienteId: cliente._dbId }]);
+    }
+    setMostrarFormMascota(false);
+    setEditandoMascotaId(null);
+  }
+
+  function eliminarMascota(m) {
+    setMascotas((prev) => prev.filter((x) => x.id !== m.id));
+    if (m._dbId) {
+      setMascotaIncompatibilidades((prev) => prev.filter((i) => i.mascotaId1 !== m._dbId && i.mascotaId2 !== m._dbId));
+    }
   }
 
   return (
@@ -1195,6 +1339,34 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           </p>
         </div>
 
+        <div style={{ marginTop: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <p style={{ ...label, margin: 0 }}>Mascotas {mascotasDelCliente.length > 1 ? `(${mascotasDelCliente.length})` : ""}</p>
+            <button onClick={() => { setEditandoMascotaId(null); setMostrarFormMascota((v) => !v); }} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              {mostrarFormMascota && !editandoMascotaId ? "Cancelar" : "+ Agregar mascota"}
+            </button>
+          </div>
+          {mostrarFormMascota && (
+            <FormularioMascota
+              inicial={editandoMascotaId ? mascotasDelCliente.find((m) => m.id === editandoMascotaId) : null}
+              onGuardar={guardarMascota}
+              onCancelar={() => { setMostrarFormMascota(false); setEditandoMascotaId(null); }}
+            />
+          )}
+          {mascotasDelCliente.length === 0 ? (
+            <p style={{ ...hint, marginTop: 8 }}>Sin perfil de mascota todavía — usa "+ Agregar mascota" para cargar raza, energía y temperamento.</p>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              {mascotasDelCliente.map((m) => (
+                <FilaMascota key={m.id} mascota={m} todasLasMascotas={mascotas} incompatibilidades={mascotaIncompatibilidades}
+                  setMascotaIncompatibilidades={setMascotaIncompatibilidades}
+                  onEditar={() => { setEditandoMascotaId(m.id); setMostrarFormMascota(true); }}
+                  onEliminar={() => eliminarMascota(m)} />
+              ))}
+            </div>
+          )}
+        </div>
+
         {cliente.email && (
           <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
             <p style={{ ...label, marginBottom: 8 }}>Correo</p>
@@ -1238,7 +1410,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -1280,6 +1452,10 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         onEliminar={() => { setClientes((prev) => prev.filter((x) => x.id !== clientePerfil.id)); setPerfilId(null); }}
         puedeEliminar={puedeEliminar}
         nombreUsuario={nombreUsuario}
+        mascotas={mascotas}
+        setMascotas={setMascotas}
+        mascotaIncompatibilidades={mascotaIncompatibilidades}
+        setMascotaIncompatibilidades={setMascotaIncompatibilidades}
       />
     );
   }
@@ -2363,6 +2539,10 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, rol } : u)));
   }
 
+  function actualizarCapacidad(id, valor) {
+    setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, capacidadMaxima: valor === "" ? null : Number(valor) } : u)));
+  }
+
   function toggleCapacitacion(id, pasoId) {
     setUsuarios((prev) => prev.map((u) => {
       if (u.id !== id) return u;
@@ -2604,6 +2784,11 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                       <option value="coordinador">Coordinador</option>
                       <option value="administrador">Administrador general</option>
                     </select>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6B6248" }}>
+                      Máx. perros/manada
+                      <input type="number" min="0" placeholder="sin límite" value={u.capacidadMaxima ?? ""} onChange={(e) => actualizarCapacidad(u.id, e.target.value)}
+                        style={{ width: 64, fontSize: 12.5, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
+                    </label>
                     {esAdmin && u.email && (
                       <BotonEliminar onConfirm={() => resetearPassword(u)} disabled={reseteandoId === u.id}
                         label={reseteandoId === u.id ? "Reseteando..." : "Resetear contraseña"}
@@ -3492,7 +3677,7 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
 }
 
 // ---------- Mapa de rutas ----------
-export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId }) {
+export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId, mascotas = [], mascotaIncompatibilidades = [] }) {
   const paseadores = usuarios;
   const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
   const [incluidos, setIncluidos] = useState({});
@@ -3506,6 +3691,26 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   const marcadoresRef = useRef(null);
 
   const clientesDelPaseador = clientes.filter((c) => c.paseadorNombre === paseadorId);
+
+  // Solo aviso, no bloquea "Calcular ruta" — el coordinador decide si
+  // sigue igual (ver audit, hallazgo "compatibilidad y capacidad").
+  const mascotasIncluidas = clientesDelPaseador
+    .filter((c) => incluidos[c.id])
+    .flatMap((c) => mascotas.filter((m) => m.clienteId === c._dbId));
+  const capacidadMaxima = usuarios.find((u) => u.nombre === paseadorId)?.capacidadMaxima;
+  const conflictosCompatibilidad = [];
+  for (let i = 0; i < mascotasIncluidas.length; i++) {
+    for (let j = i + 1; j < mascotasIncluidas.length; j++) {
+      const a = mascotasIncluidas[i], b = mascotasIncluidas[j];
+      const incompatibles = mascotaIncompatibilidades.some((inc) =>
+        (inc.mascotaId1 === a._dbId && inc.mascotaId2 === b._dbId) || (inc.mascotaId1 === b._dbId && inc.mascotaId2 === a._dbId));
+      if (incompatibles) conflictosCompatibilidad.push([a, b]);
+    }
+  }
+  const idsMascotasEnConflicto = new Set(conflictosCompatibilidad.flatMap(([a, b]) => [a._dbId, b._dbId]));
+  const idsClientesEnConflicto = new Set(
+    clientesDelPaseador.filter((c) => mascotas.some((m) => m.clienteId === c._dbId && idsMascotasEnConflicto.has(m._dbId))).map((c) => c.id)
+  );
 
   function toggleIncluido(id) {
     setIncluidos((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -3604,13 +3809,28 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
           </div>
         </div>
 
-        <p style={label}>Clientes de {paseadorId || "este paseador"}</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <p style={{ ...label, margin: 0 }}>Clientes de {paseadorId || "este paseador"}</p>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: capacidadMaxima && mascotasIncluidas.length > capacidadMaxima ? RUST : "#8A7E5C" }}>
+            {capacidadMaxima ? `${mascotasIncluidas.length}/${capacidadMaxima} perros en esta manada` : `${mascotasIncluidas.length} perro(s) — sin límite configurado`}
+          </span>
+        </div>
+        {capacidadMaxima && mascotasIncluidas.length > capacidadMaxima && (
+          <p style={{ fontSize: 12.5, color: RUST, margin: "6px 0 0" }}>⚠️ Esta manada se pasa de la capacidad de {paseadorId} ({capacidadMaxima} perros).</p>
+        )}
+        {conflictosCompatibilidad.length > 0 && (
+          <div style={{ background: "#F1DCD2", border: "1px solid #E7C0AE", borderRadius: 8, padding: "10px 14px", marginTop: 8 }}>
+            {conflictosCompatibilidad.map(([a, b], i) => (
+              <p key={i} style={{ margin: i === 0 ? 0 : "4px 0 0", fontSize: 12.5, color: RUST }}>⚠️ {a.nombre} y {b.nombre} no se llevan bien.</p>
+            ))}
+          </div>
+        )}
         {clientesDelPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Este paseador no tiene clientes asignados (ve a "Asignaciones").</p>
         ) : (
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
             {clientesDelPaseador.map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: incluidos[c.id] ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8 }}>
+              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: incluidos[c.id] ? "#D8ECDE" : "#FFFFFF", border: incluidos[c.id] && idsClientesEnConflicto.has(c.id) ? `1.5px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
                   <input type="checkbox" checked={!!incluidos[c.id]} onChange={() => toggleIncluido(c.id)} />
                   <span style={{ fontSize: 13.5 }}><b style={{ color: NAVY }}>{c.nombre}</b> · 🐾 {c.perro} · {c.direccion || "sin dirección"}</span>

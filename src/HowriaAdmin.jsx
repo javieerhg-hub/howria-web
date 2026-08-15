@@ -220,6 +220,7 @@ function usuarioToDb(u) {
     numero_cuenta: u.datosBancarios?.numeroCuenta || u.numeroCuenta || null,
     email: u.email || slugEmailUsuario(u.nombre),
     capacitacion_completada: u.capacitacionCompletada || [],
+    capacidad_maxima: u.capacidadMaxima || null,
   };
 }
 
@@ -232,7 +233,43 @@ function dbToUsuario(row) {
     datosBancarios: { banco: row.banco, tipoCuenta: row.tipo_cuenta, numeroCuenta: row.numero_cuenta },
     email: row.email,
     capacitacionCompletada: row.capacitacion_completada || [],
+    capacidadMaxima: row.capacidad_maxima,
   };
+}
+
+function mascotaToDb(m) {
+  return {
+    cliente_id: m.clienteId,
+    nombre: m.nombre,
+    raza: m.raza || null,
+    peso_kg: m.pesoKg || null,
+    nivel_energia: m.nivelEnergia || null,
+    temperamento: m.temperamento || [],
+    notas: m.notas || null,
+    necesita_revision: m.necesitaRevision || false,
+  };
+}
+
+function dbToMascota(row) {
+  return {
+    clienteId: row.cliente_id,
+    nombre: row.nombre,
+    raza: row.raza,
+    pesoKg: row.peso_kg,
+    nivelEnergia: row.nivel_energia,
+    temperamento: row.temperamento || [],
+    notas: row.notas,
+    necesitaRevision: row.necesita_revision,
+  };
+}
+
+function incompatibilidadToDb(i) {
+  const [id1, id2] = [i.mascotaId1, i.mascotaId2].sort();
+  return { mascota_id_1: id1, mascota_id_2: id2, motivo: i.motivo || null, creado_por: i.creadoPor || null };
+}
+
+function dbToIncompatibilidad(row) {
+  return { mascotaId1: row.mascota_id_1, mascotaId2: row.mascota_id_2, motivo: row.motivo, creadoPor: row.creado_por };
 }
 
 function loginPendienteToDb(l) {
@@ -710,6 +747,20 @@ export const TIPOS_SERVICIO = [
   { id: "paseos", nombre: "Paseos" },
   { id: "clases", nombre: "Clases de adiestramiento" },
   { id: "evaluacion", nombre: "Evaluación" },
+];
+
+export const NIVELES_ENERGIA = [
+  { id: "baja", nombre: "Baja" },
+  { id: "media", nombre: "Media" },
+  { id: "alta", nombre: "Alta" },
+];
+
+export const TAGS_TEMPERAMENTO = [
+  { id: "sociable", nombre: "Sociable" },
+  { id: "reactivo_perros", nombre: "Reactivo con perros" },
+  { id: "reactivo_personas", nombre: "Reactivo con personas" },
+  { id: "ansioso", nombre: "Ansioso" },
+  { id: "guarda_recursos", nombre: "Guarda recursos" },
 ];
 
 export const PASOS_CAPACITACION = [
@@ -2605,6 +2656,8 @@ export default function HowriaAdmin() {
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", sessionVersion);
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
+  const [mascotas, setMascotas, cargandoMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
+  const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes);
   const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
   const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
@@ -2850,11 +2903,11 @@ export default function HowriaAdmin() {
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
-        {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} />}
+        {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
