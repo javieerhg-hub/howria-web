@@ -1,5 +1,4 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
@@ -35,6 +34,12 @@ const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) =>
 // HowriaAdminResto.jsx (ese lazy trae las 14 pestañas juntas — importar
 // desde ahí arrastraría todo Resto solo para abrir la ruta).
 const RutaGuiada = React.lazy(() => import("./RutaGuiada.jsx").then((m) => ({ default: m.RutaGuiada })));
+
+// Los gráficos de Inicio/Mis Paseos (recharts) también aparte — recharts es
+// pesada y este archivo se carga siempre, hasta para la pantalla de login,
+// que nunca llega a mostrar un gráfico.
+const AnilloHoy = React.lazy(() => import("./GraficosInicio.jsx").then((m) => ({ default: m.AnilloHoy })));
+const GraficoIngresosSemana = React.lazy(() => import("./GraficosInicio.jsx").then((m) => ({ default: m.GraficoIngresosSemana })));
 
 // Sin esto, si algo revienta al renderizar una pestaña, React desmonta
 // todo el árbol y la pantalla queda en blanco sin ningún aviso (header y
@@ -2094,13 +2099,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         <p style={{ ...label, marginTop: 18 }}>Hoy</p>
         <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", marginTop: 10, marginBottom: 22 }}>
           <div style={{ width: 150, height: 150, position: "relative", flex: "none" }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie data={datosAnillo} dataKey="value" innerRadius="72%" outerRadius="100%" startAngle={90} endAngle={-270} stroke="none" isAnimationActive={false}>
-                  {datosAnillo.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<div style={{ width: "100%", height: "100%", borderRadius: "50%", background: CREAM_SOFT }} />}>
+              <AnilloHoy datosAnillo={datosAnillo} />
+            </Suspense>
             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
               <span style={{ fontSize: 30, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{clientesHoyAnillo.length === 0 ? "—" : pendientesHoy}</span>
               <span style={{ fontSize: 11, color: "#8A7E5C" }}>{clientesHoyAnillo.length === 0 ? "Sin paseos hoy" : "Pendientes"}</span>
@@ -2655,15 +2656,9 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
           <b style={{ color: NAVY, fontSize: 16 }}>{fmtCLP(totalIngresosSemana)}</b>
         </div>
         <div style={{ width: "100%", height: 160, marginTop: 10 }}>
-          <ResponsiveContainer>
-            <BarChart data={dataGraficoSemana}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EDE4CE" />
-              <XAxis dataKey="etiqueta" tick={{ fontSize: 11, fill: "#8A7E5C" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#8A7E5C" }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-              <Tooltip formatter={(v) => fmtCLP(v)} contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #EDE4CE" }} />
-              <Bar dataKey="total" fill={NAVY} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<div style={{ width: "100%", height: "100%" }} />}>
+            <GraficoIngresosSemana data={dataGraficoSemana} />
+          </Suspense>
         </div>
       </div>
 

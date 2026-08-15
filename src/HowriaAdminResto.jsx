@@ -2298,8 +2298,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 
   async function descargarPdf(b, claveFila) {
     setDescargando(claveFila);
-    await descargarPdfBoleta(b, b._tipo, b.editadaPor ? "-corregida" : "");
-    setDescargando(null);
+    try {
+      await descargarPdfBoleta(b, b._tipo, b.editadaPor ? "-corregida" : "");
+    } catch {
+      showToast("No se pudo generar el PDF. Intenta de nuevo.");
+    } finally {
+      setDescargando(null);
+    }
   }
 
   const todasLasBoletas = useMemo(() => [
@@ -5393,8 +5398,13 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
   // de verdad se pide descargar.
   async function descargarComprobante() {
     setGenerandoComprobante(true);
-    await descargarPdfBoleta(boleta, tipo, boleta.editadaPor ? "-corregida" : "");
-    setGenerandoComprobante(false);
+    try {
+      await descargarPdfBoleta(boleta, tipo, boleta.editadaPor ? "-corregida" : "");
+    } catch {
+      showToast("No se pudo generar el PDF. Intenta de nuevo.");
+    } finally {
+      setGenerandoComprobante(false);
+    }
   }
 
   return (
