@@ -211,9 +211,17 @@ export default async function handler(req, res) {
     }
 
     let prospectoId = null;
+    let clienteNuevoId = null;
     if (!cliente) {
       // link genérico: quien reserva todavía no es cliente — sus datos
-      // quedan como prospecto para que el equipo le dé seguimiento.
+      // quedan como prospecto para que el equipo le dé seguimiento (venta/
+      // marketing) Y, además, se crea un cliente real de una vez —
+      // incompleto a propósito (sin paseador, sin tarifa, sin plan; el
+      // coordinador lo completa después si el trato avanza) — para que
+      // apenas se acepte la cita ya aparezca solo en "Clientes por
+      // atender" del entrenador (ver InicioPaseador en HowriaAdmin.jsx,
+      // que ya filtra citas agendadas con cliente_id), sin depender de que
+      // el entrenador tenga acceso a Seguimiento.
       const { data: nuevoProspecto, error: prospectoErr } = await admin
         .from("prospectos")
         .insert({
@@ -233,10 +241,43 @@ export default async function handler(req, res) {
         return;
       }
       prospectoId = nuevoProspecto.id;
+
+      const { data: nuevoCliente, error: clienteErr } = await admin
+        .from("clientes")
+        .insert({
+          nombre: nombre.trim(),
+          perro: perro.trim(),
+          telefono: telefono.trim(),
+          email: email.trim(),
+          valor_paseo_ref: 0,
+          raza: null,
+          peso_kg: null,
+          foto_url: null,
+          dias_habituales: [],
+          hora_habitual: null,
+          plan_habitual: null,
+          objetivos: null,
+          paseador_nombre: null,
+          tarifa_paseador: 0,
+          adiestrador_nombre: adiestrador,
+          direccion: direccion.trim(),
+          lat: null,
+          lng: null,
+          tipo_servicio: [tipo === "evaluacion" ? "evaluacion" : "clases"],
+          estado_cliente: "activo",
+          fecha_inicio: null,
+        })
+        .select("id")
+        .single();
+      if (clienteErr || !nuevoCliente) {
+        res.status(500).json({ error: "No se pudieron guardar tus datos" });
+        return;
+      }
+      clienteNuevoId = nuevoCliente.id;
     }
 
     const { error: insertErr } = await admin.from("citas_agenda").insert({
-      cliente_id: cliente ? cliente.id : null,
+      cliente_id: cliente ? cliente.id : clienteNuevoId,
       prospecto_id: prospectoId,
       cliente_nombre: cliente ? cliente.nombre : nombre.trim(),
       perro: cliente ? cliente.perro : perro.trim(),

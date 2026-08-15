@@ -80,6 +80,7 @@ no un runner de migraciones.
 | 052 | `usuarios_meta_mensual.sql` | 2026-08-15 | Agrega `meta_mensual` a `usuarios` (meta de dinero por paseador, la fija el coordinador/admin, que la ruta guiada muestra al terminar el día). |
 | 053 | `fase_dia_paseador_ausente_motivo.sql` | 2026-08-15 | Agrega `ausente_motivo` a `fase_dia_paseador` (el paseador puede justificar que no sale a rondar hoy, sin usar el "cancelado" de registro_paseos que significa otra cosa). |
 | 054 | `citas_agenda_datos_contacto.sql` | 2026-08-15 | Agrega `email`/`telefono`/`direccion` a `citas_agenda` (copia redundante, mismo criterio que cliente_nombre/perro) — el adiestrador ve en Agenda lo que el cliente dejó al pedir la cita, sin necesitar acceso a `prospectos`. |
+| 055 | `prospectos_entrenador_sus_citas.sql` | 2026-08-15 | Agrega políticas RLS (select/update) para que el entrenador vea y dé seguimiento a los prospectos de sus propias citas, sin abrirle toda la tabla `prospectos`. |
 
 ## Nota sobre el orden 001–023
 

@@ -5024,7 +5024,13 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", direccion: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
-export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque }) {
+export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque, rolActual }) {
+  // El entrenador ve y da seguimiento a los prospectos de sus propias
+  // citas (RLS scoped, ver database/055), pero no crea prospectos nuevos
+  // a mano ni los elimina — eso sigue siendo trabajo de coordinador/
+  // administrador. Sin esto, tocar esos botones fallaría en silencio
+  // contra la política de Postgres en vez de explicar por qué.
+  const puedeCrearYEliminar = rolActual !== "entrenador";
   // Solo tiene sentido ofrecer como "responsable" a alguien que de verdad
   // puede entrar a esta pestaña — si permisosRoles todavía no cargó, se
   // muestra la lista completa para no dejar el selector vacío mientras tanto.
@@ -5106,12 +5112,14 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
             <h2 style={sectionTitle}>Seguimiento de prospectos</h2>
             <p style={hint}>Para no perder el hilo de una conversación de venta — cada contacto de campaña queda con su estado y notas.</p>
           </div>
-          <button onClick={() => { setMostrarForm((v) => !v); setIntentoCrear(false); }} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>
-            {mostrarForm ? "Cancelar" : "+ Nuevo prospecto"}
-          </button>
+          {puedeCrearYEliminar && (
+            <button onClick={() => { setMostrarForm((v) => !v); setIntentoCrear(false); }} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>
+              {mostrarForm ? "Cancelar" : "+ Nuevo prospecto"}
+            </button>
+          )}
         </div>
 
-        {mostrarForm && (
+        {mostrarForm && puedeCrearYEliminar && (
           <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 18, margin: "16px 0" }}>
             <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
@@ -5248,10 +5256,12 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
               )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                {p.estado === "ganado" && (
+                {p.estado === "ganado" && puedeCrearYEliminar && (
                   <button onClick={() => convertirACliente(p)} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Convertir a cliente</button>
                 )}
-                <BotonEliminar onConfirm={() => eliminarProspecto(p.id)} label="Eliminar prospecto" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+                {puedeCrearYEliminar && (
+                  <BotonEliminar onConfirm={() => eliminarProspecto(p.id)} label="Eliminar prospecto" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+                )}
               </div>
             </div>
           );
