@@ -974,6 +974,19 @@ const ICONOS_TAB = {
   seguimiento: Target,
 };
 
+// Paleta para los íconos del launcher — mismos pares fondo/color que ya
+// usan FASES_PASEADOR/ESTADOS_CLIENTE en el resto del panel, reciclados
+// acá para que el grid de accesos se sienta variado por color (como un
+// tablero de apps) sin salirse de la paleta de marca.
+const PALETA_LAUNCHER = [
+  { bg: "#F3E3B4", color: "#8A6A1E" }, // dorado
+  { bg: "#D6E6EE", color: "#1E5A7A" }, // celeste
+  { bg: "#D8ECDE", color: "#2F6A46" }, // verde salvia
+  { bg: "#F1DCD2", color: RUST },      // terracota
+  { bg: "#DCE3EA", color: NAVY },      // acero
+  { bg: "#E5DCEE", color: "#6B4E85" }, // ciruela
+];
+
 // Carga y sincroniza los permisos por rol (qué pestañas ve cada uno)
 // guardados en la tabla permisos_roles.
 function usePermisosRoles(sessionVersion) {
@@ -2553,6 +2566,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
+        <div style={{ position: "absolute", top: 30, right: 60, width: 70, height: 70, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
           <div style={{ width: 52, height: 52, borderRadius: "50%", flex: "none", background: user.fotoUrl ? `url(${user.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
             {!user.fotoUrl && <span style={{ color: CREAM, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
@@ -2570,18 +2584,23 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
             const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
             if (tabsDelGrupo.length === 0) return null;
             return (
-              <div key={grupo} className="howria-card" style={{ ...tarjeta, marginBottom: 14 }}>
-                <p style={{ ...label, marginBottom: 12 }}>{grupo}</p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-                  {tabsDelGrupo.map((t) => {
+              <div key={grupo} style={{ marginBottom: 18 }}>
+                <p style={{ ...label, marginBottom: 10 }}>{grupo}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                  {tabsDelGrupo.map((t, i) => {
                     const Icono = ICONOS_TAB[t.id] || Home;
+                    const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
                     return (
                       <button key={t.id} onClick={() => setTab(t.id)}
-                        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 2px", border: "none", background: "none", cursor: "pointer", font: "inherit" }}>
-                        <span style={{ width: 46, height: 46, borderRadius: 14, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", color: NAVY, flex: "none" }}>
-                          <Icono size={20} />
+                        style={{
+                          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                          padding: "16px 6px", border: "none", borderRadius: 16, background: "#FFFFFF",
+                          boxShadow: "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
+                        }}>
+                        <span style={{ width: 46, height: 46, borderRadius: 14, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flex: "none" }}>
+                          <Icono size={21} />
                         </span>
-                        <span style={{ fontSize: 11, color: INK, textAlign: "center", lineHeight: 1.25 }}>{t.label}</span>
+                        <span style={{ fontSize: 11.5, color: INK, textAlign: "center", lineHeight: 1.25, fontWeight: 500 }}>{t.label}</span>
                       </button>
                     );
                   })}
