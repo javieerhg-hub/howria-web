@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
-  FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
+  FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -20,7 +20,6 @@ const Finanzas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => (
 const PagoTrabajadores = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PagoTrabajadores })));
 const Coordinacion = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Coordinacion })));
 const MapaRutas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.MapaRutas })));
-const IngresoPersonalNuevo = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.IngresoPersonalNuevo })));
 const EquipoTrabajo = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EquipoTrabajo })));
 const Agenda = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Agenda })));
 const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Mail })));
@@ -949,7 +948,6 @@ export const TODOS_LOS_TABS = [
   { id: "finanzas", label: "Finanzas", grupo: "Clientes y boletas" },
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
   { id: "equipo", label: "Equipo", grupo: "Equipo" },
-  { id: "ingreso-personal", label: "Ingreso personal nuevo", grupo: "Equipo" },
   { id: "usuarios", label: "Usuarios", grupo: "Equipo" },
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
 ];
@@ -971,7 +969,6 @@ const ICONOS_TAB = {
   finanzas: TrendingUp,
   pagos: Banknote,
   equipo: Users,
-  "ingreso-personal": UserPlus,
   usuarios: ShieldCheck,
   seguimiento: Target,
 };
@@ -2958,7 +2955,7 @@ export function PullToRefresh() {
 
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
-const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "ingreso-personal", "usuarios"];
+const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "usuarios"];
 
 function ItemBarraNav({ activo, Icono, label, onClick }) {
   if (activo) {
@@ -3319,7 +3316,6 @@ export default function HowriaAdmin() {
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
-        {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}

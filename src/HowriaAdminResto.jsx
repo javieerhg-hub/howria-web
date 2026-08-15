@@ -2552,10 +2552,42 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   const [nuevo, setNuevo] = useState({ nombre: "", rol: "paseador" });
   const [creando, setCreando] = useState(false);
   const [credencialesNuevo, setCredencialesNuevo] = useState(null);
+  const [masOpciones, setMasOpciones] = useState(false);
+  const [fotoUrlNuevo, setFotoUrlNuevo] = useState(null);
+  const [fechaInicioNuevo, setFechaInicioNuevo] = useState("");
+  const [bancoNuevo, setBancoNuevo] = useState("");
+  const [tipoCuentaNuevo, setTipoCuentaNuevo] = useState("Cuenta corriente");
+  const [numeroCuentaNuevo, setNumeroCuentaNuevo] = useState("");
+  const [clientesSeleccionadosNuevo, setClientesSeleccionadosNuevo] = useState([]);
   const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
   const [gestionandoSolicitudId, setGestionandoSolicitudId] = useState(null);
   const [reseteandoId, setReseteandoId] = useState(null);
   const [passwordReseteada, setPasswordReseteada] = useState(null);
+
+  const hoyNuevo = new Date();
+  const mesActualNuevo = hoyNuevo.getMonth(), anioActualNuevo = hoyNuevo.getFullYear();
+
+  async function subirFotoNuevo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFotoUrlNuevo(await comprimirImagen(file));
+  }
+
+  function toggleClienteNuevo(id) {
+    setClientesSeleccionadosNuevo((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  const clientesElegidosNuevo = clientes.filter((c) => clientesSeleccionadosNuevo.includes(c.id));
+  const horarioPorDiaNuevo = DIAS_SEMANA_LARGO.map((nombreDia, dow) => ({
+    dia: nombreDia,
+    clientes: clientesElegidosNuevo.filter((c) => c.diasHabituales?.includes(dow)),
+  }));
+  const paseosSemanaNuevo = clientesElegidosNuevo.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
+  const gananciaSemanalNuevo = clientesElegidosNuevo.reduce((acc, c) => acc + (c.diasHabituales?.length || 0) * Number(c.tarifaPaseador || 0), 0);
+  const gananciaMensualNuevo = clientesElegidosNuevo.reduce((acc, c) => {
+    const paseosMes = diasSegunPlan(mesActualNuevo, anioActualNuevo, c.diasHabituales || []).length;
+    return acc + paseosMes * Number(c.tarifaPaseador || 0);
+  }, 0);
 
   async function resetearPassword(u) {
     if (reseteandoId || !u.email) return;
@@ -2655,9 +2687,20 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
       setCreando(false);
       return;
     }
-    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: nombreNuevo, rol: nuevo.rol, email }]);
-    setCredencialesNuevo({ nombre: nombreNuevo, email, password });
+    const usuarioNuevo = {
+      id: Date.now(), nombre: nombreNuevo, rol: nuevo.rol, email,
+      fotoUrl: fotoUrlNuevo, fechaInicio: fechaInicioNuevo,
+      datosBancarios: { banco: bancoNuevo, tipoCuenta: tipoCuentaNuevo, numeroCuenta: numeroCuentaNuevo },
+    };
+    setUsuarios((prev) => [...prev, usuarioNuevo]);
+    if (clientesSeleccionadosNuevo.length > 0) {
+      setClientes((prev) => prev.map((c) => (clientesSeleccionadosNuevo.includes(c.id) ? { ...c, paseadorNombre: usuarioNuevo.nombre } : c)));
+    }
+    const detalleClientes = clientesElegidosNuevo.length > 0 ? ` con ${clientesElegidosNuevo.length} cliente(s) asignado(s)` : "";
+    setCredencialesNuevo({ nombre: nombreNuevo, email, password, detalleClientes });
     setNuevo({ nombre: "", rol: "paseador" });
+    setFotoUrlNuevo(null); setFechaInicioNuevo(""); setBancoNuevo(""); setNumeroCuentaNuevo(""); setClientesSeleccionadosNuevo([]);
+    setMasOpciones(false);
     setCreando(false);
   }
 
@@ -2903,10 +2946,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
 
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Agregar usuario</h2>
-        <p style={{ fontSize: 13, color: "#6B6248", marginTop: -8, marginBottom: 14 }}>
-          Para dar de alta un entrenador con clientes asignados, usa la pestaña "Ingreso personal nuevo". Este formulario es para agregar rápido a alguien sin asignarle clientes (ej. un coordinador o administrador).
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
           <input placeholder="Nombre completo" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={{ ...input, flex: 1, minWidth: 200, marginBottom: 0 }} />
           <select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={{ ...input, marginBottom: 0, width: 190 }}>
             <option value="paseador">Paseador</option>
@@ -2919,9 +2959,90 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
           </button>
         </div>
         {!nuevo.nombre.trim() && <p style={{ color: "#8A7E5C", fontSize: 12.5, margin: "8px 0 0" }}>Ingresa el nombre para poder agregar.</p>}
+
+        {!masOpciones ? (
+          <button onClick={() => setMasOpciones(true)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600, marginTop: 12, padding: 0 }}>
+            + Agregar foto, fecha de inicio, datos bancarios y clientes
+          </button>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <div className="howria-photo-row" style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 20 }}>
+              <div>
+                <div style={{ width: 100, height: 100, borderRadius: "50%", background: fotoUrlNuevo ? `url(${fotoUrlNuevo}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
+                  {!fotoUrlNuevo && "Foto"}
+                </div>
+                <label style={{ ...botonSecundario, display: "inline-block", marginTop: 10, padding: "6px 10px", fontSize: 11, textAlign: "center", cursor: "pointer" }}>
+                  Subir foto
+                  <input type="file" accept="image/*" onChange={subirFotoNuevo} style={{ display: "none" }} />
+                </label>
+              </div>
+              <div>
+                <label style={label} htmlFor="nuevo-fecha-inicio">Fecha de inicio de contrato</label>
+                <input id="nuevo-fecha-inicio" type="date" value={fechaInicioNuevo} onChange={(e) => setFechaInicioNuevo(e.target.value)} style={{ ...input, marginBottom: 0, maxWidth: 220 }} />
+              </div>
+            </div>
+
+            <p style={{ ...label, marginTop: 22 }}>Datos bancarios para el pago</p>
+            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 6 }}>
+              <input placeholder="Banco" value={bancoNuevo} onChange={(e) => setBancoNuevo(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              <select value={tipoCuentaNuevo} onChange={(e) => setTipoCuentaNuevo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                <option>Cuenta corriente</option>
+                <option>Cuenta vista</option>
+                <option>Cuenta RUT</option>
+              </select>
+              <input placeholder="N° de cuenta" value={numeroCuentaNuevo} onChange={(e) => setNumeroCuentaNuevo(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+
+            <p style={{ ...label, marginTop: 22 }}>Clientes a asignar (opcional)</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10, marginBottom: 6 }}>
+              {clientes.map((c) => (
+                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: clientesSeleccionadosNuevo.includes(c.id) ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+                  <input type="checkbox" checked={clientesSeleccionadosNuevo.includes(c.id)} onChange={() => toggleClienteNuevo(c.id)} />
+                  <span>{c.nombre} · 🐾 {c.perro} {c.paseadorNombre && <span style={{ color: "#8A7E5C", fontSize: 11.5 }}>(hoy: {c.paseadorNombre})</span>}</span>
+                </label>
+              ))}
+            </div>
+            <p style={hint}>Si un cliente ya tenía otro paseador asignado, al registrar quedará reasignado a este nuevo ingreso. Puedes dejarlo sin marcar y asignar clientes más adelante editando la ficha del cliente en Clientes.</p>
+
+            <button onClick={() => setMasOpciones(false)} style={{ border: "none", background: "none", color: "#8A7E5C", cursor: "pointer", fontSize: 12.5, marginTop: 6, padding: 0 }}>
+              Menos opciones
+            </button>
+          </div>
+        )}
+
+        {masOpciones && clientesElegidosNuevo.length > 0 && (
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #EDE4CE" }}>
+            <h2 style={sectionTitle}>Horario resultante</h2>
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {horarioPorDiaNuevo.map((d) => (
+                <div key={d.dia} style={{ display: "flex", gap: 14, padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                  <span style={{ width: 90, color: NAVY, fontWeight: 600 }}>{d.dia}</span>
+                  <span style={{ color: d.clientes.length ? INK : "#B0A587" }}>
+                    {d.clientes.length ? d.clientes.map((c) => `${c.nombre} (${c.perro})`).join(" · ") : "Libre"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginTop: 22 }}>
+              <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+                <p style={{ ...label, marginBottom: 6 }}>Paseos por semana</p>
+                <p style={{ margin: 0, fontWeight: 700, color: NAVY, fontSize: 19 }}>{paseosSemanaNuevo}</p>
+              </div>
+              <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia semanal estimada</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaSemanalNuevo)}</p>
+              </div>
+              <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia mensual estimada</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaMensualNuevo)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {credencialesNuevo && (
           <div style={{ marginTop: 14, padding: "14px 16px", background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, fontSize: 13, color: "#2F6A46", lineHeight: 1.6 }}>
-            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ Cuenta creada para {credencialesNuevo.nombre} — pásale estos datos para que pueda entrar:</p>
+            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ Cuenta creada para {credencialesNuevo.nombre}{credencialesNuevo.detalleClientes} — pásale estos datos para que pueda entrar:</p>
             <p style={{ margin: 0 }}>Correo: <b>{credencialesNuevo.email}</b></p>
             <p style={{ margin: "4px 0 10px" }}>Contraseña: <b style={{ fontFamily: "monospace", fontSize: 14 }}>{credencialesNuevo.password}</b></p>
             <button onClick={() => navigator.clipboard.writeText(`Correo: ${credencialesNuevo.email}\nContraseña: ${credencialesNuevo.password}`)}
@@ -4051,181 +4172,6 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   );
 }
 
-// ---------- Ingreso de personal nuevo ----------
-export function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) {
-  const [nombre, setNombre] = useState("");
-  const [rol, setRol] = useState("paseador");
-  const [fotoUrl, setFotoUrl] = useState(null);
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [banco, setBanco] = useState("");
-  const [tipoCuenta, setTipoCuenta] = useState("Cuenta corriente");
-  const [numeroCuenta, setNumeroCuenta] = useState("");
-  const [seleccionados, setSeleccionados] = useState([]);
-  const [registrando, setRegistrando] = useState(false);
-  const [credenciales, setCredenciales] = useState(null);
-
-  const hoy = new Date();
-  const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
-
-  async function subirFoto(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFotoUrl(await comprimirImagen(file));
-  }
-
-  function toggleCliente(id) {
-    setSeleccionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
-  const clientesElegidos = clientes.filter((c) => seleccionados.includes(c.id));
-
-  const horarioPorDia = DIAS_SEMANA_LARGO.map((nombreDia, dow) => ({
-    dia: nombreDia,
-    clientes: clientesElegidos.filter((c) => c.diasHabituales?.includes(dow)),
-  }));
-
-  const paseosSemana = clientesElegidos.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
-  const gananciaSemanal = clientesElegidos.reduce((acc, c) => acc + (c.diasHabituales?.length || 0) * Number(c.tarifaPaseador || 0), 0);
-  const gananciaMensual = clientesElegidos.reduce((acc, c) => {
-    const paseosMes = diasSegunPlan(mesActual, anioActual, c.diasHabituales || []).length;
-    return acc + paseosMes * Number(c.tarifaPaseador || 0);
-  }, 0);
-
-  async function registrar() {
-    if (!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando) return;
-    setRegistrando(true);
-    const nombreNuevo = nombre.trim();
-    const email = slugEmailUsuario(nombreNuevo);
-    const { password, error } = await crearCuentaAcceso(email);
-    if (error) {
-      showToast(`No se pudo crear la cuenta de acceso: ${error.message}`);
-      setRegistrando(false);
-      return;
-    }
-    const nuevoUsuario = { id: Date.now(), nombre: nombreNuevo, rol, fotoUrl, fechaInicio, email, datosBancarios: { banco, tipoCuenta, numeroCuenta } };
-    setUsuarios((prev) => [...prev, nuevoUsuario]);
-    setClientes((prev) => prev.map((c) => (seleccionados.includes(c.id) ? { ...c, paseadorNombre: nuevoUsuario.nombre } : c)));
-    const detalleClientes = clientesElegidos.length > 0 ? ` con ${clientesElegidos.length} cliente(s) asignado(s)` : "";
-    setCredenciales({ nombre: nombreNuevo, email, password, detalleClientes });
-    setNombre(""); setFotoUrl(null); setSeleccionados([]); setRol("paseador"); setFechaInicio(""); setBanco(""); setNumeroCuenta("");
-    setRegistrando(false);
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Ingreso de personal nuevo</h2>
-        <p style={hint}>Registra a un paseador o entrenador nuevo, asígnale clientes desde el inicio, y revisa su horario y ganancia estimada antes de confirmar.</p>
-
-        {credenciales && (
-          <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", color: "#2F6A46", borderRadius: 8, padding: "12px 16px", margin: "14px 0", fontSize: 13.5, lineHeight: 1.6 }}>
-            <p style={{ margin: "0 0 8px", fontWeight: 600 }}>✓ {credenciales.nombre} quedó registrado{credenciales.detalleClientes} — pásale estos datos para que pueda entrar:</p>
-            <p style={{ margin: 0 }}>Correo: <b>{credenciales.email}</b></p>
-            <p style={{ margin: "4px 0 10px" }}>Contraseña: <b style={{ fontFamily: "monospace", fontSize: 14 }}>{credenciales.password}</b></p>
-            <button onClick={() => navigator.clipboard.writeText(`Correo: ${credenciales.email}\nContraseña: ${credenciales.password}`)}
-              style={{ ...botonSecundario, padding: "6px 14px", fontSize: 12 }}>Copiar datos</button>
-          </div>
-        )}
-
-        <div className="howria-photo-row" style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 20, marginTop: 16 }}>
-          <div>
-            <div style={{ width: 100, height: 100, borderRadius: "50%", background: fotoUrl ? `url(${fotoUrl}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
-              {!fotoUrl && "Foto"}
-            </div>
-            <label style={{ ...botonSecundario, display: "inline-block", marginTop: 10, padding: "6px 10px", fontSize: 11, textAlign: "center", cursor: "pointer" }}>
-              Subir foto
-              <input type="file" accept="image/*" onChange={subirFoto} style={{ display: "none" }} />
-            </label>
-          </div>
-          <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <input placeholder="Nombre del paseador" value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-            <select value={rol} onChange={(e) => setRol(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-              <option value="paseador">Paseador</option>
-              <option value="entrenador">Entrenador</option>
-              <option value="coordinador">Coordinador</option>
-              <option value="administrador">Administrador general</option>
-            </select>
-            <div>
-              <label style={label} htmlFor="ingreso-fecha-inicio">Fecha de inicio de contrato</label>
-              <input id="ingreso-fecha-inicio" type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-            </div>
-          </div>
-        </div>
-
-        <p style={{ ...label, marginTop: 22 }}>Acceso al sistema</p>
-        <p style={{ fontSize: 13, color: "#6B6248", margin: "0 0 6px" }}>
-          Correo de acceso (se genera solo): <b>{nombre.trim() ? slugEmailUsuario(nombre) : "—"}</b>
-        </p>
-        <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: 0 }}>
-          Al registrar, se crea sola la cuenta de acceso con ese correo — te va a mostrar una contraseña generada para que se la pases.
-        </p>
-
-        <p style={{ ...label, marginTop: 16 }}>Datos bancarios para el pago</p>
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 6 }}>
-          <input placeholder="Banco" value={banco} onChange={(e) => setBanco(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-          <select value={tipoCuenta} onChange={(e) => setTipoCuenta(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-            <option>Cuenta corriente</option>
-            <option>Cuenta vista</option>
-            <option>Cuenta RUT</option>
-          </select>
-          <input placeholder="N° de cuenta" value={numeroCuenta} onChange={(e) => setNumeroCuenta(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-        </div>
-
-        <p style={{ ...label, marginTop: 22 }}>Clientes a asignar</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10, marginBottom: 6 }}>
-          {clientes.map((c) => (
-            <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: seleccionados.includes(c.id) ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
-              <input type="checkbox" checked={seleccionados.includes(c.id)} onChange={() => toggleCliente(c.id)} />
-              <span>{c.nombre} · 🐾 {c.perro} {c.paseadorNombre && <span style={{ color: "#8A7E5C", fontSize: 11.5 }}>(hoy: {c.paseadorNombre})</span>}</span>
-            </label>
-          ))}
-        </div>
-        <p style={hint}>Si un cliente ya tenía otro paseador asignado, al registrar quedará reasignado a este nuevo ingreso. Esto es solo para el ingreso inicial — para reasignar clientes más adelante, usa la pestaña "Asignaciones".</p>
-      </div>
-
-      {clientesElegidos.length > 0 && (
-        <div className="howria-card" style={tarjeta}>
-          <h2 style={sectionTitle}>Horario resultante</h2>
-          <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-            {horarioPorDia.map((d) => (
-              <div key={d.dia} style={{ display: "flex", gap: 14, padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                <span style={{ width: 90, color: NAVY, fontWeight: 600 }}>{d.dia}</span>
-                <span style={{ color: d.clientes.length ? INK : "#B0A587" }}>
-                  {d.clientes.length ? d.clientes.map((c) => `${c.nombre} (${c.perro})`).join(" · ") : "Libre"}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginTop: 22 }}>
-            <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-              <p style={{ ...label, marginBottom: 6 }}>Paseos por semana</p>
-              <p style={{ margin: 0, fontWeight: 700, color: NAVY, fontSize: 19 }}>{paseosSemana}</p>
-            </div>
-            <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-              <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia semanal estimada</p>
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaSemanal)}</p>
-            </div>
-            <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-              <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia mensual estimada</p>
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaMensual)}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!registrando && (!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0)) && (
-        <p style={{ color: "#8A7E5C", fontSize: 12.5, margin: "0 0 10px" }}>
-          {!nombre.trim() ? "Ingresa el nombre para poder registrar." : "Selecciona al menos un cliente para asignar."}
-        </p>
-      )}
-      <button onClick={registrar} disabled={!nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando}
-        style={{ ...botonPrincipal, width: "auto", padding: "12px 28px", opacity: !nombre.trim() || ((rol === "entrenador" || rol === "paseador") && clientesElegidos.length === 0) || registrando ? 0.45 : 1 }}>
-        {registrando ? "Creando cuenta..." : "Registrar paseador y asignar clientes"}
-      </button>
-    </div>
-  );
-}
 
 // ---------- Equipo (organización de trabajo interno) ----------
 export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando }) {

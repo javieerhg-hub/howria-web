@@ -82,6 +82,7 @@ no un runner de migraciones.
 | 054 | `citas_agenda_datos_contacto.sql` | 2026-08-15 | Agrega `email`/`telefono`/`direccion` a `citas_agenda` (copia redundante, mismo criterio que cliente_nombre/perro) — el adiestrador ve en Agenda lo que el cliente dejó al pedir la cita, sin necesitar acceso a `prospectos`. |
 | 055 | `prospectos_entrenador_sus_citas.sql` | 2026-08-15 | Agrega políticas RLS (select/update) para que el entrenador vea y dé seguimiento a los prospectos de sus propias citas, sin abrirle toda la tabla `prospectos`. |
 | 056 | `permisos_roles_unificar_boletas.sql` | 2026-08-15 | Limpieza de datos en `permisos_roles.tabs`: "Boletas" y "Boletas Adiestramiento" se unificaron en una sola pestaña con selector de tipo, así que `'boletas-adiestramiento'` deja de existir como tab id — este script lo reemplaza/limpia en los roles que lo tenían. |
+| 057 | `permisos_roles_unificar_ingreso_personal.sql` | 2026-08-15 | Limpieza de datos en `permisos_roles.tabs`: "Ingreso personal nuevo" se unificó dentro de "Agregar usuario" (pestaña Usuarios), así que `'ingreso-personal'` deja de existir como tab id — este script lo reemplaza/limpia en los roles que lo tenían. |
 
 ## Nota sobre el orden 001–023
 
