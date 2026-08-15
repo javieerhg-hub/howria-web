@@ -7,7 +7,8 @@
 // importa de HowriaAdmin.jsx, que lo exporta para este archivo.
 import { useState, useRef, useMemo, useEffect, Fragment } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Search, ArrowUpDown, Dog, Users, Banknote } from "lucide-react";
+import { Search, ArrowUpDown, Dog, Users, Banknote, GripVertical } from "lucide-react";
+import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
@@ -3683,6 +3684,75 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
 }
 
 // ---------- Mapa de rutas ----------
+
+// Tarjeta arrastrable de un cliente en el armador de manada. El clic normal
+// sigue funcionando igual que antes (togglea incluido) — dnd-kit solo activa
+// el arrastre si el puntero se mueve lo suficiente (mouse) o se mantiene
+// apretado un instante (táctil), así que un tap corto no se confunde con un
+// intento de arrastre y el click nativo se sigue disparando solo.
+function TarjetaClienteArrastrable({ cliente: c, enConflicto, onToggle, onUbicar, geocodificando }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: c.id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onClick={() => onToggle(c.id)}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+        padding: "10px 12px", background: "#FFFFFF",
+        border: enConflicto ? `1.5px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8,
+        opacity: isDragging ? 0.4 : 1, touchAction: "none", cursor: "grab",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+        <GripVertical size={15} color="#C4BCA0" style={{ flexShrink: 0 }} />
+        <span style={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <b style={{ color: NAVY }}>{c.nombre}</b> · 🐾 {c.perro} · {c.direccion || "sin dirección"}
+        </span>
+      </div>
+      {c.lat && c.lng ? (
+        <span style={{ fontSize: 11.5, color: "#2F6A46", fontWeight: 600, flexShrink: 0 }}>✓ ubicado</span>
+      ) : (
+        <button
+          onClick={(e) => { e.stopPropagation(); onUbicar(c); }}
+          disabled={!c.direccion || geocodificando === c.id}
+          style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, flexShrink: 0 }}
+        >
+          {geocodificando === c.id ? "Buscando..." : "Ubicar"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Columna de destino ("Disponibles" / "En la ruta de hoy") del armador de
+// manada — soltar una tarjeta acá adentro dispara onDragEnd en MapaRutas.
+function ColumnaManada({ id, titulo, clientes, vacio, idsClientesEnConflicto, onToggle, onUbicar, geocodificando }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div>
+      <p style={{ ...label, marginBottom: 8 }}>{titulo} ({clientes.length})</p>
+      <div
+        ref={setNodeRef}
+        style={{
+          display: "flex", flexDirection: "column", gap: 8, minHeight: 60, borderRadius: 10,
+          padding: 8, background: isOver ? "#F3E3B4" : "transparent",
+          border: isOver ? `1.5px dashed ${GOLD}` : "1.5px dashed transparent",
+        }}
+      >
+        {clientes.length === 0 && <p style={{ ...hint, margin: "8px 4px" }}>{vacio}</p>}
+        {clientes.map((c) => (
+          <TarjetaClienteArrastrable
+            key={c.id} cliente={c} enConflicto={idsClientesEnConflicto.has(c.id)}
+            onToggle={onToggle} onUbicar={onUbicar} geocodificando={geocodificando}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId, mascotas = [], mascotaIncompatibilidades = [] }) {
   const paseadores = usuarios;
   const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
@@ -3721,6 +3791,23 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   function toggleIncluido(id) {
     setIncluidos((prev) => ({ ...prev, [id]: !prev[id] }));
     setRuta(null);
+  }
+
+  // Umbrales de activación distintos por tipo de puntero (patrón recomendado
+  // por dnd-kit): con mouse hay que moverse un poco antes de que cuente como
+  // arrastre; en táctil hay que mantener apretado un instante, así un swipe
+  // para scrollear la lista no dispara un arrastre por accidente.
+  const sensoresManada = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
+
+  function onDragEndManada(event) {
+    const { active, over } = event;
+    if (!over) return;
+    const yaIncluido = !!incluidos[active.id];
+    const destinoIncluye = over.id === "en-ruta";
+    if (yaIncluido !== destinoIncluye) toggleIncluido(active.id);
   }
 
   async function ubicarCliente(cliente) {
@@ -3834,23 +3921,24 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
         {clientesDelPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Este paseador no tiene clientes asignados (ve a "Asignaciones").</p>
         ) : (
-          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-            {clientesDelPaseador.map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: incluidos[c.id] ? "#D8ECDE" : "#FFFFFF", border: incluidos[c.id] && idsClientesEnConflicto.has(c.id) ? `1.5px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
-                  <input type="checkbox" checked={!!incluidos[c.id]} onChange={() => toggleIncluido(c.id)} />
-                  <span style={{ fontSize: 13.5 }}><b style={{ color: NAVY }}>{c.nombre}</b> · 🐾 {c.perro} · {c.direccion || "sin dirección"}</span>
-                </label>
-                {c.lat && c.lng ? (
-                  <span style={{ fontSize: 11.5, color: "#2F6A46", fontWeight: 600 }}>✓ ubicado</span>
-                ) : (
-                  <button onClick={() => ubicarCliente(c)} disabled={!c.direccion || geocodificando === c.id} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>
-                    {geocodificando === c.id ? "Buscando..." : "Ubicar en el mapa"}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+          <DndContext sensors={sensoresManada} onDragEnd={onDragEndManada}>
+            <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <ColumnaManada
+                id="disponibles" titulo="Disponibles"
+                clientes={clientesDelPaseador.filter((c) => !incluidos[c.id])}
+                vacio="No quedan clientes sin incluir."
+                idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
+                onUbicar={ubicarCliente} geocodificando={geocodificando}
+              />
+              <ColumnaManada
+                id="en-ruta" titulo="En la ruta de hoy"
+                clientes={clientesDelPaseador.filter((c) => incluidos[c.id])}
+                vacio="Arrastra o toca un cliente de la izquierda para agregarlo."
+                idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
+                onUbicar={ubicarCliente} geocodificando={geocodificando}
+              />
+            </div>
+          </DndContext>
         )}
         {errorGeo && <p style={{ color: RUST, fontSize: 12.5, marginBottom: 12 }}>{errorGeo}</p>}
 
