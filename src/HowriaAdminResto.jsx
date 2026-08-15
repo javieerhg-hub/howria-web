@@ -4413,14 +4413,62 @@ const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rech
 // (coordinador/admin únicamente). Citas viejas, creadas antes de esta
 // columna, o agendadas a mano por staff, simplemente no tienen nada que
 // mostrar.
-function DatosContactoCita({ cita }) {
+function DatosContactoCita({ cita, onAbrir }) {
   if (!cita.email && !cita.telefono && !cita.direccion) return null;
   return (
-    <div style={{ marginTop: 8, padding: "8px 10px", background: CREAM_SOFT, borderRadius: 6, fontSize: 12.5, color: "#5C5442" }}>
-      <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>Datos que dejó al pedir la cita</p>
+    <button type="button" onClick={onAbrir}
+      style={{ display: "block", width: "100%", textAlign: "left", marginTop: 8, padding: "8px 10px", background: CREAM_SOFT, border: "none", borderRadius: 6, fontSize: 12.5, color: "#5C5442", cursor: "pointer" }}>
+      <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>Datos que dejó al pedir la cita · toca para ver todo</p>
       {cita.email && <p style={{ margin: "4px 0 0" }}>✉️ {cita.email}</p>}
       {cita.telefono && <p style={{ margin: "2px 0 0" }}>📞 {cita.telefono}</p>}
       {cita.direccion && <p style={{ margin: "2px 0 0" }}>📍 {cita.direccion}</p>}
+    </button>
+  );
+}
+
+function FilaDetalleCita({ label, valor }) {
+  return (
+    <div>
+      <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</p>
+      <p style={{ margin: "2px 0 0", fontSize: 13.5, color: NAVY }}>{valor}</p>
+    </div>
+  );
+}
+
+// Mismo criterio visual que ModalConfirmacion (HowriaAdmin.jsx) — fondo
+// oscuro + tarjeta centrada — pero de solo lectura, sin botones de acción.
+function ModalDetalleCita({ cita, onCerrar }) {
+  useEffect(() => {
+    function alEscape(e) { if (e.key === "Escape") onCerrar(); }
+    window.addEventListener("keydown", alEscape);
+    return () => window.removeEventListener("keydown", alEscape);
+  }, [onCerrar]);
+
+  const tipoTexto = TIPOS_CITA.find((t) => t.id === cita.tipo)?.nombre || cita.tipo;
+  const estadoTexto = NOMBRES_ESTADO_CITA[cita.estado] || cita.estado;
+
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-detalle-cita-titulo"
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 420, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <h3 id="modal-detalle-cita-titulo" style={{ margin: "0 0 4px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{cita.clienteNombre}</h3>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
+        </div>
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: "#8A7E5C" }}>🐾 {cita.perro} · {tipoTexto} · {estadoTexto}</p>
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <FilaDetalleCita label="Fecha y hora" valor={new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} />
+          <FilaDetalleCita label="Adiestrador" valor={cita.adiestrador} />
+          {cita.precio != null && <FilaDetalleCita label="Precio" valor={fmtCLP(cita.precio)} />}
+          <FilaDetalleCita label="Correo" valor={cita.email || "Sin correo"} />
+          <FilaDetalleCita label="Teléfono" valor={cita.telefono || "Sin teléfono"} />
+          <FilaDetalleCita label="Dirección" valor={cita.direccion || "Sin dirección"} />
+          {cita.notas && <FilaDetalleCita label="Notas" valor={cita.notas} />}
+          <FilaDetalleCita label="Origen" valor={cita.origen === "cliente" ? "Pedida por el cliente (agenda pública)" : "Agendada por el equipo"} />
+          {cita.confirmadaEn && <FilaDetalleCita label="Confirmada el" valor={new Date(cita.confirmadaEn).toLocaleString("es-CL")} />}
+        </div>
+      </div>
     </div>
   );
 }
@@ -4436,6 +4484,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const [editandoId, setEditandoId] = useState(null);
   const [notasEdit, setNotasEdit] = useState("");
   const [confirmandoId, setConfirmandoId] = useState(null);
+  const [citaDetalleId, setCitaDetalleId] = useState(null);
   const esEntrenador = rolActual === "entrenador";
   const [adiestradorHorario, setAdiestradorHorario] = useState(esEntrenador ? nombreActual : (adiestradores[0]?.nombre ?? ""));
   const [linkGenericoCopiado, setLinkGenericoCopiado] = useState(false);
@@ -4528,8 +4577,11 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
     return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando agenda…</p></div>;
   }
 
+  const citaDetalle = citaDetalleId ? citas.find((c) => c.id === citaDetalleId) : null;
+
   return (
     <div style={{ display: "grid", gap: 20 }}>
+      {citaDetalle && <ModalDetalleCita cita={citaDetalle} onCerrar={() => setCitaDetalleId(null)} />}
       <div className="howria-card" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Link público de agenda</h2>
@@ -4556,7 +4608,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                     {new Date(c.fechaISO).toLocaleString("es-CL", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · {c.adiestrador}
                   </div>
                 </div>
-                <DatosContactoCita cita={c} />
+                <DatosContactoCita cita={c} onAbrir={() => setCitaDetalleId(c.id)} />
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   <button onClick={() => confirmar(c)} disabled={confirmandoId === c.id}
                     style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId === c.id ? 0.6 : 1 }}>
@@ -4630,7 +4682,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
               </div>
               {c.notas && <p style={{ margin: "8px 0 0", fontSize: 13, color: "#5C5442" }}>{c.notas}</p>}
-              <DatosContactoCita cita={c} />
+              <DatosContactoCita cita={c} onAbrir={() => setCitaDetalleId(c.id)} />
 
               {editandoId === c.id ? (
                 <div style={{ marginTop: 10 }}>
