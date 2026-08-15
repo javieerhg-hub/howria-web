@@ -19,7 +19,7 @@ import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, NAVY_LOGO,
   PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, ESTADOS_CLIENTE,
-  NIVELES_ENERGIA, TAGS_TEMPERAMENTO,
+  NIVELES_ENERGIA, TAGS_TEMPERAMENTO, FASES_PASEADOR,
   ESTADOS_FACTURA, ESTADOS_PROSPECTO, ORIGENES_PROSPECTO, ROLES_APP, TODOS_LOS_TABS,
   PASOS_CAPACITACION, LOGO_B64, HUELLA_B64,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
@@ -3248,7 +3248,7 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   );
 }
 
-export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel }) {
+export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {} }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   const [busqueda, setBusqueda] = useState("");
   const [diaOffset, setDiaOffset] = useState(0);
@@ -3388,7 +3388,13 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
               return (
                 <div key={paseador} style={{ border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, background: "#FFFFFF" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{items.length} hecho(s)</span></span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{items.length} hecho(s)</span></span>
+                      {esHoyVista && paseador !== "Sin asignar" && (() => {
+                        const f = FASES_PASEADOR.find((x) => x.id === (faseDiaPaseador[paseador] || "pendiente"));
+                        return <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: f.bg, color: f.color }}>{f.nombre}</span>;
+                      })()}
+                    </div>
                     {paseador !== "Sin asignar" && (
                       <button onClick={() => irAMapa(paseador)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Ver ruta en el mapa →</button>
                     )}

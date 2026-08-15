@@ -74,6 +74,7 @@ no un runner de migraciones.
 | 046 | `realtime_paseos_agenda_correos.sql` | 2026-08-14 | Activa Supabase Realtime para `citas_agenda`, `registro_paseos` y `correos`. |
 | 047 | `mascotas.sql` | 2026-08-15 | Crea `mascotas` y `mascota_incompatibilidades` (perfil de cada perro y matriz de compatibilidad), separado del "contrato de servicio" en `clientes`. Incluye seed no destructivo desde `clientes.perro`. |
 | 048 | `usuarios_capacidad_maxima.sql` | 2026-08-15 | Agrega `capacidad_maxima` a `usuarios` (límite de perros por paseador, nullable = sin límite configurado). |
+| 049 | `fase_dia_paseador.sql` | 2026-08-15 | Crea `fase_dia_paseador` (consola de estados en vivo: una fase por paseador/día — Pendiente/En Recolección/En Parque/En Retorno/Completado), agregada a `supabase_realtime`. |
 
 ## Nota sobre el orden 001–023
 
