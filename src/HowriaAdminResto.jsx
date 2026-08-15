@@ -2117,6 +2117,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const [editandoBoleta, setEditandoBoleta] = useState(null);
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
+  const [descargando, setDescargando] = useState(null);
+
+  async function descargarPdf(b, claveFila) {
+    setDescargando(claveFila);
+    await descargarPdfBoleta(b, b._tipo, b.editadaPor ? "-corregida" : "");
+    setDescargando(null);
+  }
 
   const todasLasBoletas = useMemo(() => [
     ...boletasEmitidas.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -2277,6 +2284,12 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                               {b.estado === "no_enviada" && (
                                 <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
+                              )}
+                              {b.estado === "pagada" && (
+                                <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
+                                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: descargando === claveFila ? 0.5 : 1 }}>
+                                  {descargando === claveFila ? "Generando..." : "Descargar PDF"}
+                                </button>
                               )}
                               <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
                               <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
@@ -4869,6 +4882,34 @@ function editarBoleta(setBoletas, dbId, cambios) {
   setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, ...cambios } : b)));
 }
 
+// Genera el PDF de una boleta (paseo o adiestramiento) al vuelo, sobre un
+// canvas descartable — no hay archivos guardados en ningún lado, se arma
+// desde los datos de la boleta cada vez que se pide.
+async function descargarPdfBoleta(boleta, tipo, sufijo = "") {
+  const logoImg = new Image();
+  const huellaImg = new Image();
+  await Promise.all([
+    new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = LOGO_B64; }),
+    new Promise((resolve) => { huellaImg.onload = resolve; huellaImg.onerror = resolve; huellaImg.src = HUELLA_B64; }),
+  ]);
+  const fuentes = tipo === "paseo"
+    ? ["700 23px Fraunces", "600 19px Fraunces", "600 14px Fraunces", "13px Inter", "600 13px Inter"]
+    : ["700 27px Fraunces", "700 19px Fraunces", "13px Inter"];
+  if (document.fonts?.ready) {
+    await Promise.all(fuentes.map((f) => document.fonts.load(f))).then(() => document.fonts.ready).catch(() => {});
+  }
+  const canvas = document.createElement("canvas");
+  if (tipo === "paseo") dibujarBoleta(canvas, boleta, logoImg, huellaImg);
+  else dibujarBoletaAdiestramiento(canvas, boleta, logoImg, huellaImg);
+  const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
+  doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+  const prefijo = tipo === "paseo" ? "Boleta" : "Boleta-Adiestramiento";
+  const link = document.createElement("a");
+  link.download = `${prefijo}-${String(boleta.numero).padStart(3, "0")}-${boleta.cliente.replace(/\s+/g, "-")}${sufijo}.pdf`;
+  link.href = URL.createObjectURL(doc.output("blob"));
+  link.click();
+}
+
 function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
   const [total, setTotal] = useState(boleta.total);
   const [mensaje, setMensaje] = useState(boleta.mensajePersonalizado || "");
@@ -4935,31 +4976,10 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
 
   // Comprobante bajo demanda: no hace falta mantener un canvas montado
   // por cada fila del historial — se arma uno descartable solo cuando
-  // de verdad se pide descargar (ej. después de corregir el total).
-  async function descargarComprobanteActualizado() {
+  // de verdad se pide descargar.
+  async function descargarComprobante() {
     setGenerandoComprobante(true);
-    const logoImg = new Image();
-    const huellaImg = new Image();
-    await Promise.all([
-      new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = LOGO_B64; }),
-      new Promise((resolve) => { huellaImg.onload = resolve; huellaImg.onerror = resolve; huellaImg.src = HUELLA_B64; }),
-    ]);
-    const fuentes = tipo === "paseo"
-      ? ["700 23px Fraunces", "600 19px Fraunces", "600 14px Fraunces", "13px Inter", "600 13px Inter"]
-      : ["700 27px Fraunces", "700 19px Fraunces", "13px Inter"];
-    if (document.fonts?.ready) {
-      await Promise.all(fuentes.map((f) => document.fonts.load(f))).then(() => document.fonts.ready).catch(() => {});
-    }
-    const canvas = document.createElement("canvas");
-    if (tipo === "paseo") dibujarBoleta(canvas, boleta, logoImg, huellaImg);
-    else dibujarBoletaAdiestramiento(canvas, boleta, logoImg, huellaImg);
-    const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
-    doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
-    const prefijo = tipo === "paseo" ? "Boleta" : "Boleta-Adiestramiento";
-    const link = document.createElement("a");
-    link.download = `${prefijo}-${String(boleta.numero).padStart(3, "0")}-${boleta.cliente.replace(/\s+/g, "-")}-corregida.pdf`;
-    link.href = URL.createObjectURL(doc.output("blob"));
-    link.click();
+    await descargarPdfBoleta(boleta, tipo, boleta.editadaPor ? "-corregida" : "");
     setGenerandoComprobante(false);
   }
 
@@ -4994,10 +5014,10 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
               {boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
                 <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
               )}
-              {boleta.editadaPor && (
-                <button onClick={descargarComprobanteActualizado} disabled={generandoComprobante}
+              {(boleta.editadaPor || boleta.estado === "pagada") && (
+                <button onClick={descargarComprobante} disabled={generandoComprobante}
                   style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, opacity: generandoComprobante ? 0.5 : 1 }}>
-                  {generandoComprobante ? "Generando..." : "Descargar comprobante actualizado"}
+                  {generandoComprobante ? "Generando..." : boleta.editadaPor ? "Descargar comprobante actualizado" : "Descargar PDF"}
                 </button>
               )}
               <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
