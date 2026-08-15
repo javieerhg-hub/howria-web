@@ -16,6 +16,26 @@ function asegurarVapid() {
   return true;
 }
 
+// Envía a cada suscripción y limpia las que ya no existan del lado del
+// navegador (desinstaló, borró datos, etc.) — 404/410 de la API de push.
+// Compartido por las dos funciones de abajo para no duplicar este bloque.
+async function enviarYLimpiarVencidas(admin, destinatarios, payload) {
+  await Promise.all(
+    destinatarios.map(async (s) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          payload
+        );
+      } catch (err) {
+        if (err?.statusCode === 404 || err?.statusCode === 410) {
+          await admin.from("push_subscriptions").delete().eq("id", s.id);
+        }
+      }
+    })
+  );
+}
+
 // admin: cliente de Supabase con la service role key (bypassa RLS, hace
 // falta para leer las suscripciones de todo el staff, no solo las propias).
 // evento: "cita" | "correo" — filtra según qué roles lo tienen activado en
@@ -37,23 +57,23 @@ export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, event
   const destinatarios = subs.filter((s) => rolesQueReciben.has(rolPorEmail.get(s.usuario_email)));
   if (destinatarios.length === 0) return;
 
-  const payload = JSON.stringify({ titulo, cuerpo, url });
+  await enviarYLimpiarVencidas(admin, destinatarios, JSON.stringify({ titulo, cuerpo, url }));
+}
 
-  await Promise.all(
-    destinatarios.map(async (s) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          payload
-        );
-      } catch (err) {
-        // 404/410: la suscripción ya no existe del lado del navegador
-        // (desinstaló, borró datos, etc.) — se limpia para no seguir
-        // reintentando en cada evento futuro.
-        if (err?.statusCode === 404 || err?.statusCode === 410) {
-          await admin.from("push_subscriptions").delete().eq("id", s.id);
-        }
-      }
-    })
-  );
+// Igual que enviarNotificacionPush, pero para destinatarios que no son del
+// staff (un tutor no está en la tabla "usuarios" ni en notificaciones_roles)
+// — manda directo a la lista de correos que le pases.
+export async function enviarNotificacionPushAEmails(admin, emails, { titulo, cuerpo, url }) {
+  if (!asegurarVapid()) return;
+
+  const unicos = [...new Set((emails || []).filter(Boolean))];
+  if (unicos.length === 0) return;
+
+  const { data: subs, error } = await admin
+    .from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth, usuario_email")
+    .in("usuario_email", unicos);
+  if (error || !subs || subs.length === 0) return;
+
+  await enviarYLimpiarVencidas(admin, subs, JSON.stringify({ titulo, cuerpo, url }));
 }

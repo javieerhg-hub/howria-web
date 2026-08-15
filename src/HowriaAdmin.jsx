@@ -717,6 +717,23 @@ function useRegistroPaseosSincronizado(clientes) {
   return [registro, setRegistro];
 }
 
+// Avisa a los tutores de hoy que la ronda empezó — sin rastreo de
+// ubicación de ningún tipo (ver api/avisar-inicio-ronda.js para el
+// porqué). Best-effort: si falla, no debe interrumpir al paseador ni
+// revertir el cambio de fase, que ya quedó guardado.
+async function avisarInicioRonda(paseadorNombre) {
+  try {
+    const { data: { session } } = await supabase.auth.refreshSession();
+    await fetch("/api/avisar-inicio-ronda", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ paseadorNombre }),
+    });
+  } catch {
+    // silencioso a propósito
+  }
+}
+
 // Fase única por paseador/día (no por perro) para la consola de estados
 // en vivo — capa nueva y aditiva sobre registro_paseos, no lo reemplaza.
 // A diferencia de useRegistroPaseosSincronizado, la clave es solo el
@@ -769,6 +786,9 @@ function useFaseDiaPaseador(sessionVersion) {
         setFasesState((prev) => ({ ...prev, [paseadorNombre]: anterior }));
       }
     });
+    if (fase === "en_recoleccion" && anterior !== "en_recoleccion") {
+      avisarInicioRonda(paseadorNombre);
+    }
   }
 
   return [fases, actualizarFaseDia];
@@ -1255,7 +1275,7 @@ function NotificacionesBell({ avisos }) {
   );
 }
 
-function BotonNotificacionesPush({ usuarioEmail }) {
+function BotonNotificacionesPush({ usuarioEmail, tituloActivar = "Activar notificaciones push (citas nuevas, correos)" }) {
   const [soportado, setSoportado] = useState(true);
   const [activo, setActivo] = useState(false);
   const [cargando, setCargando] = useState(false);
@@ -1296,7 +1316,7 @@ function BotonNotificacionesPush({ usuarioEmail }) {
     <button
       onClick={alternar}
       disabled={cargando}
-      title={activo ? "Desactivar notificaciones push" : "Activar notificaciones push (citas nuevas, correos)"}
+      title={activo ? "Desactivar notificaciones push" : tituloActivar}
       style={{ background: "none", border: "none", cursor: cargando ? "default" : "pointer", padding: 6, display: "flex", alignItems: "center", color: activo ? "#D4A94A" : "#7C8AA0" }}
     >
       {activo ? <Bell size={19} /> : <BellOff size={19} />}
@@ -1625,7 +1645,10 @@ function PortalCliente({ cliente, boletasCliente, onSalir }) {
     <div style={{ minHeight: "100vh", background: CREAM, fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
       <div style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <LogoHowria height={40} />
-        <button onClick={onSalir} style={{ background: "none", border: `1.5px solid ${CREAM}`, color: CREAM, borderRadius: 6, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>Cerrar sesión</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <BotonNotificacionesPush usuarioEmail={cliente.email} tituloActivar="Activar aviso de cuándo empieza el paseo de tu perro" />
+          <button onClick={onSalir} style={{ background: "none", border: `1.5px solid ${CREAM}`, color: CREAM, borderRadius: 6, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>Cerrar sesión</button>
+        </div>
       </div>
 
       <div style={{ padding: "28px 20px", maxWidth: 640, margin: "0 auto", display: "grid", gap: 18 }}>
