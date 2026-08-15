@@ -397,6 +397,12 @@ function citaToDb(c) {
     cliente_id: c.clienteId || null,
     cliente_nombre: c.clienteNombre,
     perro: c.perro || null,
+    // Copia redundante que deja la agenda pública al pedir la cita (ver
+    // api/cliente-agenda.js) — no se edita desde acá, solo se reescribe
+    // igual en cada guardado normal, mismo criterio que cliente_nombre.
+    email: c.email || null,
+    telefono: c.telefono || null,
+    direccion: c.direccion || null,
     tipo: c.tipo,
     adiestrador: c.adiestrador || null,
     fecha_hora: c.fechaISO,
@@ -414,6 +420,9 @@ function dbToCita(row) {
     clienteId: row.cliente_id,
     clienteNombre: row.cliente_nombre,
     perro: row.perro,
+    email: row.email,
+    telefono: row.telefono,
+    direccion: row.direccion,
     tipo: row.tipo,
     adiestrador: row.adiestrador,
     fechaISO: row.fecha_hora,

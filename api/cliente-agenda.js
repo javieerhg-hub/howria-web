@@ -152,7 +152,7 @@ export default async function handler(req, res) {
     if (clienteId) {
       const { data: clienteRow, error: clienteErr } = await admin
         .from("clientes")
-        .select("id, nombre, perro, tipo_servicio")
+        .select("id, nombre, perro, tipo_servicio, email, telefono")
         .eq("id", clienteId)
         .maybeSingle();
       if (clienteErr || !clienteRow) {
@@ -240,6 +240,12 @@ export default async function handler(req, res) {
       prospecto_id: prospectoId,
       cliente_nombre: cliente ? cliente.nombre : nombre.trim(),
       perro: cliente ? cliente.perro : perro.trim(),
+      // Copia redundante (mismo criterio que cliente_nombre/perro) — así
+      // el adiestrador ve en Agenda lo que se dejó al pedir la cita, sin
+      // necesitar acceso a la tabla prospectos (coordinador/admin only).
+      email: cliente ? cliente.email : email.trim(),
+      telefono: cliente ? cliente.telefono : telefono.trim(),
+      direccion: direccion.trim(),
       tipo,
       adiestrador,
       fecha_hora: fechaISO,

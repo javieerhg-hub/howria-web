@@ -4407,6 +4407,24 @@ const TIPOS_CITA = [
 
 const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rechazada: "Rechazada", cancelada: "Cancelada", realizada: "Realizada" };
 
+// Lo que el cliente dejó al pedir la cita desde la agenda pública — copia
+// redundante guardada directo en citas_agenda (ver api/cliente-agenda.js),
+// así el adiestrador la ve acá sin necesitar acceso a la tabla prospectos
+// (coordinador/admin únicamente). Citas viejas, creadas antes de esta
+// columna, o agendadas a mano por staff, simplemente no tienen nada que
+// mostrar.
+function DatosContactoCita({ cita }) {
+  if (!cita.email && !cita.telefono && !cita.direccion) return null;
+  return (
+    <div style={{ marginTop: 8, padding: "8px 10px", background: CREAM_SOFT, borderRadius: 6, fontSize: 12.5, color: "#5C5442" }}>
+      <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>Datos que dejó al pedir la cita</p>
+      {cita.email && <p style={{ margin: "4px 0 0" }}>✉️ {cita.email}</p>}
+      {cita.telefono && <p style={{ margin: "2px 0 0" }}>📞 {cita.telefono}</p>}
+      {cita.direccion && <p style={{ margin: "2px 0 0" }}>📍 {cita.direccion}</p>}
+    </div>
+  );
+}
+
 export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidad, actualizarDisponibilidad, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
@@ -4538,6 +4556,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                     {new Date(c.fechaISO).toLocaleString("es-CL", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · {c.adiestrador}
                   </div>
                 </div>
+                <DatosContactoCita cita={c} />
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   <button onClick={() => confirmar(c)} disabled={confirmandoId === c.id}
                     style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId === c.id ? 0.6 : 1 }}>
@@ -4611,6 +4630,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
               </div>
               {c.notas && <p style={{ margin: "8px 0 0", fontSize: 13, color: "#5C5442" }}>{c.notas}</p>}
+              <DatosContactoCita cita={c} />
 
               {editandoId === c.id ? (
                 <div style={{ marginTop: 10 }}>
