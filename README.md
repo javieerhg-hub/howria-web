@@ -38,9 +38,8 @@ howria.cl (DNS en Cloudflare).
   Usa la service role key — el navegador del tutor nunca tiene acceso
   directo a Supabase.
 - `database/*.sql` — todos los scripts SQL corridos hasta ahora en Supabase,
-  en orden cronológico aproximado (nombres autoexplicativos), incluyendo
-  `agenda_disponibilidad_citas_cliente.sql` (tabla de horarios semanales de
-  los adiestradores y permisos para la reserva pública). El esquema
+  numerados en orden (`NNN_descripcion.sql`) — ver `database/README.md`
+  para la convención y el índice completo de qué hace cada uno. El esquema
   base original (`schema_howria.sql`) no está aquí — ya se corrió al
   principio del proyecto; si hace falta reconstruir la base desde cero,
   avisar.
@@ -94,7 +93,7 @@ Piezas:
   suscripción ya no existe (410/404), se borra sola.
 
 Setup, además de las variables de entorno de arriba:
-1. Correr `database/push_subscriptions.sql` en el SQL Editor de Supabase
+1. Correr `database/033_push_subscriptions.sql` en el SQL Editor de Supabase
    (crea la tabla y sus políticas RLS).
 2. Generar el par de llaves VAPID una sola vez: `npx web-push generate-vapid-keys`.
    La pública va en `VITE_VAPID_PUBLIC_KEY` y `VAPID_PUBLIC_KEY` (mismo
@@ -105,7 +104,7 @@ Setup, además de las variables de entorno de arriba:
 ## Notas importantes
 
 - **RLS activado** en todas las tablas: solo usuarios autenticados
-  (Supabase Auth) pueden leer/escribir. `database/rls_permisos_por_rol.sql`
+  (Supabase Auth) pueden leer/escribir. `database/019_rls_permisos_por_rol.sql`
   ya está corrido en el SQL Editor de Supabase — los permisos distinguen
   por rol a nivel de base de datos, no solo de interfaz: por ejemplo, solo
   `administrador` puede escribir en `usuarios` (antes cualquiera podía

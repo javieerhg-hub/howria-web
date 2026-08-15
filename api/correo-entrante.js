@@ -1,7 +1,7 @@
 // Función serverless de Vercel: recibe los correos que llegan a
 // contacto@howria.cl. Cloudflare Email Routing no puede leer correos "hacia
 // afuera" — solo reenvía o entrega el mensaje crudo a un Worker — así que
-// un Worker mínimo (howria-mail-relay, ver database/correos.sql y el README)
+// un Worker mínimo (howria-mail-relay, ver database/031_correos.sql y el README)
 // reenvía cada correo entrante hasta acá para que quede guardado y visible
 // en la pestaña Mail del panel.
 //
