@@ -77,6 +77,8 @@ no un runner de migraciones.
 | 049 | `fase_dia_paseador.sql` | 2026-08-15 | Crea `fase_dia_paseador` (consola de estados en vivo: una fase por paseador/día — Pendiente/En Recolección/En Parque/En Retorno/Completado), agregada a `supabase_realtime`. |
 | 050 | `fase_dia_paseador_aviso_enviado.sql` | 2026-08-15 | Agrega `aviso_enviado` a `fase_dia_paseador` (evita re-mandar el push de inicio de ronda si el paseador corrige un toque y vuelve a entrar a "En Recolección" el mismo día). |
 | 051 | `prospectos_direccion.sql` | 2026-08-15 | Agrega `direccion` a `prospectos` (la agenda pública ahora la pide/confirma). |
+| 052 | `usuarios_meta_mensual.sql` | 2026-08-15 | Agrega `meta_mensual` a `usuarios` (meta de dinero por paseador, la fija el coordinador/admin, que la ruta guiada muestra al terminar el día). |
+| 053 | `fase_dia_paseador_ausente_motivo.sql` | 2026-08-15 | Agrega `ausente_motivo` a `fase_dia_paseador` (el paseador puede justificar que no sale a rondar hoy, sin usar el "cancelado" de registro_paseos que significa otra cosa). |
 
 ## Nota sobre el orden 001–023
 

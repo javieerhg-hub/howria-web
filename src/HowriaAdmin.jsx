@@ -3,7 +3,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
-  MessageCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -29,6 +28,13 @@ const Agenda = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ 
 const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Mail })));
 const Prospectos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Prospectos })));
 const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PanelAdmin })));
+
+// Aparte de las 14 pestañas de arriba: la ruta guiada de Mis Paseos es su
+// propio chunk, ni en este archivo (se carga siempre, para todo rol, y no
+// vale la pena meterle Leaflet si un coordinador nunca la abre) ni en
+// HowriaAdminResto.jsx (ese lazy trae las 14 pestañas juntas — importar
+// desde ahí arrastraría todo Resto solo para abrir la ruta).
+const RutaGuiada = React.lazy(() => import("./RutaGuiada.jsx").then((m) => ({ default: m.RutaGuiada })));
 
 // Sin esto, si algo revienta al renderizar una pestaña, React desmonta
 // todo el árbol y la pantalla queda en blanco sin ningún aviso (header y
@@ -222,6 +228,7 @@ function usuarioToDb(u) {
     email: u.email || slugEmailUsuario(u.nombre),
     capacitacion_completada: u.capacitacionCompletada || [],
     capacidad_maxima: u.capacidadMaxima || null,
+    meta_mensual: u.metaMensual || null,
   };
 }
 
@@ -235,6 +242,7 @@ function dbToUsuario(row) {
     email: row.email,
     capacitacionCompletada: row.capacitacion_completada || [],
     capacidadMaxima: row.capacidad_maxima,
+    metaMensual: row.meta_mensual,
   };
 }
 
@@ -746,8 +754,12 @@ async function avisarInicioRonda(paseadorNombre) {
 // necesitan acumular fechas pasadas.
 function useFaseDiaPaseador(sessionVersion) {
   const [fases, setFasesState] = useState({});
+  // Mapa paralelo a `fases`, no reemplaza su forma (sigue siendo
+  // {paseadorNombre: faseString}) para no tener que tocar los call sites
+  // que ya la leen así (badge de Coordinación, gate del botón de WhatsApp).
+  const [ausencias, setAusenciasState] = useState({});
   // No es estado de React a propósito: solo lo lee/escribe actualizarFaseDia
-  // (siempre del propio paseador, ver ControlFaseDia en MisPaseos) para
+  // (siempre del propio paseador, ver la ruta guiada en MisPaseos) para
   // decidir si ya avisó hoy, así que no necesita re-renderizar nada.
   const avisosEnviadosRef = useRef({});
 
@@ -755,9 +767,14 @@ function useFaseDiaPaseador(sessionVersion) {
     (async () => {
       const { data, error } = await supabase.from("fase_dia_paseador").select("*").eq("fecha", fechaKey(new Date()));
       if (!error && data) {
-        const mapa = {};
-        data.forEach((r) => { mapa[r.paseador_nombre] = r.fase; avisosEnviadosRef.current[r.paseador_nombre] = r.aviso_enviado; });
+        const mapa = {}, mapaAusencias = {};
+        data.forEach((r) => {
+          mapa[r.paseador_nombre] = r.fase;
+          mapaAusencias[r.paseador_nombre] = r.ausente_motivo || null;
+          avisosEnviadosRef.current[r.paseador_nombre] = r.aviso_enviado;
+        });
         setFasesState(mapa);
+        setAusenciasState(mapaAusencias);
       }
     })();
   }, [sessionVersion]);
@@ -768,14 +785,13 @@ function useFaseDiaPaseador(sessionVersion) {
       .on("postgres_changes", { event: "*", schema: "public", table: "fase_dia_paseador" }, (payload) => {
         const fila = payload.eventType === "DELETE" ? payload.old : payload.new;
         if (fila.fecha !== fechaKey(new Date())) return;
-        setFasesState((prev) => {
-          if (payload.eventType === "DELETE") {
-            const copia = { ...prev };
-            delete copia[fila.paseador_nombre];
-            return copia;
-          }
-          return { ...prev, [fila.paseador_nombre]: fila.fase };
-        });
+        if (payload.eventType === "DELETE") {
+          setFasesState((prev) => { const copia = { ...prev }; delete copia[fila.paseador_nombre]; return copia; });
+          setAusenciasState((prev) => { const copia = { ...prev }; delete copia[fila.paseador_nombre]; return copia; });
+          return;
+        }
+        setFasesState((prev) => ({ ...prev, [fila.paseador_nombre]: fila.fase }));
+        setAusenciasState((prev) => ({ ...prev, [fila.paseador_nombre]: fila.ausente_motivo || null }));
       })
       .subscribe();
     return () => { supabase.removeChannel(canal); };
@@ -802,7 +818,30 @@ function useFaseDiaPaseador(sessionVersion) {
     }
   }
 
-  return [fases, actualizarFaseDia];
+  // Upsert parcial — no manda `fase`, así que un conflicto no le pisa la
+  // fase que ya tuviera esa fila (mismo criterio que aviso_enviado más
+  // arriba). No se reutiliza "cancelado" de registro_paseos: ese campo es
+  // específicamente "el cliente canceló" y no cuenta contra el pago del
+  // paseador — una ausencia del paseador es un caso distinto.
+  function justificarAusencia(paseadorNombre, motivo) {
+    const anterior = ausencias[paseadorNombre] || null;
+    setAusenciasState((prev) => ({ ...prev, [paseadorNombre]: motivo }));
+    supabase.from("fase_dia_paseador").upsert(
+      { paseador_nombre: paseadorNombre, fecha: fechaKey(new Date()), ausente_motivo: motivo, actualizado_en: new Date().toISOString() },
+      { onConflict: "paseador_nombre,fecha" }
+    ).then(({ error }) => {
+      if (error) {
+        showToast(`No se pudo guardar la ausencia: ${error.message}`);
+        setAusenciasState((prev) => ({ ...prev, [paseadorNombre]: anterior }));
+      }
+    });
+  }
+
+  function deshacerAusencia(paseadorNombre) {
+    justificarAusencia(paseadorNombre, null);
+  }
+
+  return [fases, actualizarFaseDia, ausencias, justificarAusencia, deshacerAusencia];
 }
 
 export const LOGO_B64 = "data:image/jpeg;base64,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";
@@ -1812,28 +1851,7 @@ function FilaAnilloLeyenda({ Icono, label, valor, color }) {
   );
 }
 
-// Control grande de la fase del día (consola de estados en vivo) — una
-// sola fila de botones, sin orden forzado: el paseador toca la fase en
-// la que está en cualquier momento, no un wizard paso a paso.
-function ControlFaseDia({ fase, onCambiar }) {
-  return (
-    <div role="group" aria-label="Fase de tu ronda" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
-      {FASES_PASEADOR.map((f) => (
-        <button key={f.id} type="button" onClick={() => onCambiar(f.id)} aria-pressed={fase === f.id}
-          style={{
-            flex: "1 1 auto", padding: "9px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            border: fase === f.id ? "none" : "1px solid rgba(255,255,255,0.25)",
-            background: fase === f.id ? f.color : "rgba(255,255,255,0.07)",
-            color: fase === f.id ? "#FFFFFF" : "#D8DEE4",
-          }}>
-          {f.nombre}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia }) {
+function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const [semanaOffset, setSemanaOffset] = useState(0);
@@ -1841,6 +1859,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const [notaTexto, setNotaTexto] = useState("");
   const [mostrarClientes, setMostrarClientes] = useState(false);
   const [mostrarCapacitacion, setMostrarCapacitacion] = useState(false);
+  const [rutaAbierta, setRutaAbierta] = useState(false);
+  const [mostrarJustificar, setMostrarJustificar] = useState(false);
+  const [motivoAusencia, setMotivoAusencia] = useState("");
 
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -1894,19 +1915,15 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     setNotaTexto("");
   }
 
-  // WhatsApp no tiene forma de publicar automáticamente dentro de un grupo
-  // ya existente (solo mensajes 1 a 1 vía su API oficial) — así que en vez
-  // de mandarlo solo, se copia el texto al portapapeles para que el
-  // paseador lo pegue a mano en el grupo del cliente. Mismo mensaje que ya
-  // recibe el tutor por push en api/avisar-inicio-ronda.js.
-  async function copiarAvisoWhatsapp(cliente) {
-    const texto = `¡Hola! 🐾 ${user.nombre} ya salió a hacer su ronda de hoy — pronto pasará a buscar a ${cliente.perro}.`;
-    try {
-      await navigator.clipboard.writeText(texto);
-      showToast(`Mensaje copiado — pégalo en el grupo de WhatsApp de ${cliente.nombre}.`, "info");
-    } catch {
-      showToast("No se pudo copiar el mensaje. Intenta de nuevo.");
-    }
+  function iniciarRuta() {
+    actualizarFaseDia(user.nombre, "en_recoleccion");
+    setRutaAbierta(true);
+  }
+
+  function confirmarAusencia() {
+    justificarAusencia(user.nombre, motivoAusencia.trim() || "Sin motivo especificado");
+    setMostrarJustificar(false);
+    setMotivoAusencia("");
   }
 
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
@@ -1958,73 +1975,86 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   }
 
   const hoyLargo = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
+  const ausenciaHoy = ausenciasPaseador[user.nombre] || null;
+  const rutaCompletada = faseHoy === "completado";
+  const rutaEnCurso = faseHoy === "en_recoleccion" || faseHoy === "en_parque" || faseHoy === "en_retorno";
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
-          <h2 style={{ ...sectionTitle, color: CREAM }}>Tus paseos de hoy</h2>
+          <h2 style={{ ...sectionTitle, color: CREAM }}>Mi ruta de hoy</h2>
           <span style={{ fontSize: 12, color: "#9BAAB8", textTransform: "capitalize" }}>{hoyLargo}</span>
         </div>
-        {clientesHoyAnillo.length > 0 && (user.rol === "paseador" || user.rol === "entrenador") && (
-          <ControlFaseDia fase={faseDiaPaseador[user.nombre] || "pendiente"} onCambiar={(f) => actualizarFaseDia(user.nombre, f)} />
-        )}
+
         {clientesHoyAnillo.length === 0 ? (
           <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "#B7C2CE" }}>No tienes paseos asignados hoy. Disfruta el día 🐾</p>
-        ) : pendientesHoy === 0 ? (
-          <p style={{ margin: "8px 0 0", fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 ¡Completaste todos tus paseos de hoy!</p>
+        ) : rutaCompletada ? (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 Completaste tu ruta de hoy — reuniste {fmtCLP(totalMontoMes)} este mes.</p>
+            <button onClick={() => setRutaAbierta(true)} style={{ ...botonSecundario, marginTop: 12, width: "auto", padding: "10px 20px", background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>
+              Ver resumen
+            </button>
+          </div>
+        ) : ausenciaHoy ? (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: "#B7C2CE" }}>Justificaste tu ausencia de hoy: <b style={{ color: CREAM }}>"{ausenciaHoy}"</b></p>
+            <button onClick={() => deshacerAusencia(user.nombre)} style={{ marginTop: 10, background: "none", border: "none", color: GOLD, fontSize: 12.5, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+              Deshacer
+            </button>
+          </div>
+        ) : rutaEnCurso ? (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Ruta en curso — {hechosHoy + canceladosHoy}/{clientesHoyAnillo.length} resueltos.</p>
+            <button onClick={() => setRutaAbierta(true)}
+              style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
+              Continuar mi ruta
+            </button>
+          </div>
         ) : (
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9BAAB8" }}>{pendientesHoy} de {clientesHoyAnillo.length} por confirmar</p>
-        )}
-        {clientesHoyAnillo.length > 0 && (
-          <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-            {clientesHoyAnillo.map((c) => {
-              const key = `${c.id}_${fechaKey(hoy)}`;
-              const registro = registroPaseos[key] || {};
-              const hecho = !!registro.realizado;
-              const cancelado = !!registro.cancelado;
-              return (
-                <div key={c.id} style={{ background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                    <div style={{ width: 42, height: 42, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "rgba(255,255,255,0.15)", flex: "none" }} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: CREAM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</div>
-                      <div style={{ fontSize: 12.5, color: "#9BAAB8" }}>🐾 {c.perro}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => toggleRealizado(c.id, hoy)} disabled={cancelado}
-                    style={{
-                      width: "100%", padding: "15px", borderRadius: 10, border: "none",
-                      cursor: cancelado ? "default" : "pointer", fontSize: 15.5, fontWeight: 700,
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                      background: cancelado ? "rgba(168,92,59,0.25)" : hecho ? "#2F6A46" : GOLD,
-                      color: cancelado ? "#F1DCD2" : hecho ? "#FFFFFF" : NAVY,
-                    }}>
-                    <CircleCheck size={19} />
-                    {cancelado ? "Cliente canceló" : hecho ? "Paseo confirmado" : "Confirmar paseo"}
-                  </button>
-                  {!hecho && (
-                    <button onClick={() => toggleCancelado(c.id, hoy)}
-                      style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: cancelado ? GOLD : "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
-                      {cancelado ? "Deshacer — el cliente no canceló" : "El cliente canceló"}
-                    </button>
-                  )}
-                  {!hecho && !cancelado && faseDiaPaseador[user.nombre] && faseDiaPaseador[user.nombre] !== "pendiente" && (
-                    <button onClick={() => copiarAvisoWhatsapp(c)}
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", marginTop: 10,
-                        padding: "10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.07)",
-                        color: CREAM, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                      }}>
-                      <MessageCircle size={14} /> Copiar aviso de WhatsApp
-                    </button>
-                  )}
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Hoy tienes {clientesHoyAnillo.length} perro{clientesHoyAnillo.length === 1 ? "" : "s"} para pasear.</p>
+            <button onClick={iniciarRuta}
+              style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
+              Iniciar ruta
+            </button>
+            {!mostrarJustificar ? (
+              <button onClick={() => setMostrarJustificar(true)}
+                style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
+                Justificar ausencia
+              </button>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                <input value={motivoAusencia} onChange={(e) => setMotivoAusencia(e.target.value)} placeholder="Ej. me enfermé, tuve una urgencia..."
+                  onKeyDown={(e) => e.key === "Enter" && confirmarAusencia()} autoFocus
+                  style={{ ...input, marginBottom: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)", color: CREAM }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={confirmarAusencia} style={{ ...botonSecundario, background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>Confirmar</button>
+                  <button onClick={() => { setMostrarJustificar(false); setMotivoAusencia(""); }} style={{ ...botonSecundario, background: "transparent", color: "#9BAAB8", border: "1.5px solid rgba(255,255,255,0.2)" }}>Cancelar</button>
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {rutaAbierta && (
+        <Suspense fallback={<p style={hint}>Cargando tu ruta…</p>}>
+          <RutaGuiada
+            clientesHoy={clientesHoyAnillo}
+            mascotas={mascotas}
+            registroPaseos={registroPaseos}
+            setRegistroPaseos={setRegistroPaseos}
+            user={user}
+            faseHoy={faseHoy}
+            actualizarFaseDia={actualizarFaseDia}
+            metaMensual={miUsuario.metaMensual}
+            totalMontoMes={totalMontoMes}
+            onSalir={() => setRutaAbierta(false)}
+          />
+        </Suspense>
+      )}
 
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
@@ -2290,7 +2320,7 @@ export function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick
 // de abajo, acá lo único que importa es "¿quién soy y a quién le doy el
 // paseo hoy?" — perfil arriba, clientes asignados abajo, y un acceso directo
 // a "Mis paseos" para marcarlos como hechos sin tener que navegar más.
-function PuntoClave({ label, valor }) {
+export function PuntoClave({ label, valor }) {
   return (
     <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: "8px 10px", minWidth: 0 }}>
       <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</p>
@@ -2758,7 +2788,10 @@ export function ToastHost() {
   }, []);
   if (!toasts.length) return null;
   return (
-    <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+    // zIndex por encima de RutaGuiada (10020, ver estadoGlobalUI más abajo)
+    // — un error de guardado tiene que seguir siendo visible aunque la
+    // ruta guiada esté abierta a pantalla completa.
+    <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 10030, display: "flex", flexDirection: "column", gap: 8 }}>
       {toasts.map((t) => (
         <div key={t.id} style={{ background: t.tipo === "error" ? RUST : NAVY, color: "#fff", padding: "12px 18px", borderRadius: 8, fontSize: 13.5, boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: 320 }}>
           {t.mensaje}
@@ -2823,6 +2856,14 @@ export function AvisoNuevaVersion() {
 const UMBRAL_PULL_REFRESH = 70;
 const MAX_PULL_REFRESH = 120;
 
+// Objeto mutable simple (no estado de React) para que la ruta guiada de
+// Mis Paseos (src/RutaGuiada.jsx, montada aparte y lazy) pueda avisarle a
+// este gesto que no se arme mientras está abierta a pantalla completa —
+// un swipe accidental ahí recargaría la página y tiraría el progreso de
+// la ruta. Se lee una sola vez por gesto (en alIniciar), no hace falta
+// que dispare renders.
+export const estadoGlobalUI = { rutaGuiadaAbierta: false };
+
 function tieneTouchActionPropio(el) {
   let cur = el;
   while (cur && cur !== document.body) {
@@ -2839,7 +2880,7 @@ export function PullToRefresh() {
 
   useEffect(() => {
     function alIniciar(e) {
-      if (window.scrollY > 0 || e.touches.length !== 1 || tieneTouchActionPropio(e.target)) return;
+      if (estadoGlobalUI.rutaGuiadaAbierta || window.scrollY > 0 || e.touches.length !== 1 || tieneTouchActionPropio(e.target)) return;
       estadoRef.current = { activo: true, inicioY: e.touches[0].clientY, inicioX: e.touches[0].clientX };
       setArrastrando(true);
     }
@@ -3002,7 +3043,7 @@ export default function HowriaAdmin() {
   const [mascotas, setMascotas, cargandoMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
   const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes);
-  const [faseDiaPaseador, actualizarFaseDia] = useFaseDiaPaseador(sessionVersion);
+  const [faseDiaPaseador, actualizarFaseDia, ausenciasPaseador, justificarAusencia, deshacerAusencia] = useFaseDiaPaseador(sessionVersion);
   const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
   const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
   const [configuracion, actualizarConfiguracion] = useConfiguracion(sessionVersion);
@@ -3243,14 +3284,14 @@ export default function HowriaAdmin() {
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} />}
-        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} />}
+        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
-        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} />}
+        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}

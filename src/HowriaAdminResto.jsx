@@ -2540,6 +2540,10 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, rol } : u)));
   }
 
+  function actualizarMetaMensual(id, valor) {
+    setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, metaMensual: valor === "" ? null : Number(valor) } : u)));
+  }
+
   function actualizarCapacidad(id, valor) {
     setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, capacidadMaxima: valor === "" ? null : Number(valor) } : u)));
   }
@@ -2789,6 +2793,11 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                       Máx. perros/manada
                       <input type="number" min="0" placeholder="sin límite" value={u.capacidadMaxima ?? ""} onChange={(e) => actualizarCapacidad(u.id, e.target.value)}
                         style={{ width: 64, fontSize: 12.5, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6B6248" }}>
+                      Meta mensual
+                      <input type="number" min="0" placeholder="sin meta" value={u.metaMensual ?? ""} onChange={(e) => actualizarMetaMensual(u.id, e.target.value)}
+                        style={{ width: 90, fontSize: 12.5, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
                     </label>
                     {esAdmin && u.email && (
                       <BotonEliminar onConfirm={() => resetearPassword(u)} disabled={reseteandoId === u.id}
@@ -3249,7 +3258,7 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   );
 }
 
-export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {} }) {
+export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   const [busqueda, setBusqueda] = useState("");
   const [diaOffset, setDiaOffset] = useState(0);
@@ -3392,6 +3401,10 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{items.length} hecho(s)</span></span>
                       {esHoyVista && paseador !== "Sin asignar" && (() => {
+                        const motivo = ausenciasPaseador[paseador];
+                        if (motivo) {
+                          return <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivo}</span>;
+                        }
                         const f = FASES_PASEADOR.find((x) => x.id === (faseDiaPaseador[paseador] || "pendiente"));
                         return <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: f.bg, color: f.color }}>{f.nombre}</span>;
                       })()}
