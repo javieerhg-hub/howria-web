@@ -14,6 +14,8 @@ import {
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
 } from "./lib/calculosBoletas.js";
 import { jsPDF } from "jspdf";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, NAVY_LOGO,
   PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, ESTADOS_CLIENTE,
@@ -32,30 +34,7 @@ const EVENTOS_NOTIFICACION = [
 ];
 
 // ---------- Utilidades de mapa (OpenStreetMap, sin API key) ----------
-const MAPA_ZOOM = 12;
-const MAPA_TILES_ANCHO = 5;
-const MAPA_TILES_ALTO = 4;
 const SANTIAGO_CENTRO = { lat: -33.4489, lng: -70.6693 };
-
-function lonATileX(lon, zoom) { return (lon + 180) / 360 * Math.pow(2, zoom); }
-function latATileY(lat, zoom) {
-  const rad = (lat * Math.PI) / 180;
-  return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, zoom);
-}
-
-function origenMapa() {
-  const cx = lonATileX(SANTIAGO_CENTRO.lng, MAPA_ZOOM);
-  const cy = latATileY(SANTIAGO_CENTRO.lat, MAPA_ZOOM);
-  return { tileX: Math.floor(cx) - Math.floor(MAPA_TILES_ANCHO / 2), tileY: Math.floor(cy) - Math.floor(MAPA_TILES_ALTO / 2) };
-}
-
-// convierte lat/lng a posición en píxeles dentro del contenedor del mapa
-function coordAPixel(lat, lng) {
-  const origen = origenMapa();
-  const x = (lonATileX(lng, MAPA_ZOOM) - origen.tileX) * 256;
-  const y = (latATileY(lat, MAPA_ZOOM) - origen.tileY) * 256;
-  return { x, y };
-}
 
 async function geocodificarDireccion(direccion) {
   const q = encodeURIComponent(`${direccion}, Santiago, Chile`);
@@ -3452,6 +3431,9 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   const [ruta, setRuta] = useState(null);
   const [geocodificando, setGeocodificando] = useState(null);
   const [errorGeo, setErrorGeo] = useState("");
+  const mapaDivRef = useRef(null);
+  const mapaRef = useRef(null);
+  const marcadoresRef = useRef(null);
 
   const clientesDelPaseador = clientes.filter((c) => c.paseadorNombre === paseadorId);
 
@@ -3490,16 +3472,44 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
     setRuta({ orden, distanciaTotal, minutosViaje, minutosParadas, dinero });
   }
 
-  const origen = origenMapa();
-  const anchoMapa = MAPA_TILES_ANCHO * 256, altoMapa = MAPA_TILES_ALTO * 256;
-  const tiles = [];
-  for (let i = 0; i < MAPA_TILES_ANCHO; i++) {
-    for (let j = 0; j < MAPA_TILES_ALTO; j++) {
-      tiles.push({ x: i * 256, y: j * 256, url: `https://tile.openstreetmap.org/${MAPA_ZOOM}/${origen.tileX + i}/${origen.tileY + j}.png` });
-    }
-  }
-
   const clientesConMapa = clientes.filter((c) => c.lat && c.lng);
+
+  // Inicializa el mapa una sola vez.
+  useEffect(() => {
+    if (!mapaDivRef.current || mapaRef.current) return;
+    const mapa = L.map(mapaDivRef.current).setView([SANTIAGO_CENTRO.lat, SANTIAGO_CENTRO.lng], 12);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© colaboradores de OpenStreetMap",
+      maxZoom: 19,
+    }).addTo(mapa);
+    marcadoresRef.current = L.layerGroup().addTo(mapa);
+    mapaRef.current = mapa;
+    return () => { mapa.remove(); mapaRef.current = null; };
+  }, []);
+
+  // Redibuja los puntos (y ajusta el encuadre) cuando cambian los clientes
+  // ubicados o cuáles están incluidos en la ruta del paseador elegido.
+  useEffect(() => {
+    const mapa = mapaRef.current;
+    if (!mapa || !marcadoresRef.current) return;
+    marcadoresRef.current.clearLayers();
+    clientesConMapa.forEach((c) => {
+      const enRuta = c.paseadorNombre === paseadorId && incluidos[c.id];
+      L.circleMarker([c.lat, c.lng], {
+        radius: 9,
+        weight: 2,
+        color: "#FFFFFF",
+        fillColor: enRuta ? GOLD : NAVY,
+        fillOpacity: 1,
+      })
+        .bindTooltip(`${c.nombre} · ${c.perro}`)
+        .addTo(marcadoresRef.current);
+    });
+    if (clientesConMapa.length > 0) {
+      mapa.invalidateSize();
+      mapa.fitBounds(L.latLngBounds(clientesConMapa.map((c) => [c.lat, c.lng])), { padding: [40, 40], maxZoom: 15 });
+    }
+  }, [clientesConMapa, paseadorId, incluidos]);
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -3579,25 +3589,11 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
 
       <div className="howria-card" style={tarjeta}>
         <p style={label}>Mapa</p>
-        <div style={{ position: "relative", width: "100%", overflow: "auto", borderRadius: 8, border: "1px solid #E4DBC3", background: "#EDE4CE" }}>
-          <div style={{ position: "relative", width: anchoMapa, height: altoMapa }}>
-            {tiles.map((t, i) => (
-              <img key={i} src={t.url} alt="" style={{ position: "absolute", left: t.x, top: t.y, width: 256, height: 256 }} />
-            ))}
-            {clientesConMapa.map((c) => {
-              const p = coordAPixel(c.lat, c.lng);
-              const enRuta = c.paseadorNombre === paseadorId && incluidos[c.id];
-              return (
-                <div key={c.id} title={`${c.nombre} · ${c.perro}`}
-                  style={{
-                    position: "absolute", left: p.x - 9, top: p.y - 9, width: 18, height: 18, borderRadius: "50%",
-                    background: enRuta ? GOLD : NAVY, border: "2px solid #FFFFFF", boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
-                  }} />
-              );
-            })}
-          </div>
-        </div>
-        <p style={{ fontSize: 11, color: "#9A9179", marginTop: 8 }}>Mapa © colaboradores de OpenStreetMap. El punto dorado marca los clientes incluidos en la ruta calculada; el azul marino, los demás clientes ya ubicados.</p>
+        <div ref={mapaDivRef} style={{ width: "100%", height: 420, borderRadius: 8, border: "1px solid #E4DBC3", background: "#EDE4CE" }} />
+        {clientesConMapa.length === 0 && (
+          <p style={{ ...hint, marginTop: 8 }}>Todavía no hay ningún cliente ubicado — usa "Ubicar en el mapa" arriba.</p>
+        )}
+        <p style={{ fontSize: 11, color: "#9A9179", marginTop: 8 }}>El punto dorado marca los clientes incluidos en la ruta calculada; el azul marino, los demás clientes ya ubicados. Se puede hacer zoom y arrastrar (mouse o dedo).</p>
       </div>
     </div>
   );
