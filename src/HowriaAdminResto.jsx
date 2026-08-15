@@ -3716,6 +3716,8 @@ function TarjetaClienteArrastrable({ cliente: c, enConflicto, onToggle, onUbicar
       ) : (
         <button
           onClick={(e) => { e.stopPropagation(); onUbicar(c); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           disabled={!c.direccion || geocodificando === c.id}
           style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, flexShrink: 0 }}
         >

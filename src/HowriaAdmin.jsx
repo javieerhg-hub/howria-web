@@ -743,13 +743,17 @@ async function avisarInicioRonda(paseadorNombre) {
 // necesitan acumular fechas pasadas.
 function useFaseDiaPaseador(sessionVersion) {
   const [fases, setFasesState] = useState({});
+  // No es estado de React a propósito: solo lo lee/escribe actualizarFaseDia
+  // (siempre del propio paseador, ver ControlFaseDia en MisPaseos) para
+  // decidir si ya avisó hoy, así que no necesita re-renderizar nada.
+  const avisosEnviadosRef = useRef({});
 
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.from("fase_dia_paseador").select("*").eq("fecha", fechaKey(new Date()));
       if (!error && data) {
         const mapa = {};
-        data.forEach((r) => { mapa[r.paseador_nombre] = r.fase; });
+        data.forEach((r) => { mapa[r.paseador_nombre] = r.fase; avisosEnviadosRef.current[r.paseador_nombre] = r.aviso_enviado; });
         setFasesState(mapa);
       }
     })();
@@ -777,16 +781,20 @@ function useFaseDiaPaseador(sessionVersion) {
   function actualizarFaseDia(paseadorNombre, fase) {
     const anterior = fases[paseadorNombre];
     setFasesState((prev) => ({ ...prev, [paseadorNombre]: fase }));
-    supabase.from("fase_dia_paseador").upsert(
-      { paseador_nombre: paseadorNombre, fecha: fechaKey(new Date()), fase, actualizado_en: new Date().toISOString() },
-      { onConflict: "paseador_nombre,fecha" }
-    ).then(({ error }) => {
+    // Avisa una sola vez por paseador/día — si el paseador corrige un toque
+    // (vuelve a Pendiente y avanza de nuevo a En Recolección), no se le
+    // vuelve a mandar el mismo push a sus clientes.
+    const debeAvisar = fase === "en_recoleccion" && anterior !== "en_recoleccion" && !avisosEnviadosRef.current[paseadorNombre];
+    const cambios = { paseador_nombre: paseadorNombre, fecha: fechaKey(new Date()), fase, actualizado_en: new Date().toISOString() };
+    if (debeAvisar) cambios.aviso_enviado = true;
+    supabase.from("fase_dia_paseador").upsert(cambios, { onConflict: "paseador_nombre,fecha" }).then(({ error }) => {
       if (error) {
         showToast(`No se pudo guardar la fase: ${error.message}`);
         setFasesState((prev) => ({ ...prev, [paseadorNombre]: anterior }));
       }
     });
-    if (fase === "en_recoleccion" && anterior !== "en_recoleccion") {
+    if (debeAvisar) {
+      avisosEnviadosRef.current[paseadorNombre] = true;
       avisarInicioRonda(paseadorNombre);
     }
   }
