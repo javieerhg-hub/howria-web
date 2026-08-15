@@ -149,6 +149,8 @@ function boletaToDb(b) {
     estado: b.estado,
     fecha_pago: b.fechaPago || null,
     forma_pago: b.formaPago || null,
+    editada_por: b.editadaPor || null,
+    editada_en: b.editadaEn || null,
   };
 }
 
@@ -178,6 +180,8 @@ function dbToBoleta(row) {
     estado: row.estado,
     fechaPago: row.fecha_pago || undefined,
     formaPago: row.forma_pago || undefined,
+    editadaPor: row.editada_por || undefined,
+    editadaEn: row.editada_en || undefined,
   };
 }
 
@@ -246,6 +250,8 @@ function boletaAdiestramientoToDb(b) {
     estado: b.estado,
     fecha_pago: b.fechaPago || null,
     forma_pago: b.formaPago || null,
+    editada_por: b.editadaPor || null,
+    editada_en: b.editadaEn || null,
   };
 }
 
@@ -268,6 +274,8 @@ function dbToBoletaAdiestramiento(row) {
     estado: row.estado,
     fechaPago: row.fecha_pago || undefined,
     formaPago: row.forma_pago || undefined,
+    editadaPor: row.editada_por || undefined,
+    editadaEn: row.editada_en || undefined,
     fecha: new Date(row.fecha_hora).toLocaleDateString("es-CL"),
     fechaISO: row.fecha_hora,
   };
@@ -2574,7 +2582,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
 }
 
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -2697,7 +2705,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
             <div>
               {historialVentas.map((b) => (
                 <FilaBoletaVenta key={`${b._tipo}-${b.numero}`} boleta={b} tipo={b._tipo}
-                  setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} />
+                  setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} nombreUsuario={nombreUsuario} />
               ))}
             </div>
           )}
@@ -2708,7 +2716,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
-function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente }) {
+function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -2749,6 +2757,7 @@ function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, 
         onEditar={() => { setEditandoId(clientePerfil.id); setPerfilId(null); setMostrarForm(true); }}
         onEliminar={() => { setClientes((prev) => prev.filter((x) => x.id !== clientePerfil.id)); setPerfilId(null); }}
         puedeEliminar={puedeEliminar}
+        nombreUsuario={nombreUsuario}
       />
     );
   }
@@ -3584,7 +3593,7 @@ function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
 // ---------- Facturas ----------
 const FORMAS_PAGO = ["Transferencia", "Efectivo", "Webpay/Tarjeta", "Otro"];
 
-function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, cargandoBoletas }) {
+function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, cargandoBoletas, nombreUsuario }) {
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [filtroCliente, setFiltroCliente] = useState("todos");
   const [desde, setDesde] = useState("");
@@ -3727,7 +3736,12 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
                   return (
                     <React.Fragment key={claveFila}>
                       <tr style={{ borderTop: "1px solid #EDE4CE" }}>
-                        <td style={{ padding: "10px" }}>{String(b.numero).padStart(3, "0")}</td>
+                        <td style={{ padding: "10px" }}>
+                          {String(b.numero).padStart(3, "0")}
+                          {b.editadaPor && (
+                            <span title={`Corregida por ${b.editadaPor} el ${new Date(b.editadaEn).toLocaleString("es-CL")}`} style={{ marginLeft: 5, fontSize: 11, color: GOLD, cursor: "help" }}>✎</span>
+                          )}
+                        </td>
                         <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
                         <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
                         <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
@@ -3762,7 +3776,7 @@ function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, 
                         <tr>
                           <td colSpan={10} style={{ padding: "0 10px 12px" }}>
                             <EditorBoletaBasico boleta={b} tipo={b._tipo}
-                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, cambios); setEditandoBoleta(null); }}
+                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditandoBoleta(null); }}
                               onCancelar={() => setEditandoBoleta(null)} />
                           </td>
                         </tr>
@@ -7215,17 +7229,48 @@ function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
 }
 
 // Fila de una venta (boleta de paseo o de adiestramiento) con acciones: aceptar, marcar pagada, editar, eliminar.
-function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestramiento }) {
+function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestramiento, nombreUsuario }) {
   const [editando, setEditando] = useState(false);
   const [pagoPendiente, setPagoPendiente] = useState(false);
   const [fechaPagoForm, setFechaPagoForm] = useState(() => new Date().toISOString().slice(0, 10));
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
+  const [generandoComprobante, setGenerandoComprobante] = useState(false);
   const setBoletas = tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
   const est = ESTADOS_FACTURA.find((e) => e.id === boleta.estado) || ESTADOS_FACTURA[0];
 
   function confirmarPago() {
     editarBoleta(setBoletas, boleta._dbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
     setPagoPendiente(false);
+  }
+
+  // Comprobante bajo demanda: no hace falta mantener un canvas montado
+  // por cada fila del historial — se arma uno descartable solo cuando
+  // de verdad se pide descargar (ej. después de corregir el total).
+  async function descargarComprobanteActualizado() {
+    setGenerandoComprobante(true);
+    const logoImg = new Image();
+    const huellaImg = new Image();
+    await Promise.all([
+      new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = LOGO_B64; }),
+      new Promise((resolve) => { huellaImg.onload = resolve; huellaImg.onerror = resolve; huellaImg.src = HUELLA_B64; }),
+    ]);
+    const fuentes = tipo === "paseo"
+      ? ["700 23px Fraunces", "600 19px Fraunces", "600 14px Fraunces", "13px Inter", "600 13px Inter"]
+      : ["700 27px Fraunces", "700 19px Fraunces", "13px Inter"];
+    if (document.fonts?.ready) {
+      await Promise.all(fuentes.map((f) => document.fonts.load(f))).then(() => document.fonts.ready).catch(() => {});
+    }
+    const canvas = document.createElement("canvas");
+    if (tipo === "paseo") dibujarBoleta(canvas, boleta, logoImg, huellaImg);
+    else dibujarBoletaAdiestramiento(canvas, boleta, logoImg, huellaImg);
+    const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
+    doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+    const prefijo = tipo === "paseo" ? "Boleta" : "Boleta-Adiestramiento";
+    const link = document.createElement("a");
+    link.download = `${prefijo}-${String(boleta.numero).padStart(3, "0")}-${boleta.cliente.replace(/\s+/g, "-")}-corregida.pdf`;
+    link.href = URL.createObjectURL(doc.output("blob"));
+    link.click();
+    setGenerandoComprobante(false);
   }
 
   return (
@@ -7236,6 +7281,11 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
           <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
           {boleta.estado === "pagada" && boleta.formaPago && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>{boleta.formaPago} · {boleta.fechaPago}</span>
+          )}
+          {boleta.editadaPor && (
+            <span title={`Corregida por ${boleta.editadaPor} el ${new Date(boleta.editadaEn).toLocaleString("es-CL")}`} style={{ marginLeft: 8, fontSize: 11.5, color: GOLD, cursor: "help" }}>
+              ✎ corregida
+            </span>
           )}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -7253,6 +7303,12 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
               )}
               {boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
                 <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
+              )}
+              {boleta.editadaPor && (
+                <button onClick={descargarComprobanteActualizado} disabled={generandoComprobante}
+                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, opacity: generandoComprobante ? 0.5 : 1 }}>
+                  {generandoComprobante ? "Generando..." : "Descargar comprobante actualizado"}
+                </button>
               )}
               <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
               <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
@@ -7272,7 +7328,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
       )}
       {editando && (
         <EditorBoletaBasico boleta={boleta} tipo={tipo}
-          onGuardar={(cambios) => { editarBoleta(setBoletas, boleta._dbId, cambios); setEditando(false); }}
+          onGuardar={(cambios) => { editarBoleta(setBoletas, boleta._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditando(false); }}
           onCancelar={() => setEditando(false)} />
       )}
     </div>
@@ -7653,8 +7709,8 @@ export default function HowriaAdmin() {
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
         {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
-        {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} />}
+        {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
