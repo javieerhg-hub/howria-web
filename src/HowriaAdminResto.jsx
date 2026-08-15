@@ -2290,26 +2290,22 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
 
 // ---------- Boletas: selector de tipo (paseo/adiestramiento) ----------
 export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRegistrarBoleta, onRegistrarBoletaAdiestramiento, recargoPct, actualizarRecargoPct, rolActual }) {
-  // El entrenador nunca tuvo acceso a las boletas de paseo (solo a las de
-  // adiestramiento) — mismo criterio que Prospectos: es una regla fija del
-  // rol, no un permiso aparte configurable desde Usuarios.
-  const puedeVerPaseos = rolActual !== "entrenador";
-  const [tipo, setTipo] = useState(puedeVerPaseos ? "paseo" : "adiestramiento");
+  // El entrenador arranca en adiestramiento (su uso más frecuente) pero
+  // ahora puede pasar a boletas de paseo igual que coordinador/administrador.
+  const [tipo, setTipo] = useState(rolActual === "entrenador" ? "adiestramiento" : "paseo");
 
   return (
     <div>
-      {puedeVerPaseos && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          <button onClick={() => setTipo("paseo")}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "paseo" ? NAVY : "#EFE9D8", color: tipo === "paseo" ? CREAM : "#6B6248" }}>
-            <Receipt size={15} /> Paseos
-          </button>
-          <button onClick={() => setTipo("adiestramiento")}
-            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "adiestramiento" ? NAVY : "#EFE9D8", color: tipo === "adiestramiento" ? CREAM : "#6B6248" }}>
-            <GraduationCap size={15} /> Adiestramiento
-          </button>
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        <button onClick={() => setTipo("paseo")}
+          style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "paseo" ? NAVY : "#EFE9D8", color: tipo === "paseo" ? CREAM : "#6B6248" }}>
+          <Receipt size={15} /> Paseos
+        </button>
+        <button onClick={() => setTipo("adiestramiento")}
+          style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "adiestramiento" ? NAVY : "#EFE9D8", color: tipo === "adiestramiento" ? CREAM : "#6B6248" }}>
+          <GraduationCap size={15} /> Adiestramiento
+        </button>
+      </div>
       {tipo === "paseo" ? (
         <FormularioBoletaPaseo clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={onRegistrarBoleta} recargoPct={recargoPct} actualizarRecargoPct={actualizarRecargoPct} />
       ) : (
