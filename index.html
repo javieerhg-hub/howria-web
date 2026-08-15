@@ -7,10 +7,13 @@
     <meta name="description" content="Paseos y adiestramiento canino profesional en Santiago. Cuidamos y educamos a tu perro con método real y cariño genuino — nunca una fórmula estándar." />
     <link rel="icon" type="image/png" href="/logo-howria.png" />
 
-    <!-- En iPhone, las notificaciones push solo funcionan si el sitio se
-    agrega a la pantalla de inicio y se abre como "app" (limitación de
-    Apple, no del sitio) — estas etiquetas hacen que esa versión "app" se
-    vea bien (ícono, nombre, sin barra de Safari). -->
+    <!-- App instalable (PWA): en el celular se puede agregar a la pantalla
+    de inicio y se abre a pantalla completa, sin la barra del navegador —
+    entra directo al panel (start_url en manifest.json). En iPhone además
+    es requisito para que las notificaciones push funcionen (limitación de
+    Apple, no del sitio). -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#122A40" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Howria" />

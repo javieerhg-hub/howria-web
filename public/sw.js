@@ -1,7 +1,16 @@
-// Service worker mínimo, solo para Web Push (no cachea nada ni hace la app
-// instalable como PWA). Vive en /public para quedar servido en la raíz
+// Service worker: Web Push + lo mínimo para que la app sea instalable
+// (manifest.json + un service worker con handler de "fetch" registrado,
+// aunque no haga nada — así lo exigen los navegadores para el botón de
+// instalar). Sigue sin cachear nada a propósito: la app depende de datos
+// siempre frescos de Supabase, cachear respuestas viejas rompería el panel
+// en vez de ayudar. Vive en /public para quedar servido en la raíz
 // (/sw.js) — un service worker solo puede controlar el scope bajo el que
 // se sirve.
+self.addEventListener("fetch", () => {
+  // Sin respondWith(): cada pedido sigue yendo directo a la red, como si
+  // el service worker no existiera. Ver comentario de arriba.
+});
+
 self.addEventListener("push", (event) => {
   let datos = {};
   try {

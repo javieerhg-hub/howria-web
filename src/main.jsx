@@ -19,6 +19,17 @@ const pathname = window.location.pathname;
 const esAdmin = pathname.startsWith("/admin");
 const esAgendar = pathname.startsWith("/agendar") || pathname.startsWith("/agendaadiestrador");
 
+// Registra el service worker apenas se carga el panel (no pide ningún
+// permiso — eso sigue pasando solo cuando alguien activa notificaciones
+// push desde el botón). Es lo que le falta a la app instalable además del
+// manifest.json: los navegadores solo ofrecen "agregar a pantalla de
+// inicio" si ya hay un service worker activo, y antes solo se registraba
+// al tocar la campana. Solo en /admin — la landing pública y la reserva no
+// necesitan quedar "instalables".
+if (esAdmin && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
 function Cargando() {
   return (
     <div style={{ minHeight: "100vh", background: "#122A40", display: "flex", alignItems: "center", justifyContent: "center", color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>
