@@ -7,7 +7,7 @@
 // importa de HowriaAdmin.jsx, que lo exporta para este archivo.
 import { useState, useRef, useMemo, useEffect, Fragment } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Search, ArrowUpDown, Dog, Users, Banknote, GripVertical } from "lucide-react";
+import { Search, ArrowUpDown, Dog, Users, Banknote, GripVertical, Receipt, GraduationCap } from "lucide-react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import {
@@ -401,8 +401,8 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   ctx.fillText(line, x, curY);
 }
 
-// ---------- Generador de boletas ----------
-export function Boletas({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, actualizarRecargoPct }) {
+// ---------- Generador de boletas: formulario de paseos ----------
+function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, actualizarRecargoPct }) {
   const hoy = new Date();
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? null);
   const [filtroPaseador, setFiltroPaseador] = useState("todos");
@@ -1950,8 +1950,8 @@ function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg) {
   ctx.textAlign = "left";
 }
 
-// ---------- Boletas de adiestramiento ----------
-export function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
+// ---------- Generador de boletas: formulario de adiestramiento ----------
+function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
   const [clienteManual, setClienteManual] = useState(false);
   const [nombreManual, setNombreManual] = useState("");
@@ -2284,6 +2284,37 @@ export function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------- Boletas: selector de tipo (paseo/adiestramiento) ----------
+export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRegistrarBoleta, onRegistrarBoletaAdiestramiento, recargoPct, actualizarRecargoPct, rolActual }) {
+  // El entrenador nunca tuvo acceso a las boletas de paseo (solo a las de
+  // adiestramiento) — mismo criterio que Prospectos: es una regla fija del
+  // rol, no un permiso aparte configurable desde Usuarios.
+  const puedeVerPaseos = rolActual !== "entrenador";
+  const [tipo, setTipo] = useState(puedeVerPaseos ? "paseo" : "adiestramiento");
+
+  return (
+    <div>
+      {puedeVerPaseos && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <button onClick={() => setTipo("paseo")}
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "paseo" ? NAVY : "#EFE9D8", color: tipo === "paseo" ? CREAM : "#6B6248" }}>
+            <Receipt size={15} /> Paseos
+          </button>
+          <button onClick={() => setTipo("adiestramiento")}
+            style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tipo === "adiestramiento" ? NAVY : "#EFE9D8", color: tipo === "adiestramiento" ? CREAM : "#6B6248" }}>
+            <GraduationCap size={15} /> Adiestramiento
+          </button>
+        </div>
+      )}
+      {tipo === "paseo" ? (
+        <FormularioBoletaPaseo clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={onRegistrarBoleta} recargoPct={recargoPct} actualizarRecargoPct={actualizarRecargoPct} />
+      ) : (
+        <FormularioBoletaAdiestramiento clientes={clientes} onRegistrarBoleta={onRegistrarBoletaAdiestramiento} />
+      )}
     </div>
   );
 }

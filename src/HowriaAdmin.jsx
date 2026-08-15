@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
-  GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
+  FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -14,7 +14,6 @@ import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan } from "./lib/calculo
 // una vez resueltos; el resto del archivo los usa igual que si estuvieran
 // definidos acá mismo.
 const Boletas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Boletas })));
-const BoletasAdiestramiento = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.BoletasAdiestramiento })));
 const Facturas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Facturas })));
 const Clientes = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Clientes })));
 const Finanzas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Finanzas })));
@@ -946,7 +945,6 @@ export const TODOS_LOS_TABS = [
   { id: "mail", label: "Mail", grupo: "Trabajo diario" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y boletas" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y boletas" },
-  { id: "boletas-adiestramiento", label: "Boletas Adiestramiento", grupo: "Clientes y boletas" },
   { id: "facturas", label: "Facturas", grupo: "Clientes y boletas" },
   { id: "finanzas", label: "Finanzas", grupo: "Clientes y boletas" },
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
@@ -969,7 +967,6 @@ const ICONOS_TAB = {
   mail: MailIcon,
   clientes: Dog,
   boletas: Receipt,
-  "boletas-adiestramiento": GraduationCap,
   facturas: FileText,
   finanzas: TrendingUp,
   pagos: Banknote,
@@ -2961,7 +2958,7 @@ export function PullToRefresh() {
 
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
-const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "boletas-adiestramiento", "ingreso-personal", "usuarios"];
+const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "ingreso-personal", "usuarios"];
 
 function ItemBarraNav({ activo, Icono, label, onClick }) {
   if (activo) {
@@ -3308,8 +3305,14 @@ export default function HowriaAdmin() {
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
-        {tab === "boletas" && tabsPermitidosRol.includes("boletas") && <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT} actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)} />}
-        {tab === "boletas-adiestramiento" && tabsPermitidosRol.includes("boletas-adiestramiento") && <BoletasAdiestramiento clientes={clientes} onRegistrarBoleta={(b) => setBoletasAdiestramiento((prev) => [...prev, b])} />}
+        {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
+          <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
+            onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])}
+            onRegistrarBoletaAdiestramiento={(b) => setBoletasAdiestramiento((prev) => [...prev, b])}
+            recargoPct={configuracion?.recargo_fin_semana ?? RECARGO_FIN_SEMANA_FERIADO_DEFAULT}
+            actualizarRecargoPct={(v) => actualizarConfiguracion("recargo_fin_semana", v)}
+            rolActual={user.rol} />
+        )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} user={user} />}
