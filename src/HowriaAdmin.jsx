@@ -429,7 +429,7 @@ function dbToProspecto(row) {
 
 // cambio hecho con el setter (igual que useState) de vuelta a la base
 // de datos — inserta, actualiza o elimina según corresponda.
-function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0, selectFrom = tableName) {
+function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0, selectFrom = tableName, realtime = false) {
   const [items, setItemsState] = useState([]);
   const [cargando, setCargando] = useState(true);
   const insertando = useRef(new Set());
@@ -451,6 +451,35 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
     })();
     return () => { activo = false; };
   }, [sessionVersion]);
+
+  // Suscripción opcional a cambios en tiempo real (Supabase Realtime) —
+  // solo para tablas que varias personas usan a la vez el mismo día
+  // (ver useSyncedTable("citas_agenda", ..., realtime: true)). Escribe
+  // directo en setItemsState (no en setItems) para no volver a mandar a
+  // Supabase lo que Supabase mismo acaba de avisar. Respeta las políticas
+  // RLS que ya existan — un cliente solo recibe eventos de filas que ya
+  // podía leer.
+  useEffect(() => {
+    if (!realtime) return;
+    const canal = supabase
+      .channel(`${tableName}-realtime`)
+      .on("postgres_changes", { event: "*", schema: "public", table: tableName }, (payload) => {
+        setItemsState((prev) => {
+          if (payload.eventType === "DELETE") {
+            return prev.filter((x) => x._dbId !== payload.old.id);
+          }
+          const idx = prev.findIndex((x) => x._dbId === payload.new.id);
+          if (idx === -1) {
+            return [...prev, { ...mapFromDb(payload.new), id: Date.now() + Math.random(), _dbId: payload.new.id }];
+          }
+          const copia = [...prev];
+          copia[idx] = { ...mapFromDb(payload.new), id: copia[idx].id, _dbId: payload.new.id };
+          return copia;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
+  }, [realtime, sessionVersion]);
 
   function sincronizar(prev, next) {
     const prevByDbId = new Map(prev.filter((x) => x._dbId).map((x) => [x._dbId, x]));
@@ -538,6 +567,39 @@ function useRegistroPaseosSincronizado(clientes) {
         setRegistroState(mapa);
       }
     })();
+  }, [clientes]);
+
+  // Tiempo real: si un paseador marca un paseo desde su celular mientras
+  // un coordinador está mirando la pantalla, que se actualice sola en vez
+  // de esperar a que alguien recargue.
+  useEffect(() => {
+    if (clientes.length === 0) return;
+    const canal = supabase
+      .channel("registro_paseos-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "registro_paseos" }, (payload) => {
+        const fila = payload.eventType === "DELETE" ? payload.old : payload.new;
+        const cliente = clientes.find((c) => c._dbId === fila.cliente_id);
+        if (!cliente) return;
+        const clave = `${cliente.id}_${fila.fecha}`;
+        setRegistroState((prev) => {
+          if (payload.eventType === "DELETE") {
+            const copia = { ...prev };
+            delete copia[clave];
+            return copia;
+          }
+          return {
+            ...prev,
+            [clave]: {
+              realizado: fila.estado === "realizado",
+              cancelado: fila.estado === "cancelado",
+              nota: fila.nota || "",
+              paseadorNombre: fila.paseador_nombre || null,
+            },
+          };
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
   }, [clientes]);
 
   function setRegistro(updater) {
@@ -947,6 +1009,27 @@ function useCorreos(sessionVersion) {
       setCargando(false);
     });
     return () => { activo = false; };
+  }, [sessionVersion]);
+
+  // Tiempo real: un correo nuevo (entrante desde api/correo-entrante.js, o
+  // saliente desde otra persona respondiendo al mismo tiempo) aparece solo,
+  // sin esperar a recargar la pestaña Mail.
+  useEffect(() => {
+    const canal = supabase
+      .channel("correos-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "correos" }, (payload) => {
+        setCorreos((prev) => {
+          if (payload.eventType === "DELETE") return prev.filter((c) => c.id !== payload.old.id);
+          const mapeado = dbToCorreo(payload.new);
+          const idx = prev.findIndex((c) => c.id === mapeado.id);
+          if (idx === -1) return [mapeado, ...prev];
+          const copia = [...prev];
+          copia[idx] = mapeado;
+          return copia;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
   }, [sessionVersion]);
 
   return [correos, setCorreos, cargando];
@@ -7513,7 +7596,7 @@ export default function HowriaAdmin() {
   const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
-  const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion);
+  const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
   const [disponibilidad, actualizarDisponibilidad] = useDisponibilidad(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
