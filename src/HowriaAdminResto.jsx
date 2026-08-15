@@ -1580,7 +1580,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], user }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], user, onVerPagos }) {
   const [periodo, setPeriodo] = useState("semana");
   const hoy = new Date();
 
@@ -1741,6 +1741,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosPeriodo)}</p>
+            {onVerPagos && (
+              <button onClick={onVerPagos} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0, marginTop: 8 }}>
+                Ver en Pago trabajadores →
+              </button>
+            )}
           </div>
         )}
         {!vistaPersonal && (
