@@ -2069,6 +2069,14 @@ export function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
     return doc.output("blob");
   }
 
+  function descargarPNG() {
+    if (!canvasRef.current) return;
+    const link = document.createElement("a");
+    link.download = `Boleta-Adiestramiento-${String(emitida.numero).padStart(3, "0")}-${emitida.cliente.replace(/\s+/g, "-")}.png`;
+    link.href = canvasRef.current.toDataURL("image/png");
+    link.click();
+  }
+
   function descargarPDF() {
     if (!canvasRef.current || !emitida) return;
     const blob = generarPdfBlob();
@@ -2269,6 +2277,7 @@ export function BoletasAdiestramiento({ clientes, onRegistrarBoleta }) {
           <>
             <canvas ref={canvasRef} style={{ width: "100%", maxWidth: 380, border: "1px solid #EDE4CE", borderRadius: 8, display: "block", margin: "0 auto 16px" }} />
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={descargarPNG} style={{ ...botonPrincipal, marginTop: 0 }}>Descargar PNG</button>
               <button onClick={descargarPDF} style={{ ...botonSecundario, borderColor: NAVY, color: NAVY }}>Descargar PDF</button>
               <button onClick={enviarWhatsapp} style={{ ...botonSecundario, borderColor: "#2F6A46", color: "#2F6A46" }}>Enviar por WhatsApp</button>
             </div>
@@ -2380,7 +2389,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
       </div>
 
       <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-        <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+        <div style={{ position: "relative" }}>
+          <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
+        </div>
         <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
           <option value="todos">Todos los clientes</option>
           {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -2395,20 +2408,6 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
         <span>{lista.length} factura(s) en este listado</span>
         <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
       </div>
-
-      {pagoPendienteDbId && (
-        <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 14, marginBottom: 14 }}>
-          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#2F6A46" }}>Confirmar pago de la boleta N°{String(pagoPendienteNumero).padStart(3, "0")}</p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 160 }} />
-            <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 180 }}>
-              {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Confirmar</button>
-            <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
-          </div>
-        </div>
-      )}
 
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
@@ -2479,6 +2478,20 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                           )}
                         </td>
                       </tr>
+                      {pagoPendienteDbId === b._dbId && (
+                        <tr>
+                          <td colSpan={10} style={{ padding: "0 10px 12px" }}>
+                            <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                              <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
+                              <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
+                                {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                              <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
+                              <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                       {editandoBoleta === claveFila && (
                         <tr>
                           <td colSpan={10} style={{ padding: "0 10px 12px" }}>
@@ -2788,12 +2801,18 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                       style={{ border: "1px solid #E4DBC3", background: "none", color: NAVY, borderRadius: 6, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
                       Capacitación {(u.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {capacitacionAbiertaId === u.id ? "▴" : "▾"}
                     </button>
-                    <select value={u.rol} onChange={(e) => actualizarRol(u.id, e.target.value)} style={{ ...input, marginBottom: 0, width: 170, padding: "8px 10px", fontSize: 13 }}>
-                      <option value="paseador">Paseador</option>
-                      <option value="entrenador">Entrenador</option>
-                      <option value="coordinador">Coordinador</option>
-                      <option value="administrador">Administrador general</option>
-                    </select>
+                    {esAdmin ? (
+                      <select value={u.rol} onChange={(e) => actualizarRol(u.id, e.target.value)} style={{ ...input, marginBottom: 0, width: 170, padding: "8px 10px", fontSize: 13 }}>
+                        <option value="paseador">Paseador</option>
+                        <option value="entrenador">Entrenador</option>
+                        <option value="coordinador">Coordinador</option>
+                        <option value="administrador">Administrador general</option>
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 12.5, color: "#6B6248" }}>
+                        {{ paseador: "Paseador", entrenador: "Entrenador", coordinador: "Coordinador", administrador: "Administrador general" }[u.rol] || u.rol}
+                      </span>
+                    )}
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6B6248" }}>
                       Máx. perros/manada
                       <input type="number" min="0" placeholder="sin límite" value={u.capacidadMaxima ?? ""} onChange={(e) => actualizarCapacidad(u.id, e.target.value)}
@@ -2809,11 +2828,13 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                         label={reseteandoId === u.id ? "Reseteando..." : "Resetear contraseña"}
                         style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5 }} />
                     )}
-                    <button onClick={() => setBorrarId(u.id)} disabled={esUsuarioActual}
-                      title={esUsuarioActual ? "No puedes eliminar tu propia cuenta" : "Eliminar"}
-                      style={{ border: "none", background: "none", color: esUsuarioActual ? "#C9BFA0" : RUST, cursor: esUsuarioActual ? "not-allowed" : "pointer", fontSize: 12.5 }}>
-                      Eliminar
-                    </button>
+                    {esAdmin && (
+                      <button onClick={() => setBorrarId(u.id)} disabled={esUsuarioActual}
+                        title={esUsuarioActual ? "No puedes eliminar tu propia cuenta" : "Eliminar"}
+                        style={{ border: "none", background: "none", color: esUsuarioActual ? "#C9BFA0" : RUST, cursor: esUsuarioActual ? "not-allowed" : "pointer", fontSize: 12.5 }}>
+                        Eliminar
+                      </button>
+                    )}
                   </div>
                 </div>
                 {capacitacionAbiertaId === u.id && (
