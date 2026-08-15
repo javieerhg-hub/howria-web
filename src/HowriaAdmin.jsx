@@ -829,11 +829,6 @@ function usePermisosRoles(sessionVersion) {
   return [permisos, actualizarPermiso];
 }
 
-const EVENTOS_NOTIFICACION = [
-  { id: "cita", label: "Nueva solicitud de cita" },
-  { id: "correo", label: "Nuevo correo entrante" },
-];
-
 // Igual que usePermisosRoles pero para notificaciones_roles (qué rol recibe
 // qué aviso push) — misma cola por rol para que marcar varias seguidas no
 // se pise entre sí.
@@ -1110,64 +1105,6 @@ export const ESTADOS_FACTURA = [
 
 export function fmtCLP(n) {
   return Number(n || 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
-}
-
-// ---------- Utilidades de mapa (OpenStreetMap, sin API key) ----------
-const MAPA_ZOOM = 12;
-const MAPA_TILES_ANCHO = 5;
-const MAPA_TILES_ALTO = 4;
-const SANTIAGO_CENTRO = { lat: -33.4489, lng: -70.6693 };
-
-function lonATileX(lon, zoom) { return (lon + 180) / 360 * Math.pow(2, zoom); }
-function latATileY(lat, zoom) {
-  const rad = (lat * Math.PI) / 180;
-  return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, zoom);
-}
-
-function origenMapa() {
-  const cx = lonATileX(SANTIAGO_CENTRO.lng, MAPA_ZOOM);
-  const cy = latATileY(SANTIAGO_CENTRO.lat, MAPA_ZOOM);
-  return { tileX: Math.floor(cx) - Math.floor(MAPA_TILES_ANCHO / 2), tileY: Math.floor(cy) - Math.floor(MAPA_TILES_ALTO / 2) };
-}
-
-// convierte lat/lng a posición en píxeles dentro del contenedor del mapa
-function coordAPixel(lat, lng) {
-  const origen = origenMapa();
-  const x = (lonATileX(lng, MAPA_ZOOM) - origen.tileX) * 256;
-  const y = (latATileY(lat, MAPA_ZOOM) - origen.tileY) * 256;
-  return { x, y };
-}
-
-async function geocodificarDireccion(direccion) {
-  const q = encodeURIComponent(`${direccion}, Santiago, Chile`);
-  const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
-  const datos = await resp.json();
-  if (!datos?.length) return null;
-  return { lat: Number(datos[0].lat), lng: Number(datos[0].lon) };
-}
-
-function distanciaKm(a, b) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
-}
-
-function ordenarRutaCercanoMasProximo(puntos) {
-  if (puntos.length <= 1) return puntos;
-  const restantes = [...puntos];
-  const ruta = [restantes.shift()];
-  while (restantes.length) {
-    const ultimo = ruta[ruta.length - 1];
-    let mejorIdx = 0, mejorDist = Infinity;
-    restantes.forEach((p, i) => {
-      const d = distanciaKm(ultimo, p);
-      if (d < mejorDist) { mejorDist = d; mejorIdx = i; }
-    });
-    ruta.push(restantes.splice(mejorIdx, 1)[0]);
-  }
-  return ruta;
 }
 
 function LogoHowria({ height = 40 }) {
