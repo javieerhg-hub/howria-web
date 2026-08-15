@@ -2346,7 +2346,7 @@ export function PuntoClave({ label, valor }) {
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [] }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -2391,6 +2391,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     return (
       <div style={{ display: "grid", gap: 20 }}>
         {encabezado}
+        <LauncherMobile tabs={tabs} setTab={setTab} />
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Clientes por atender</h2>
           <p style={{ ...hint, marginTop: 8 }}>Citas que ya aceptaste en Agenda — cada una queda acá hasta que la marques como realizada.</p>
@@ -2510,12 +2511,52 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
   );
 }
 
+// Grid de íconos tipo "app launcher" que aparece arriba de Inicio en
+// mobile — mismo para administrador/coordinador y para el entrenador,
+// cada uno con sus propias pestañas permitidas (tabs ya viene filtrado
+// por rol desde App()).
+function LauncherMobile({ tabs, setTab }) {
+  if (!tabs) return null;
+  return (
+    <div className="howria-launcher-mobile" style={{ display: "none" }}>
+      {ORDEN_GRUPOS.map((grupo) => {
+        const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+        if (tabsDelGrupo.length === 0) return null;
+        return (
+          <div key={grupo} style={{ marginBottom: 18 }}>
+            <p style={{ ...label, marginBottom: 10 }}>{grupo}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {tabsDelGrupo.map((t, i) => {
+                const Icono = ICONOS_TAB[t.id] || Home;
+                const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                      padding: "16px 6px", border: "none", borderRadius: 16, background: "#FFFFFF",
+                      boxShadow: "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
+                    }}>
+                    <span style={{ width: 46, height: 46, borderRadius: 14, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flex: "none" }}>
+                      <Icono size={21} />
+                    </span>
+                    <span style={{ fontSize: 11.5, color: INK, textAlign: "center", lineHeight: 1.25, fontWeight: 500 }}>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- Inicio (dashboard) ----------
 function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
 
@@ -2573,38 +2614,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
         </div>
       </div>
 
-      {tabs && (
-        <div className="howria-launcher-mobile" style={{ display: "none" }}>
-          {ORDEN_GRUPOS.map((grupo) => {
-            const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
-            if (tabsDelGrupo.length === 0) return null;
-            return (
-              <div key={grupo} style={{ marginBottom: 18 }}>
-                <p style={{ ...label, marginBottom: 10 }}>{grupo}</p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-                  {tabsDelGrupo.map((t, i) => {
-                    const Icono = ICONOS_TAB[t.id] || Home;
-                    const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
-                    return (
-                      <button key={t.id} onClick={() => setTab(t.id)}
-                        style={{
-                          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                          padding: "16px 6px", border: "none", borderRadius: 16, background: "#FFFFFF",
-                          boxShadow: "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
-                        }}>
-                        <span style={{ width: 46, height: 46, borderRadius: 14, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flex: "none" }}>
-                          <Icono size={21} />
-                        </span>
-                        <span style={{ fontSize: 11.5, color: INK, textAlign: "center", lineHeight: 1.25, fontWeight: 500 }}>{t.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <LauncherMobile tabs={tabs} setTab={setTab} />
 
       {avisos.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
