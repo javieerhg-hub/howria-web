@@ -308,13 +308,6 @@ function dbToPago(row) {
   };
 }
 
-function equipoToDb(p) {
-  return { nombre: p.nombre };
-}
-function dbToEquipo(row) {
-  return { nombre: row.nombre };
-}
-
 function objetivoSemanalToDb(o) {
   return { texto: o.texto, asignado_a: o.asignadoA || null, semana_key: o.semanaKey, cumplido: o.cumplido };
 }
@@ -5727,7 +5720,7 @@ function IngresoPersonalNuevo({ clientes, setClientes, usuarios, setUsuarios }) 
 }
 
 // ---------- Equipo (organización de trabajo interno) ----------
-function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando }) {
+function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando }) {
   const hoy = new Date();
   const [semanaOffset, setSemanaOffset] = useState(0);
   const fechaRef = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + semanaOffset * 7); return d; }, [semanaOffset]);
@@ -5744,7 +5737,6 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
   const [nuevaTarea, setNuevaTarea] = useState("");
   const [asignadoTarea, setAsignadoTarea] = useState("");
   const [enlaceTarea, setEnlaceTarea] = useState("");
-  const [nuevoMiembro, setNuevoMiembro] = useState("");
 
   const diasSemanaVista = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(desde); d.setDate(d.getDate() + i); return d; }), [desde]);
 
@@ -5789,13 +5781,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
     setTareas((prev) => prev.filter((t) => t.id !== id));
   }
 
-  function agregarMiembro() {
-    if (!nuevoMiembro.trim() || equipo.some((p) => p.nombre === nuevoMiembro.trim())) return;
-    setEquipo((prev) => [...prev, { id: Date.now(), nombre: nuevoMiembro.trim() }]);
-    setNuevoMiembro("");
-  }
-
-  const progresoPorPersona = equipo.map((p) => {
+  const progresoPorPersona = usuarios.map((p) => {
     const suyas = tareasSemana.filter((t) => t.asignadoA === p.nombre);
     const hechas = suyas.filter((t) => t.estado === "hecho").length;
     return { persona: p.nombre, total: suyas.length, hechas };
@@ -5826,14 +5812,11 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
 
         <p style={{ ...label, marginTop: 16 }}>Equipo</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-          {equipo.map((persona) => (
+          {usuarios.map((persona) => (
             <span key={persona.id} style={{ padding: "6px 14px", borderRadius: 20, background: CREAM_SOFT, color: NAVY, fontSize: 13, fontWeight: 600 }}>{persona.nombre}</span>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input placeholder="Agregar persona al equipo" value={nuevoMiembro} onChange={(e) => setNuevoMiembro(e.target.value)} style={{ ...input, marginBottom: 0, maxWidth: 260 }} />
-          <button onClick={agregarMiembro} disabled={!nuevoMiembro.trim()} style={{ ...botonSecundario, padding: "8px 16px", opacity: !nuevoMiembro.trim() ? 0.5 : 1 }}>Agregar</button>
-        </div>
+        <p style={hint}>Para agregar o sacar a alguien del equipo, hazlo desde la pestaña "Usuarios".</p>
       </div>
 
       <div className="howria-card" style={tarjeta}>
@@ -5867,7 +5850,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
               <input placeholder="Nuevo objetivo de la semana" value={nuevoObjetivo} onChange={(e) => setNuevoObjetivo(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               <select value={asignadoObjetivo} onChange={(e) => setAsignadoObjetivo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 <option value="">Equipo (todos)</option>
-                {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                {usuarios.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
               <button onClick={agregarObjetivo} disabled={!nuevoObjetivo.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevoObjetivo.trim() ? 0.5 : 1 }}>Agregar</button>
             </div>
@@ -5894,7 +5877,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
               <input placeholder="Nuevo objetivo del mes" value={nuevoObjetivoMes} onChange={(e) => setNuevoObjetivoMes(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               <select value={asignadoObjetivoMes} onChange={(e) => setAsignadoObjetivoMes(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 <option value="">Equipo (todos)</option>
-                {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                {usuarios.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
               </select>
               <button onClick={agregarObjetivoMes} disabled={!nuevoObjetivoMes.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevoObjetivoMes.trim() ? 0.5 : 1 }}>Agregar</button>
             </div>
@@ -5940,7 +5923,7 @@ function EquipoTrabajo({ equipo, setEquipo, objetivos = [], setObjetivos, objeti
           <input placeholder="Nueva tarea para este día" value={nuevaTarea} onChange={(e) => setNuevaTarea(e.target.value)} style={{ ...input, marginBottom: 0 }} />
           <select value={asignadoTarea} onChange={(e) => setAsignadoTarea(e.target.value)} style={{ ...input, marginBottom: 0 }}>
             <option value="">Sin asignar</option>
-            {equipo.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+            {usuarios.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
           </select>
           <input placeholder="Enlace a documento (opcional)" value={enlaceTarea} onChange={(e) => setEnlaceTarea(e.target.value)} style={{ ...input, marginBottom: 0 }} />
           <button onClick={agregarTarea} disabled={!nuevaTarea.trim()} style={{ ...botonPrincipal, width: "auto", padding: "0 20px", marginTop: 0, opacity: !nuevaTarea.trim() ? 0.5 : 1 }}>Agregar</button>
@@ -7527,7 +7510,6 @@ export default function HowriaAdmin() {
     setUser(null);
   }
 
-  const [equipoInterno, setEquipoInterno, cargandoEquipoInterno] = useSyncedTable("equipo_interno", equipoToDb, dbToEquipo, "nombre", sessionVersion);
   const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
@@ -7540,7 +7522,7 @@ export default function HowriaAdmin() {
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [enfoqueEmailProspecto, setEnfoqueEmailProspecto] = useState(null);
   const correosNoLeidos = correos.filter((c) => c.direccion === "entrante" && !c.leido).length;
-  const cargandoEquipo = cargandoEquipoInterno || cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
+  const cargandoEquipo = cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
 
   if (clientesParaElegir) {
     return (
@@ -7716,7 +7698,7 @@ export default function HowriaAdmin() {
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} />}
         {tab === "ingreso-personal" && tabsPermitidosRol.includes("ingreso-personal") && <IngresoPersonalNuevo clientes={clientes} setClientes={setClientes} usuarios={usuarios} setUsuarios={setUsuarios} />}
-        {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo equipo={equipoInterno} setEquipo={setEquipoInterno} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
+        {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidad={disponibilidad} actualizarDisponibilidad={actualizarDisponibilidad} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
