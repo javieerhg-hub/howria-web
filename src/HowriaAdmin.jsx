@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   GraduationCap, FileText, TrendingUp, Banknote, Users, UserPlus, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
+  MessageCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -1891,6 +1892,21 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     setNotaTexto("");
   }
 
+  // WhatsApp no tiene forma de publicar automáticamente dentro de un grupo
+  // ya existente (solo mensajes 1 a 1 vía su API oficial) — así que en vez
+  // de mandarlo solo, se copia el texto al portapapeles para que el
+  // paseador lo pegue a mano en el grupo del cliente. Mismo mensaje que ya
+  // recibe el tutor por push en api/avisar-inicio-ronda.js.
+  async function copiarAvisoWhatsapp(cliente) {
+    const texto = `¡Hola! 🐾 ${user.nombre} ya salió a hacer su ronda de hoy — pronto pasará a buscar a ${cliente.perro}.`;
+    try {
+      await navigator.clipboard.writeText(texto);
+      showToast(`Mensaje copiado — pégalo en el grupo de WhatsApp de ${cliente.nombre}.`, "info");
+    } catch {
+      showToast("No se pudo copiar el mensaje. Intenta de nuevo.");
+    }
+  }
+
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
     const idxHoy = (hoy.getDay() + 6) % 7;
     return idxHoy;
@@ -1989,6 +2005,16 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                     <button onClick={() => toggleCancelado(c.id, hoy)}
                       style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: cancelado ? GOLD : "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
                       {cancelado ? "Deshacer — el cliente no canceló" : "El cliente canceló"}
+                    </button>
+                  )}
+                  {!hecho && !cancelado && faseDiaPaseador[user.nombre] && faseDiaPaseador[user.nombre] !== "pendiente" && (
+                    <button onClick={() => copiarAvisoWhatsapp(c)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", marginTop: 10,
+                        padding: "10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.07)",
+                        color: CREAM, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      <MessageCircle size={14} /> Copiar aviso de WhatsApp
                     </button>
                   )}
                 </div>
