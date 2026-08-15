@@ -76,6 +76,7 @@ no un runner de migraciones.
 | 048 | `usuarios_capacidad_maxima.sql` | 2026-08-15 | Agrega `capacidad_maxima` a `usuarios` (límite de perros por paseador, nullable = sin límite configurado). |
 | 049 | `fase_dia_paseador.sql` | 2026-08-15 | Crea `fase_dia_paseador` (consola de estados en vivo: una fase por paseador/día — Pendiente/En Recolección/En Parque/En Retorno/Completado), agregada a `supabase_realtime`. |
 | 050 | `fase_dia_paseador_aviso_enviado.sql` | 2026-08-15 | Agrega `aviso_enviado` a `fase_dia_paseador` (evita re-mandar el push de inicio de ronda si el paseador corrige un toque y vuelve a entrar a "En Recolección" el mismo día). |
+| 051 | `prospectos_direccion.sql` | 2026-08-15 | Agrega `direccion` a `prospectos` (la agenda pública ahora la pide/confirma). |
 
 ## Nota sobre el orden 001–023
 

@@ -4937,7 +4937,7 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   );
 }
 // ---------- Seguimiento de prospectos (ventas) ----------
-const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
+const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", direccion: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
 export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque }) {
   // Solo tiene sentido ofrecer como "responsable" a alguien que de verdad
@@ -4985,7 +4985,7 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
     setClientes((prev) => [...prev, {
       id: Date.now(), nombre: p.nombre, perro: p.perro || "Sin nombre", telefono: p.telefono, email: p.email || null,
       valorPaseoRef: 0, raza: "", pesoKg: 0, fotoUrl: null, diasHabituales: [], planHabitual: "LV",
-      objetivos: "", paseadorNombre: "", tarifaPaseador: 0, direccion: "", lat: null, lng: null, tipoServicio: p.tipoServicio,
+      objetivos: "", paseadorNombre: "", tarifaPaseador: 0, direccion: p.direccion || "", lat: null, lng: null, tipoServicio: p.tipoServicio,
     }]);
     setProspectos((prev) => prev.filter((x) => x.id !== p.id));
   }
@@ -5040,6 +5040,8 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
                 <option value="">Sin asignar</option>
                 {usuariosConAccesoSeguimiento.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
               </select>
+              <input placeholder="Dirección (si la sabes)" value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+                style={{ ...input, marginBottom: 0, gridColumn: "1 / -1" }} />
             </div>
             <p style={{ ...label, marginTop: 12 }} id="prospecto-interes-label">Interés en</p>
             <div role="group" aria-labelledby="prospecto-interes-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
@@ -5112,6 +5114,7 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
                     {p.telefono || "sin teléfono"} {p.email && `· ${p.email}`} {p.perro && `· 🐾 ${p.perro}`} · {p.origen}
                     {p.tipoServicio?.length > 0 && ` · interés: ${p.tipoServicio.map((t) => TIPOS_SERVICIO.find((x) => x.id === t)?.nombre).join(", ")}`}
                   </p>
+                  {p.direccion && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>📍 {p.direccion}</p>}
                   <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>
                     Responsable: <b style={{ color: p.asignadoA ? NAVY : "#8A7E5C" }}>{p.asignadoA || "sin asignar"}</b>
                   </p>

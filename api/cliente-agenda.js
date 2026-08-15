@@ -72,7 +72,7 @@ export default async function handler(req, res) {
     if (clienteId) {
       const { data: clienteRow, error: clienteErr } = await admin
         .from("clientes")
-        .select("id, nombre, perro, tipo_servicio")
+        .select("id, nombre, perro, tipo_servicio, direccion")
         .eq("id", clienteId)
         .maybeSingle();
       if (clienteErr || !clienteRow) {
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
     }
 
     res.status(200).json({
-      cliente: cliente ? { nombre: cliente.nombre, perro: cliente.perro, tipoServicio: cliente.tipo_servicio || [] } : null,
+      cliente: cliente ? { nombre: cliente.nombre, perro: cliente.perro, tipoServicio: cliente.tipo_servicio || [], direccion: cliente.direccion || "" } : null,
       puedeAgendar,
       adiestradores: (usuarios || []).map((u) => u.nombre),
       disponibilidad: (disponibilidad || []).map((d) => ({ adiestrador: d.adiestrador, diaSemana: d.dia_semana, horaInicio: d.hora_inicio, horaFin: d.hora_fin })),
@@ -122,13 +122,17 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "POST") {
-    const { clienteId, nombre, email, telefono, perro, adiestrador, tipo, fechaISO } = req.body || {};
+    const { clienteId, nombre, email, telefono, perro, direccion, adiestrador, tipo, fechaISO } = req.body || {};
     if (!adiestrador || !tipo || !fechaISO) {
       res.status(400).json({ error: "Faltan datos de la solicitud" });
       return;
     }
-    if (!clienteId && (!nombre?.trim() || !email?.trim() || !telefono?.trim() || !perro?.trim())) {
-      res.status(400).json({ error: "Faltan tus datos de contacto (nombre, correo, teléfono y perro)" });
+    if (!clienteId && (!nombre?.trim() || !email?.trim() || !telefono?.trim() || !perro?.trim() || !direccion?.trim())) {
+      res.status(400).json({ error: "Faltan tus datos de contacto (nombre, correo, teléfono, perro y dirección)" });
+      return;
+    }
+    if (clienteId && !direccion?.trim()) {
+      res.status(400).json({ error: "Falta confirmar tu dirección" });
       return;
     }
     if (!clienteId && !/^\S+@\S+\.\S+$/.test(email.trim())) {
@@ -160,6 +164,10 @@ export default async function handler(req, res) {
         return;
       }
       cliente = clienteRow;
+      // Guarda la dirección confirmada/editada en el formulario — así queda
+      // al día para geocodificar en Mapa aunque el cliente nunca pise el
+      // panel de administración.
+      await admin.from("clientes").update({ direccion: direccion.trim() }).eq("id", clienteId);
     }
 
     const { data: entrenador } = await admin.from("usuarios").select("nombre").eq("nombre", adiestrador).eq("rol", "entrenador").maybeSingle();
@@ -213,6 +221,7 @@ export default async function handler(req, res) {
           email: email.trim(),
           telefono: telefono.trim(),
           perro: perro.trim(),
+          direccion: direccion.trim(),
           origen: "Agenda pública",
           tipo_servicio: [tipo === "evaluacion" ? "evaluacion" : "clases"],
           estado: "nuevo",

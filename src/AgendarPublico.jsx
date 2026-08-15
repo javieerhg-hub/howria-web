@@ -54,6 +54,7 @@ export default function AgendarPublico() {
   const [contactoEmail, setContactoEmail] = useState("");
   const [contactoTelefono, setContactoTelefono] = useState("");
   const [contactoPerro, setContactoPerro] = useState("");
+  const [contactoDireccion, setContactoDireccion] = useState("");
 
   useEffect(() => {
     const url = clienteId ? `/api/cliente-agenda?clienteId=${encodeURIComponent(clienteId)}` : "/api/cliente-agenda";
@@ -67,6 +68,7 @@ export default function AgendarPublico() {
         } else {
           setInfo(data);
           setAdiestrador(data.adiestradores[0] || "");
+          if (data.cliente) setContactoDireccion(data.cliente.direccion || "");
         }
         setCargando(false);
       })
@@ -90,7 +92,9 @@ export default function AgendarPublico() {
     return () => { activo = false; };
   }, [adiestrador, fecha, clienteId]);
 
-  const faltanDatosContacto = !clienteId && (!contactoNombre.trim() || !contactoEmail.trim() || !contactoTelefono.trim() || !contactoPerro.trim());
+  const faltanDatosContacto = !clienteId
+    ? (!contactoNombre.trim() || !contactoEmail.trim() || !contactoTelefono.trim() || !contactoPerro.trim() || !contactoDireccion.trim())
+    : !contactoDireccion.trim();
 
   // Si no hay una tarifa cargada para este adiestrador+tipo, antes se
   // ocultaba el precio en silencio y se podía reservar igual (el servidor
@@ -107,8 +111,8 @@ export default function AgendarPublico() {
     setErrorEnvio("");
     try {
       const body = clienteId
-        ? { clienteId, adiestrador, tipo, fechaISO: horaSel }
-        : { nombre: contactoNombre.trim(), email: contactoEmail.trim(), telefono: contactoTelefono.trim(), perro: contactoPerro.trim(), adiestrador, tipo, fechaISO: horaSel };
+        ? { clienteId, direccion: contactoDireccion.trim(), adiestrador, tipo, fechaISO: horaSel }
+        : { nombre: contactoNombre.trim(), email: contactoEmail.trim(), telefono: contactoTelefono.trim(), perro: contactoPerro.trim(), direccion: contactoDireccion.trim(), adiestrador, tipo, fechaISO: horaSel };
       const resp = await fetch("/api/cliente-agenda", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,6 +176,18 @@ export default function AgendarPublico() {
 
                   <label style={label} htmlFor="pub-perro">Nombre de tu perro</label>
                   <input id="pub-perro" value={contactoPerro} onChange={(e) => setContactoPerro(e.target.value)} placeholder="Ej. Toby"
+                    style={{ ...input, marginBottom: 12 }} />
+
+                  <label style={label} htmlFor="pub-direccion">Tu dirección</label>
+                  <input id="pub-direccion" value={contactoDireccion} onChange={(e) => setContactoDireccion(e.target.value)} placeholder="Calle, número y comuna"
+                    style={{ ...input, marginBottom: 18 }} />
+                </div>
+              )}
+
+              {info.cliente && (
+                <div style={{ marginBottom: 4 }}>
+                  <label style={label} htmlFor="pub-direccion-cliente">Confirma tu dirección</label>
+                  <input id="pub-direccion-cliente" value={contactoDireccion} onChange={(e) => setContactoDireccion(e.target.value)} placeholder="Calle, número y comuna"
                     style={{ ...input, marginBottom: 18 }} />
                 </div>
               )}
