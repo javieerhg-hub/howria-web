@@ -1238,7 +1238,7 @@ function FilaMascota({ mascota, todasLasMascotas, incompatibilidades, setMascota
 }
 
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -1275,6 +1275,10 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
     if (m._dbId) {
       setMascotaIncompatibilidades((prev) => prev.filter((i) => i.mascotaId1 !== m._dbId && i.mascotaId2 !== m._dbId));
     }
+  }
+
+  function agregarNotaCliente(texto) {
+    setClientes((prev) => prev.map((c) => (c.id === cliente.id ? { ...c, bitacora: [...(c.bitacora || []), { creadoEn: new Date().toISOString(), texto }] } : c)));
   }
 
   return (
@@ -1382,13 +1386,6 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           )}
         </div>
 
-        {cliente.email && (
-          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
-            <p style={{ ...label, marginBottom: 8 }}>Correo</p>
-            <ListaCorreosCompacta correos={correosCliente} />
-          </div>
-        )}
-
         <div style={{ marginTop: 20 }}>
           <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
           <div style={{ display: "flex", gap: 6 }}>
@@ -1404,6 +1401,16 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
         <div style={{ marginTop: 20 }}>
           <p style={label}>Objetivos a cumplir</p>
           <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
+        </div>
+
+        <div style={{ marginTop: 26 }}>
+          <p style={label}>Historial</p>
+          <p style={{ ...hint, marginTop: 2, marginBottom: 10 }}>Notas, correos y citas de este cliente, todo junto y por fecha.</p>
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
+            <HistorialUnificado notas={cliente.bitacora || []} onAgregarNota={agregarNotaCliente}
+              correos={correosCliente} citas={citasCliente} boletas={historialVentas}
+              placeholderNota="Ej. llamó para reagendar, quedamos el jueves..." />
+          </div>
         </div>
 
         <div style={{ marginTop: 26 }}>
@@ -1425,7 +1432,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -1460,6 +1467,8 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clientePerfil))}
         boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
         correosCliente={correos.filter((c) => c.clienteId === clientePerfil._dbId)}
+        citasCliente={citasAgenda.filter((c) => c.clienteId === clientePerfil._dbId)}
+        setClientes={setClientes}
         setBoletasEmitidas={setBoletasEmitidas}
         setBoletasAdiestramiento={setBoletasAdiestramiento}
         onVolver={() => setPerfilId(null)}
@@ -5376,19 +5385,72 @@ function CuerpoCorreo({ mensaje }) {
 
 // Lista compacta reutilizada en la ficha de un cliente y en la tarjeta de
 // un prospecto — sin cuerpo expandible, para eso está la pestaña Mail.
-function ListaCorreosCompacta({ correos }) {
-  if (correos.length === 0) return <p style={{ ...hint, margin: 0 }}>Sin correos todavía.</p>;
-  const ordenados = [...correos].sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn));
+// Convierte la fecha de una nota vieja de bitácora ("DD-MM-YYYY", texto
+// simple sin hora — formato que usaba prospectos antes de este historial
+// unificado) a un Date real, para poder ordenarla junto a correos/citas/
+// boletas que sí tienen timestamp. Las notas nuevas ya guardan creadoEn
+// (ISO) directo, no necesitan este parseo.
+function fechaNotaVieja(fechaStr) {
+  if (!fechaStr) return new Date(0);
+  const [d, m, y] = fechaStr.split("-");
+  if (!d || !m || !y) return new Date(0);
+  return new Date(`${y}-${m}-${d}`);
+}
+
+// Línea de tiempo de todo lo que se sabe de un contacto (cliente o
+// prospecto) en un solo lugar: notas libres + correos + (citas y
+// boletas, cuando aplica) — ordenado del más reciente al más viejo, con
+// un campo arriba para dejar una nota nueva. Reemplaza los bloques
+// sueltos de "Bitácora"/"Correo" que antes vivían por separado.
+function HistorialUnificado({ notas = [], onAgregarNota, correos = [], citas = [], boletas = [], placeholderNota = "Ej. llamó para confirmar, quedamos el jueves..." }) {
+  const [notaNueva, setNotaNueva] = useState("");
+
+  function agregar() {
+    const texto = notaNueva.trim();
+    if (!texto || !onAgregarNota) return;
+    onAgregarNota(texto);
+    setNotaNueva("");
+  }
+
+  const entradas = [
+    ...notas.map((n) => ({ fechaOrden: n.creadoEn ? new Date(n.creadoEn) : fechaNotaVieja(n.fecha), icono: "📝", texto: n.texto })),
+    ...correos.map((c) => ({
+      fechaOrden: new Date(c.creadoEn),
+      icono: c.direccion === "entrante" ? "📥" : "📤",
+      texto: `${c.direccion === "entrante" ? "Recibido" : "Enviado"}: ${c.asunto || "(sin asunto)"}`,
+    })),
+    ...citas.map((c) => ({
+      fechaOrden: new Date(c.fechaISO),
+      icono: "📅",
+      texto: `${TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre || c.tipo} con ${c.adiestrador} — ${NOMBRES_ESTADO_CITA[c.estado] || c.estado}`,
+    })),
+    ...boletas.map((b) => ({
+      fechaOrden: new Date(b.fechaISO),
+      icono: "🧾",
+      texto: `Boleta N°${String(b.numero).padStart(3, "0")} — ${fmtCLP(b.total)} — ${ESTADOS_FACTURA.find((e) => e.id === b.estado)?.nombre || b.estado}`,
+    })),
+  ].sort((a, b) => b.fechaOrden - a.fechaOrden);
+
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      {ordenados.map((c) => (
-        <p key={c.id} style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>
-          <span style={{ fontWeight: 600, color: c.direccion === "entrante" ? "#2F6A46" : "#A85C3B" }}>
-            {c.direccion === "entrante" ? "Recibido" : "Enviado"}
-          </span>{" "}
-          {c.asunto || "(sin asunto)"} · {fmtFechaCorreo(c.creadoEn)}
-        </p>
-      ))}
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input placeholder={placeholderNota} value={notaNueva} onChange={(e) => setNotaNueva(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && agregar()} style={{ ...input, marginBottom: 0, flex: 1 }} />
+        <button onClick={agregar} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>Agregar nota</button>
+      </div>
+      {entradas.length === 0 ? (
+        <p style={{ ...hint, margin: 0 }}>Sin actividad registrada todavía.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {entradas.map((e, i) => (
+            <p key={i} style={{ margin: 0, fontSize: 13, color: INK }}>
+              <span style={{ marginRight: 6 }}>{e.icono}</span>
+              {e.texto}
+              <span style={{ color: "#8A7E5C", fontSize: 12 }}> · {e.fechaOrden.toLocaleDateString("es-CL")}</span>
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -6236,7 +6298,6 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
   const [form, setForm] = useState(PROSPECTO_VACIO);
   const [filtroEstado, setFiltroEstado] = useState("activos");
   const [busqueda, setBusqueda] = useState("");
-  const [notaNueva, setNotaNueva] = useState({});
   const [intentoCrear, setIntentoCrear] = useState(false);
 
   useEffect(() => {
@@ -6258,11 +6319,8 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
     setProspectos((prev) => prev.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)));
   }
 
-  function agregarNota(id) {
-    const texto = (notaNueva[id] || "").trim();
-    if (!texto) return;
-    setProspectos((prev) => prev.map((p) => (p.id === id ? { ...p, bitacora: [...p.bitacora, { fecha: new Date().toLocaleDateString("es-CL"), texto }] } : p)));
-    setNotaNueva((prev) => ({ ...prev, [id]: "" }));
+  function agregarNotaProspecto(id, texto) {
+    setProspectos((prev) => prev.map((p) => (p.id === id ? { ...p, bitacora: [...p.bitacora, { creadoEn: new Date().toISOString(), texto }] } : p)));
   }
 
   function eliminarProspecto(id) {
@@ -6430,27 +6488,11 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
               </div>
 
               <div style={{ marginTop: 14, background: CREAM_SOFT, borderRadius: 8, padding: 12 }}>
-                <p style={{ ...label, marginBottom: 8 }}>Bitácora — qué quedó pendiente</p>
-                {p.bitacora.length === 0 ? (
-                  <p style={{ ...hint, margin: "0 0 10px" }}>Sin notas todavía.</p>
-                ) : (
-                  p.bitacora.slice().reverse().map((n, i) => (
-                    <p key={i} style={{ margin: "0 0 8px", fontSize: 13, color: INK }}><span style={{ color: "#8A7E5C" }}>{n.fecha}:</span> {n.texto}</p>
-                  ))
-                )}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input placeholder="Ej. quedó en confirmar el jueves..." value={notaNueva[p.id] || ""} onChange={(e) => setNotaNueva((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && agregarNota(p.id)} style={{ ...input, marginBottom: 0, flex: 1 }} />
-                  <button onClick={() => agregarNota(p.id)} style={{ ...botonSecundario, padding: "8px 16px" }}>Agregar</button>
-                </div>
+                <p style={{ ...label, marginBottom: 8 }}>Historial — notas y correos</p>
+                <HistorialUnificado notas={p.bitacora} onAgregarNota={(texto) => agregarNotaProspecto(p.id, texto)}
+                  correos={p._dbId ? correos.filter((c) => c.prospectoId === p._dbId) : []}
+                  placeholderNota="Ej. quedó en confirmar el jueves..." />
               </div>
-
-              {p._dbId && (
-                <div style={{ marginTop: 12 }}>
-                  <p style={{ ...label, marginBottom: 6 }}>Correo</p>
-                  <ListaCorreosCompacta correos={correos.filter((c) => c.prospectoId === p._dbId)} />
-                </div>
-              )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 {p.estado === "ganado" && puedeCrearYEliminar && (
