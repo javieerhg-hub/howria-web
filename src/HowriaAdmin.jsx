@@ -3520,9 +3520,11 @@ export default function HowriaAdmin() {
   const [clientesParaElegir, setClientesParaElegir] = useState(null);
   const [sessionVersion, setSessionVersion] = useState(0);
   // Permite entrar directo a una pestaña desde un link (ej. una
-  // notificación push manda a /admin?tab=agenda) — se lee una sola vez
-  // al montar y se limpia de la URL enseguida (si no, un refresh
-  // posterior mientras se está en otra pestaña rebotaría siempre acá).
+  // notificación push manda a /admin?tab=agenda) — se lee al montar. La
+  // URL se mantiene sincronizada con la pestaña actual en todo momento
+  // (no se limpia después) para que un refresh (pull-to-refresh, o que
+  // iOS descargue la pestaña en segundo plano y la recargue) vuelva a
+  // la misma pestaña en vez de rebotar siempre a Inicio.
   const [tab, setTab] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("tab") || "inicio";
@@ -3531,10 +3533,13 @@ export default function HowriaAdmin() {
     }
   });
   useEffect(() => {
-    if (window.location.search.includes("tab=")) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
+    try {
+      const url = new URL(window.location.href);
+      if (tab === "inicio") url.searchParams.delete("tab");
+      else url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url.pathname + url.search);
+    } catch {}
+  }, [tab]);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
