@@ -3296,11 +3296,8 @@ export default function HowriaAdmin() {
         }
         .howria-shell { display: flex; }
         .howria-sidebar { display: none; }
-        .howria-header-desktop { display: none; }
         @media (min-width: 681px) {
           .howria-sidebar { display: flex; }
-          .howria-header-desktop { display: flex; }
-          .howria-header-mobile { display: none; }
         }
         @media (max-width: 680px) {
           .howria-g2, .howria-g3, .howria-g4, .howria-split, .howria-photo-row {
@@ -3329,8 +3326,8 @@ export default function HowriaAdmin() {
           .howria-dia-col-oculta-movil { display: none !important; }
         }
       `}</style>
-      <div className="howria-header-mobile" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
-        <LogoHowria height={44} />
+      <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
+        <LogoHowria height={56} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
@@ -3346,9 +3343,6 @@ export default function HowriaAdmin() {
 
       <div className="howria-shell">
         <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "sticky", top: 0, alignSelf: "flex-start", height: "100vh", overflowY: "auto" }}>
-          <div style={{ padding: "4px 10px 20px" }}>
-            <LogoHowria height={34} />
-          </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {tabs.some((t) => t.id === "inicio") && (
               <button onClick={() => setTab("inicio")}
@@ -3390,25 +3384,7 @@ export default function HowriaAdmin() {
         </aside>
 
         <div className="howria-shell-contenido" style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div className="howria-header-desktop" style={{ padding: "20px 32px 0", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <h1 style={{ margin: 0, fontFamily: "'Fraunces', Georgia, serif", fontSize: 20, color: NAVY }}>{TODOS_LOS_TABS.find((t) => t.id === tab)?.label || "Inicio"}</h1>
-              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#9A9179", textTransform: "capitalize" }}>{new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
-              <BotonNotificacionesPush usuarioEmail={user.email} />
-              <div style={{ fontSize: 13, textAlign: "right", color: NAVY }}>
-                <div>{user.nombre}</div>
-                <div style={{ fontSize: 11, color: "#9A9179", textTransform: "capitalize" }}>{user.rol}</div>
-              </div>
-              <button onClick={cerrarSesion} style={{ background: "none", border: "1px solid #E4DBC3", color: "#6B6248", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
-                Cerrar sesión
-              </button>
-            </div>
-          </div>
-
-          <div className="howria-main" style={{ padding: "20px 32px 28px", maxWidth: 1040, margin: "0 auto" }}>
+          <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
