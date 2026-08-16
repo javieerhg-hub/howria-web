@@ -1238,7 +1238,7 @@ function FilaMascota({ mascota, todasLasMascotas, incompatibilidades, setMascota
 }
 
 // ---------- Perfil de cliente ----------
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], usuarios = [], citasAgenda = [], setCitas, setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -1251,6 +1251,33 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
   const [mostrarFormMascota, setMostrarFormMascota] = useState(false);
   const [editandoMascotaId, setEditandoMascotaId] = useState(null);
   const mascotasDelCliente = mascotas.filter((m) => m.clienteId === cliente._dbId);
+
+  const adiestradoresDisponibles = usuarios.filter((u) => u.rol === "entrenador");
+  const [mostrarAgendar, setMostrarAgendar] = useState(false);
+  const [agendarAdiestrador, setAgendarAdiestrador] = useState(cliente.adiestradorNombre || adiestradoresDisponibles[0]?.nombre || "");
+  const [agendarTipo, setAgendarTipo] = useState(cliente.tipoServicio?.includes("evaluacion") ? "evaluacion" : "clase");
+  const [agendarFechaHora, setAgendarFechaHora] = useState("");
+
+  function agregarAlCalendario() {
+    if (!agendarFechaHora || !agendarAdiestrador) return;
+    if (new Date(agendarFechaHora).getTime() <= Date.now()) {
+      showToast("La fecha y hora deben ser en el futuro.");
+      return;
+    }
+    if (hayChoqueHorario(citasAgenda, agendarAdiestrador, agendarFechaHora)) {
+      showToast(`${agendarAdiestrador} ya tiene otra cita agendada en ese horario.`);
+      return;
+    }
+    setCitas((prev) => [...prev, {
+      id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
+      email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
+      tipo: agendarTipo, adiestrador: agendarAdiestrador, fechaISO: new Date(agendarFechaHora).toISOString(),
+      estado: "agendada", origen: "staff", notas: "",
+    }]);
+    setAgendarFechaHora("");
+    setMostrarAgendar(false);
+    showToast(`Agregado al calendario de ${agendarAdiestrador}.`);
+  }
 
   function copiarLinkAgenda() {
     const link = `${window.location.origin}/agendaadiestrador?c=${cliente._dbId}`;
@@ -1317,12 +1344,43 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
             {puedeAgendar && cliente._dbId && (
               <button onClick={copiarLinkAgenda} style={botonSecundario}>{linkCopiado ? "¡Copiado!" : "Copiar link de agenda"}</button>
             )}
+            {adiestradoresDisponibles.length > 0 && cliente._dbId && (
+              <button onClick={() => setMostrarAgendar((v) => !v)} style={botonSecundario}>
+                {mostrarAgendar ? "Cancelar" : "+ Agregar al calendario del adiestrador"}
+              </button>
+            )}
             <button onClick={onEditar} style={botonSecundario}>Editar</button>
             {puedeEliminar && (
               <button onClick={() => setConfirmandoEliminar(true)} style={{ ...botonSecundario, borderColor: RUST, color: RUST }}>Eliminar</button>
             )}
           </div>
         </div>
+
+        {mostrarAgendar && (
+          <div style={{ marginTop: 18, padding: 14, background: CREAM_SOFT, borderRadius: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={label} htmlFor="agendar-adiestrador">Adiestrador</label>
+              <select id="agendar-adiestrador" value={agendarAdiestrador} onChange={(e) => setAgendarAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                {adiestradoresDisponibles.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label} htmlFor="agendar-tipo">Tipo</label>
+              <select id="agendar-tipo" value={agendarTipo} onChange={(e) => setAgendarTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label} htmlFor="agendar-fecha">Fecha y hora</label>
+              <input id="agendar-fecha" type="datetime-local" value={agendarFechaHora} onChange={(e) => setAgendarFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <button onClick={agregarAlCalendario} disabled={!agendarFechaHora} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: agendarFechaHora ? 1 : 0.6 }}>
+                Agregar al calendario
+              </button>
+            </div>
+          </div>
+        )}
 
         {confirmandoEliminar && (
           <ModalConfirmacion
@@ -1435,7 +1493,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -1472,6 +1530,9 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
         correosCliente={correos.filter((c) => c.clienteId === clientePerfil._dbId)}
         citasCliente={citasAgenda.filter((c) => c.clienteId === clientePerfil._dbId)}
+        usuarios={usuarios}
+        citasAgenda={citasAgenda}
+        setCitas={setCitas}
         setClientes={setClientes}
         setBoletasEmitidas={setBoletasEmitidas}
         setBoletasAdiestramiento={setBoletasAdiestramiento}
@@ -4856,6 +4917,20 @@ const TIPOS_CITA = [
   { id: "clase", nombre: "Clase" },
 ];
 
+// Compartida entre el formulario de Agenda y el botón "Agregar al
+// calendario del adiestrador" de PerfilCliente — mismo criterio de choque
+// en los dos lugares donde se agenda una cita a mano.
+function hayChoqueHorario(citas, adiestrador, fechaISO, duracionMin = 60) {
+  const inicioNuevo = new Date(fechaISO).getTime();
+  const finNuevo = inicioNuevo + duracionMin * 60000;
+  return citas.some((c) => {
+    if (c.adiestrador !== adiestrador || !["pendiente", "agendada"].includes(c.estado)) return false;
+    const oIni = new Date(c.fechaISO).getTime();
+    const oFin = oIni + (c.duracionMin || 60) * 60000;
+    return inicioNuevo < oFin && finNuevo > oIni;
+  });
+}
+
 const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rechazada: "Rechazada", cancelada: "Cancelada", realizada: "Realizada" };
 
 // Bloques horarios de 1 hora que el adiestrador puede habilitar por día —
@@ -4962,20 +5037,11 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   function agendar() {
     const cliente = clientes.find((c) => c.id === Number(clienteId));
     if (!cliente || !fechaHora || !adiestrador) return;
-    const inicioNuevo = new Date(fechaHora).getTime();
-    if (inicioNuevo <= Date.now()) {
+    if (new Date(fechaHora).getTime() <= Date.now()) {
       showToast("La fecha y hora de la cita debe ser futura.");
       return;
     }
-    const duracionNueva = 60;
-    const finNuevo = inicioNuevo + duracionNueva * 60000;
-    const choca = citas.some((c) => {
-      if (c.adiestrador !== adiestrador || !["pendiente", "agendada"].includes(c.estado)) return false;
-      const oIni = new Date(c.fechaISO).getTime();
-      const oFin = oIni + (c.duracionMin || 60) * 60000;
-      return inicioNuevo < oFin && finNuevo > oIni;
-    });
-    if (choca) {
+    if (hayChoqueHorario(citas, adiestrador, fechaHora)) {
       showToast(`${adiestrador} ya tiene otra cita agendada en ese horario.`);
       return;
     }
@@ -6061,7 +6127,11 @@ function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, 
   );
 }
 
-function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolver }) {
+// Calendario del mes con las citas (clases/evaluaciones) de un
+// adiestrador — se usa tanto como sub-vista de Alumnos (con "onVolver")
+// como pestaña propia "Calendario" en el menú (sin "onVolver", vista
+// completa y celdas más grandes para que se divise bien).
+export function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolver }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesIdx, setMesIdx] = useState(hoy.getMonth());
@@ -6097,31 +6167,44 @@ function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolver }) {
 
   return (
     <div>
-      <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18 }}>← Volver a Alumnos</button>
+      {onVolver && <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18 }}>← Volver a Alumnos</button>}
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{nombreMes}</h2>
+          <h2 style={{ ...sectionTitle, textTransform: "capitalize", fontSize: 20 }}>{nombreMes}</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => cambiarMes(-1)} style={botonSecundario}>←</button>
             <button onClick={() => cambiarMes(1)} style={botonSecundario}>→</button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 11, color: "#8A7E5C", textAlign: "center", marginBottom: 6 }}>
-          {["L", "M", "X", "J", "V", "S", "D"].map((d) => <span key={d}>{d}</span>)}
+        <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>Clientes por atender este mes — clic en un día para ver el detalle, o directo en un nombre.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, fontSize: 12, color: "#8A7E5C", textAlign: "center", marginBottom: 8 }}>
+          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <span key={d}>{d}</span>)}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
           {celdas.map((dia, i) => {
             if (!dia) return <div key={`vacio-${i}`} />;
             const key = fechaKey(new Date(anio, mesIdx, dia));
-            const citasDia = porDia[key] || [];
+            const citasDia = (porDia[key] || []).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+            const esHoy = key === fechaKey(hoy);
             return (
-              <button key={key} onClick={() => setDiaSel(diaSel === key ? null : key)}
-                style={{ aspectRatio: "1", borderRadius: 6, border: diaSel === key ? `1.5px solid ${NAVY}` : "1px solid #EDE4CE",
-                  background: citasDia.length > 0 ? "#F3E3B4" : "#FFFFFF", cursor: "pointer", padding: 4,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 12, color: INK }}>{dia}</span>
-                {citasDia.length > 0 && <span style={{ fontSize: 10, color: "#8A6A1E", fontWeight: 600 }}>{citasDia.length}</span>}
-              </button>
+              <div key={key}
+                style={{ minHeight: 92, borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
+                  background: citasDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                <button onClick={() => setDiaSel(diaSel === key ? null : key)}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
+                  {dia}
+                </button>
+                {citasDia.slice(0, 2).map((c) => (
+                  <button key={c._dbId || c.id} onClick={() => setCitaSel(c)}
+                    style={{ border: "none", background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46",
+                      borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.perro}
+                  </button>
+                ))}
+                {citasDia.length > 2 && (
+                  <span style={{ fontSize: 10, color: "#8A7E5C", paddingLeft: 5 }}>+{citasDia.length - 2} más</span>
+                )}
+              </div>
             );
           })}
         </div>
