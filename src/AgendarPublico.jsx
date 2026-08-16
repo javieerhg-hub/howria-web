@@ -23,7 +23,11 @@ const TIPOS_CITA = [
 
 const tarjeta = { background: CREAM, borderRadius: 10, padding: "36px 32px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" };
 const label = { display: "block", fontSize: 12, fontWeight: 600, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 };
-const input = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #DCD2B4", fontSize: 14, fontFamily: "inherit", background: "#FFFFFF", boxSizing: "border-box" };
+// fontSize 16 (no 14): bajo 16px, Safari en iPhone hace zoom automático
+// al enfocar el campo — esta es la página pública de agenda, la
+// primera impresión de un cliente nuevo, así que importa especialmente
+// acá que no salte el zoom sin querer.
+const input = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #DCD2B4", fontSize: 16, fontFamily: "inherit", background: "#FFFFFF", boxSizing: "border-box" };
 const botonPrincipal = { width: "100%", padding: "12px", borderRadius: 8, border: "none", background: NAVY, color: CREAM, fontWeight: 700, fontSize: 14, cursor: "pointer", marginTop: 6 };
 
 function fechaKey(d) {

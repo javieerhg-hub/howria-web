@@ -96,6 +96,7 @@ no un runner de migraciones.
 | 068 | `clientes_acceso_rapido.sql` | 2026-08-16 | Agrega `acceso_rapido` a `clientes` — el entrenador puede marcar un alumno como atajo en su propio Inicio. |
 | 069 | `boletas_adiestramiento_monto_responsable.sql` | 2026-08-16 | Agrega `monto_responsable` a `boletas_adiestramiento` — el reparto entre el responsable de la cuenta (entrenador) y Howria en cada factura, para que la Finanzas personal y la utilidad general reflejen lo que de verdad se lleva cada uno. |
 | 070 | `usuario_howria.sql` | 2026-08-16 | Renombra la cuenta "Javier Herrera" a "Howria" (mismo email/contraseña/rol) — pasa a ser la cuenta que se queda con la ganancia de la empresa en paseos y adiestramiento. Javier Herrera (la persona) recibe una cuenta nueva de paseador, creada aparte desde Usuarios → Agregar usuario. |
+| 071 | `howria_javier_h.sql` | 2026-08-16 | Arregla el login de Howria (el email interno seguía siendo javier.herrera@howria.local tras el renombre de 070, así que escribir "Howria" al entrar no funcionaba) y transfiere los clientes que decían "Javier Herrera" en paseador/responsable/adiestrador a la cuenta nueva "Javier H". |
 
 ## Nota sobre el orden 001–023
 

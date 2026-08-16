@@ -1641,7 +1641,11 @@ function Login({ onLogin, usuarios }) {
     else setSlideIntro((s) => Math.max(s - 1, 0));
   }
 
-  const inputPill = { width: "100%", boxSizing: "border-box", padding: "13px 18px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 999, fontSize: 14.5, background: "#F7F5F0", fontFamily: "inherit", color: INK };
+  // fontSize 16 por el mismo motivo que el input compartido más abajo en
+  // este archivo — evita el zoom automático de Safari en iPhone al tocar
+  // el campo, más importante todavía acá porque es lo primero que toca
+  // cualquiera que recién entra a la app.
+  const inputPill = { width: "100%", boxSizing: "border-box", padding: "13px 18px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 999, fontSize: 16, background: "#F7F5F0", fontFamily: "inherit", color: INK };
   const labelPill = { display: "block", fontSize: 12, color: "#8A7E5C", fontWeight: 600, marginBottom: 6, marginLeft: 6 };
   const botonPill = { width: "100%", padding: "14px", background: NAVY, color: CREAM, border: "none", borderRadius: 999, fontSize: 14.5, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" };
 
@@ -2990,7 +2994,12 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
 export const sectionTitle = { fontSize: 18, color: NAVY, fontFamily: "'Fraunces', Georgia, serif", fontWeight: 600, letterSpacing: 0.1, marginBottom: 6, marginTop: 0 };
 export const hint = { fontSize: 12.5, color: "#9A9179", margin: "0 0 12px" };
 export const label = { display: "block", fontSize: 11.5, color: "#8A7E5C", marginBottom: 6, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" };
-export const input = { width: "100%", boxSizing: "border-box", padding: "10px 13px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 8, fontSize: 14, background: "#FFFFFF", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif", color: INK, transition: "border-color .15s" };
+// fontSize 16 (no 14) a propósito: por debajo de 16px, Safari en iPhone
+// hace zoom automático al enfocar el campo (para que se pueda leer),
+// lo que Javier reportó como "de repente se activa el zoom" al usar la
+// app — pasa en cualquier <input>/<select>/<textarea> que use este
+// estilo, o sea, prácticamente todos los formularios de la app.
+export const input = { width: "100%", boxSizing: "border-box", padding: "10px 13px", marginBottom: 16, border: "1px solid #E1D7B8", borderRadius: 8, fontSize: 16, background: "#FFFFFF", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif", color: INK, transition: "border-color .15s" };
 export const botonPrincipal = { width: "100%", padding: "12px", background: NAVY, color: CREAM, border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 600, letterSpacing: 0.3, fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(20,33,61,0.18)", transition: "transform .12s, box-shadow .12s" };
 export const botonSecundario = { padding: "10px 18px", background: "transparent", color: NAVY, border: `1.5px solid ${NAVY}`, borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600, flex: 1, fontFamily: "'Inter', sans-serif", transition: "background .12s" };
 export const tarjeta = { background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 14, padding: 24, boxShadow: "0 1px 3px rgba(20,33,61,0.05)" };
