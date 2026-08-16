@@ -347,7 +347,7 @@ export default async function handler(req, res) {
     await enviarNotificacionPush(admin, {
       titulo: "Nueva solicitud de cita",
       cuerpo: `${nombreSolicitante} pidió ${tipoTexto} con ${adiestrador}`,
-      url: "/admin",
+      url: "/admin?tab=agenda",
       evento: "cita",
     });
 

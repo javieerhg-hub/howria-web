@@ -79,7 +79,7 @@ export default async function handler(req, res) {
   await enviarNotificacionPush(admin, {
     titulo: "Nuevo correo",
     cuerpo: parsed.subject ? `${remitente}: ${parsed.subject}` : `De ${remitente}`,
-    url: "/admin",
+    url: "/admin?tab=mail",
     evento: "correo",
   });
 

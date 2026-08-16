@@ -35,8 +35,16 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification.data?.url || "/admin";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((lista) => {
-      for (const cliente of lista) {
-        if (cliente.url.includes(url) && "focus" in cliente) return cliente.focus();
+      // Coincide con cualquier ventana ya abierta en /admin (sin importar
+      // la pestaña en la que esté, ej. "?tab=agenda") — si existe, la
+      // navega al destino exacto de la notificación en vez de solo
+      // enfocarla, para que sí termine en la pestaña que corresponde.
+      const abierta = lista.find((cliente) => cliente.url.includes("/admin"));
+      if (abierta) {
+        if ("navigate" in abierta) {
+          return abierta.navigate(url).then((c) => c.focus()).catch(() => abierta.focus());
+        }
+        return abierta.focus();
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
     })

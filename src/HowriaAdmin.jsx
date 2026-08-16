@@ -1500,8 +1500,14 @@ function LogoHowria({ height = 40 }) {
   return <img src={LOGO_B64} alt="Howria" style={{ height, display: "block" }} />;
 }
 
-function NotificacionesBell({ avisos }) {
+function NotificacionesBell({ avisos, setTab }) {
   const [abierto, setAbierto] = useState(false);
+
+  function irAlAviso(a) {
+    if (a.tab && setTab) setTab(a.tab);
+    setAbierto(false);
+  }
+
   return (
     <div style={{ position: "relative" }}>
       <button onClick={() => setAbierto((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", position: "relative", padding: 6 }}>
@@ -1513,14 +1519,27 @@ function NotificacionesBell({ avisos }) {
         )}
       </button>
       {abierto && (
-        <div style={{ position: "absolute", left: 0, top: "110%", width: 280, maxWidth: "calc(100vw - 24px)", background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20 }}>
-          <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: "#8A7E5C", textTransform: "uppercase" }}>Avisos</p>
-          {avisos.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 13, color: "#9A9179" }}>No hay avisos pendientes.</p>
-          ) : (
-            avisos.map((a, i) => <p key={i} style={{ margin: "0 0 8px", fontSize: 13, color: "#332E22" }}>{a.icono} {a.texto}</p>)
-          )}
-        </div>
+        <>
+          <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 19 }} />
+          <div style={{ position: "absolute", left: 0, top: "110%", width: 280, maxWidth: "calc(100vw - 24px)", background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20 }}>
+            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: "#8A7E5C", textTransform: "uppercase" }}>Avisos</p>
+            {avisos.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13, color: "#9A9179" }}>No hay avisos pendientes.</p>
+            ) : (
+              avisos.map((a, i) => (
+                <button key={i} onClick={() => irAlAviso(a)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", margin: "0 0 4px", padding: "6px 8px", borderRadius: 6,
+                    border: "none", background: "none", fontSize: 13, color: "#332E22", cursor: a.tab ? "pointer" : "default", font: "inherit",
+                  }}
+                  onMouseEnter={(e) => { if (a.tab) e.currentTarget.style.background = "#F7F5F0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}>
+                  {a.icono} {a.texto}
+                </button>
+              ))
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -1998,40 +2017,40 @@ function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquip
   // necesita que el cliente pague, así que van en avisos separados.
   const porRevisar = boletasEmitidas.filter((b) => b.estado === "no_enviada");
   if (porRevisar.length > 0) {
-    avisos.push({ tipo: "factura-revisar", icono: "📝", texto: `${porRevisar.length} factura(s) por revisar y aceptar`, clave: `revisar-${porRevisar.length}` });
+    avisos.push({ tipo: "factura-revisar", icono: "📝", texto: `${porRevisar.length} factura(s) por revisar y aceptar`, clave: `revisar-${porRevisar.length}`, tab: "facturas" });
   }
 
   const pendientes = boletasEmitidas.filter(esPorCobrar);
   const montoPendiente = pendientes.reduce((acc, b) => acc + b.total, 0);
   if (pendientes.length > 0) {
-    avisos.push({ tipo: "factura", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}` });
+    avisos.push({ tipo: "factura", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}`, tab: "facturas" });
   }
 
   const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dow));
   const sinMarcar = clientesHoy.filter((c) => { const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`]; return !r?.realizado && !r?.cancelado; });
   if (sinMarcar.length > 0) {
-    avisos.push({ tipo: "paseo", icono: "🐾", texto: `${sinMarcar.length} paseo(s) de hoy sin marcar como realizado`, detalle: sinMarcar.map((c) => `${c.nombre} (${c.paseadorNombre || "sin paseador"})`).join(", "), clave: `paseo-${hoyStr0}-${sinMarcar.length}` });
+    avisos.push({ tipo: "paseo", icono: "🐾", texto: `${sinMarcar.length} paseo(s) de hoy sin marcar como realizado`, detalle: sinMarcar.map((c) => `${c.nombre} (${c.paseadorNombre || "sin paseador"})`).join(", "), clave: `paseo-${hoyStr0}-${sinMarcar.length}`, tab: "coordinacion" });
   }
 
   const tareasHoy = tareasEquipo.filter((t) => fechaKey(new Date(t.fechaISO)) === fechaKey(hoy) && t.estado !== "hecho");
   if (tareasHoy.length > 0) {
-    avisos.push({ tipo: "tarea", icono: "📋", texto: `${tareasHoy.length} tarea(s) del equipo pendiente(s) para hoy`, clave: `tarea-${hoyStr0}-${tareasHoy.length}` });
+    avisos.push({ tipo: "tarea", icono: "📋", texto: `${tareasHoy.length} tarea(s) del equipo pendiente(s) para hoy`, clave: `tarea-${hoyStr0}-${tareasHoy.length}`, tab: "equipo" });
   }
 
   const sinPaseador = clientes.filter((c) => !c.paseadorNombre);
   if (sinPaseador.length > 0) {
-    avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}` });
+    avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
   }
 
   const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
   if (necesitanEvaluacion.length > 0) {
-    avisos.push({ tipo: "evaluacion", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}` });
+    avisos.push({ tipo: "evaluacion", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda" });
   }
 
   const hoyStr = fechaKey(hoy);
   const prospectosVencidos = prospectos.filter((p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido");
   if (prospectosVencidos.length > 0) {
-    avisos.push({ tipo: "prospecto", icono: "📞", texto: `${prospectosVencidos.length} prospecto(s) con seguimiento pendiente`, clave: `prospecto-${hoyStr}-${prospectosVencidos.length}` });
+    avisos.push({ tipo: "prospecto", icono: "📞", texto: `${prospectosVencidos.length} prospecto(s) con seguimiento pendiente`, clave: `prospecto-${hoyStr}-${prospectosVencidos.length}`, tab: "seguimiento" });
   }
 
   return avisos;
@@ -3409,7 +3428,22 @@ export default function HowriaAdmin() {
   const [clienteSesion, setClienteSesion] = useState(null);
   const [clientesParaElegir, setClientesParaElegir] = useState(null);
   const [sessionVersion, setSessionVersion] = useState(0);
-  const [tab, setTab] = useState("inicio");
+  // Permite entrar directo a una pestaña desde un link (ej. una
+  // notificación push manda a /admin?tab=agenda) — se lee una sola vez
+  // al montar y se limpia de la URL enseguida (si no, un refresh
+  // posterior mientras se está en otra pestaña rebotaría siempre acá).
+  const [tab, setTab] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("tab") || "inicio";
+    } catch {
+      return "inicio";
+    }
+  });
+  useEffect(() => {
+    if (window.location.search.includes("tab=")) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
@@ -3615,7 +3649,7 @@ export default function HowriaAdmin() {
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={56} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
+          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} setTab={setTab} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
             <div>{user.nombre}</div>
@@ -3677,7 +3711,7 @@ export default function HowriaAdmin() {
 
           <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" }}>
-              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
+              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} setTab={setTab} />}
               <BotonNotificacionesPush usuarioEmail={user.email} />
             </div>
             <div style={{ padding: "0 8px", fontSize: 13, color: CREAM }}>
