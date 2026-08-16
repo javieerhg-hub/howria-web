@@ -471,9 +471,30 @@ function dbToBloqueDisponibilidad(row) {
   };
 }
 
+function planClaseToDb(p) {
+  return {
+    cliente_id: p.clienteId,
+    nombre: p.nombre || null,
+    num_clases: p.numClases,
+    incluye_evaluacion: p.incluyeEvaluacion || false,
+    boleta_adiestramiento_id: p.boletaAdiestramientoId || null,
+    creado_por: p.creadoPor || null,
+  };
+}
+function dbToPlanClase(row) {
+  return {
+    clienteId: row.cliente_id,
+    nombre: row.nombre,
+    numClases: row.num_clases,
+    incluyeEvaluacion: row.incluye_evaluacion,
+    boletaAdiestramientoId: row.boleta_adiestramiento_id,
+    creadoPor: row.creado_por,
+  };
+}
+
 function claseRealizadaToDb(c) {
   return {
-    boleta_adiestramiento_id: c.boletaAdiestramientoId,
+    plan_id: c.planId,
     numero_clase: c.numeroClase,
     fecha_realizada: c.fechaRealizada,
     temas: c.temas || [],
@@ -483,7 +504,7 @@ function claseRealizadaToDb(c) {
 }
 function dbToClaseRealizada(row) {
   return {
-    boletaAdiestramientoId: row.boleta_adiestramiento_id,
+    planId: row.plan_id,
     numeroClase: row.numero_clase,
     fechaRealizada: row.fecha_realizada,
     temas: row.temas || [],
@@ -1264,12 +1285,12 @@ function useDisponibilidadFecha(sessionVersion) {
   return [filas, toggleBloque, cargando, aplicarPatronSemanal];
 }
 
-// Seguimiento de clases realizadas dentro de un pack de adiestramiento
-// (clases_realizadas, 062) — mismo espíritu que useDisponibilidadFecha:
-// se carga una vez y se muta por (boletaId, numeroClase) puntual, sin
-// necesidad de diffear un array completo (useSyncedTable). Marcar una
-// clase es un upsert (permite corregir fecha/temas de una clase ya
-// marcada); deshacerla es un delete.
+// Seguimiento de clases realizadas dentro de un plan de clases
+// (clases_realizadas, 067) — mismo espíritu que useDisponibilidadFecha:
+// se carga una vez y se muta por (planId, numeroClase) puntual, sin
+// necesidad de diffear un array completo (useSyncedTable). numeroClase
+// 0 = evaluación, 1..N = clases. Marcar una clase es un upsert (permite
+// corregir fecha/temas de una clase ya marcada); deshacerla es un delete.
 function useClasesRealizadas(sessionVersion) {
   const [clases, setClases] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -1286,10 +1307,10 @@ function useClasesRealizadas(sessionVersion) {
     return () => { activo = false; };
   }, [sessionVersion]);
 
-  async function marcarClase(boletaAdiestramientoId, numeroClase, { fechaRealizada, temas, notas, creadoPor }) {
-    const item = { boletaAdiestramientoId, numeroClase, fechaRealizada, temas: temas || [], notas: notas || null, creadoPor };
+  async function marcarClase(planId, numeroClase, { fechaRealizada, temas, notas, creadoPor }) {
+    const item = { planId, numeroClase, fechaRealizada, temas: temas || [], notas: notas || null, creadoPor };
     const { data, error } = await supabase.from("clases_realizadas")
-      .upsert(claseRealizadaToDb(item), { onConflict: "boleta_adiestramiento_id,numero_clase" })
+      .upsert(claseRealizadaToDb(item), { onConflict: "plan_id,numero_clase" })
       .select().single();
     if (error) {
       showToast(`No se pudo guardar la clase: ${error.message}`);
@@ -1297,12 +1318,12 @@ function useClasesRealizadas(sessionVersion) {
     }
     if (data) {
       const guardada = dbToClaseRealizada(data);
-      setClases((prev) => [...prev.filter((c) => !(c.boletaAdiestramientoId === boletaAdiestramientoId && c.numeroClase === numeroClase)), guardada]);
+      setClases((prev) => [...prev.filter((c) => !(c.planId === planId && c.numeroClase === numeroClase)), guardada]);
     }
   }
 
-  async function deshacerClase(boletaAdiestramientoId, numeroClase) {
-    const existente = clases.find((c) => c.boletaAdiestramientoId === boletaAdiestramientoId && c.numeroClase === numeroClase);
+  async function deshacerClase(planId, numeroClase) {
+    const existente = clases.find((c) => c.planId === planId && c.numeroClase === numeroClase);
     if (!existente) return;
     setClases((prev) => prev.filter((c) => c !== existente));
     const { error } = await supabase.from("clases_realizadas").delete().eq("id", existente._dbId);
@@ -3363,6 +3384,7 @@ export default function HowriaAdmin() {
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
   const [disponibilidadFecha, toggleBloqueDisponibilidad, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
+  const [planesClases, setPlanesClases, cargandoPlanesClases] = useSyncedTable("planes_clases", planClaseToDb, dbToPlanClase, "creado_en", sessionVersion);
   const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
@@ -3567,7 +3589,7 @@ export default function HowriaAdmin() {
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}

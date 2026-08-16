@@ -91,6 +91,8 @@ no un runner de migraciones.
 | 063 | `clientes_comuna_edad_temas_objetivo.sql` | 2026-08-16 | Agrega `comuna`, `edad` (texto), `temas_objetivo` a `clientes` — ficha de ingreso de adiestramiento. |
 | 064 | `clientes_insert_update_entrenador.sql` | 2026-08-16 | Amplía las políticas de insert/update de `clientes` para incluir al rol entrenador (antes solo coordinador/administrador) — necesario para que el entrenador pueda cargar la ficha de ingreso de un alumno nuevo. |
 | 065 | `permisos_roles_tab_alumnos.sql` | 2026-08-16 | Registra la pestaña nueva `alumnos` en `permisos_roles` para entrenador/coordinador/administrador. |
+| 066 | `planes_clases.sql` | 2026-08-16 | Crea `planes_clases` — el "pack" de clases de un alumno pasa a ser su propia entidad (número de clases, si incluye evaluación), creada directamente desde Alumnos, con enlace opcional a una `boletas_adiestramiento` ya enviada. |
+| 067 | `clases_realizadas_por_plan.sql` | 2026-08-16 | Recrea `clases_realizadas` (062, sin datos reales todavía) apuntando a `planes_clases` en vez de `boletas_adiestramiento` directamente. `numero_clase = 0` pasa a ser la convención para "Evaluación". |
 
 ## Nota sobre el orden 001–023
 
