@@ -239,9 +239,7 @@ export default function AgendarPublico() {
                 <CalendarioMes anio={mesVisto.anio} mesIdx={mesVisto.mesIdx}
                   estadoDia={(key) => {
                     if (key < fechaKey(manana) || key > fechaKey(limiteMax)) return "pasado";
-                    if (mapaDisponibilidad[key] === true) return "disponible";
-                    if (mapaDisponibilidad[key] === false) return "bloqueado";
-                    return "sin-datos";
+                    return mapaDisponibilidad[key] === true ? "disponible" : "bloqueado";
                   }}
                   onClickDia={(key) => setFecha(key)}
                   onCambiarMes={(delta) => setMesVisto((prev) => { const d = new Date(prev.anio, prev.mesIdx + delta, 1); return { anio: d.getFullYear(), mesIdx: d.getMonth() }; })}

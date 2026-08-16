@@ -4417,6 +4417,10 @@ const TIPOS_CITA = [
 
 const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rechazada: "Rechazada", cancelada: "Cancelada", realizada: "Realizada" };
 
+// Bloques horarios de 1 hora que el adiestrador puede habilitar por día —
+// mismo horizonte que cubre un negocio de paseos/adiestramiento (8am-8pm).
+const BLOQUES_DIA = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
+
 // Lo que el cliente dejó al pedir la cita desde la agenda pública — copia
 // redundante guardada directo en citas_agenda (ver api/cliente-agenda.js),
 // así el adiestrador la ve acá sin necesitar acceso a la tabla prospectos
@@ -4483,7 +4487,7 @@ function ModalDetalleCita({ cita, onCerrar }) {
   );
 }
 
-export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidadFecha, actualizarDisponibilidadFecha, aplicarPatronSemanal, tarifas, actualizarTarifas, rolActual, nombreActual }) {
+export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidadFecha, toggleBloqueDisponibilidad, aplicarPatronSemanal, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
@@ -4500,9 +4504,9 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const [linkGenericoCopiado, setLinkGenericoCopiado] = useState(false);
   const hoyDisponibilidad = new Date();
   const [mesDisponibilidad, setMesDisponibilidad] = useState({ anio: hoyDisponibilidad.getFullYear(), mesIdx: hoyDisponibilidad.getMonth() });
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [diasPatron, setDiasPatron] = useState([]);
-  const [horaInicioPatron, setHoraInicioPatron] = useState("09:00");
-  const [horaFinPatron, setHoraFinPatron] = useState("18:00");
+  const [bloquesPatron, setBloquesPatron] = useState([]);
   const [aplicandoPatron, setAplicandoPatron] = useState(false);
 
   function copiarLinkGenerico() {
@@ -4744,7 +4748,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       {(esEntrenador || adiestradores.length > 0) && (
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Disponibilidad</h2>
-          <p style={hint}>Clic en un día para abrirlo o cerrarlo — así aparece (o no) para que los tutores agenden evaluaciones y clases ese día puntual.</p>
+          <p style={hint}>Clic en un día para ver y elegir qué bloques de hora quedan disponibles ese día — solo esos bloques van a aparecer para que los tutores agenden evaluaciones y clases.</p>
           {!esEntrenador && (
             <select value={adiestradorHorario} onChange={(e) => setAdiestradorHorario(e.target.value)} style={{ ...input, marginTop: 12, width: 240 }}>
               {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
@@ -4754,31 +4758,38 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
             const objetivo = esEntrenador ? nombreActual : adiestradorHorario;
             const hoyKey = fechaKey(new Date());
 
+            function bloquesDe(key) {
+              return disponibilidadFecha.filter((d) => d.adiestrador === objetivo && d.fecha === key).map((d) => d.horaInicio);
+            }
+
             function estadoDia(key) {
               if (key < hoyKey) return "pasado";
-              const fila = disponibilidadFecha.find((d) => d.adiestrador === objetivo && d.fecha === key);
-              if (!fila) return "sin-datos";
-              return fila.disponible ? "disponible" : "bloqueado";
+              return bloquesDe(key).length > 0 ? "disponible" : "bloqueado";
             }
 
             function onClickDia(key) {
-              const fila = disponibilidadFecha.find((d) => d.adiestrador === objetivo && d.fecha === key);
-              actualizarDisponibilidadFecha(objetivo, key, { disponible: !fila?.disponible });
+              setDiaSeleccionado(key);
             }
 
             function toggleDiaPatron(dow) {
               setDiasPatron((prev) => (prev.includes(dow) ? prev.filter((d) => d !== dow) : [...prev, dow]));
             }
 
+            function toggleBloquePatron(hora) {
+              setBloquesPatron((prev) => (prev.includes(hora) ? prev.filter((h) => h !== hora) : [...prev, hora]));
+            }
+
             async function aplicarPatron() {
-              if (diasPatron.length === 0 || aplicandoPatron) return;
+              if (diasPatron.length === 0 || bloquesPatron.length === 0 || aplicandoPatron) return;
               setAplicandoPatron(true);
               const total = diasDelMes(mesDisponibilidad.mesIdx, mesDisponibilidad.anio);
               const desde = fechaKeyMes(mesDisponibilidad.anio, mesDisponibilidad.mesIdx, 1);
               const hasta = fechaKeyMes(mesDisponibilidad.anio, mesDisponibilidad.mesIdx, total);
-              await aplicarPatronSemanal(objetivo, diasPatron, horaInicioPatron, horaFinPatron, desde, hasta);
+              await aplicarPatronSemanal(objetivo, diasPatron, bloquesPatron, desde, hasta);
               setAplicandoPatron(false);
             }
+
+            const bloquesDelDiaSeleccionado = diaSeleccionado ? bloquesDe(diaSeleccionado) : [];
 
             return (
               <div style={{ marginTop: 14 }}>
@@ -4796,21 +4807,51 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                       </button>
                     ))}
                   </div>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <input type="time" value={horaInicioPatron} onChange={(e) => setHoraInicioPatron(e.target.value)} style={{ ...input, marginBottom: 0, width: 120 }} />
-                    <span style={{ color: "#8A7E5C", fontSize: 13 }}>a</span>
-                    <input type="time" value={horaFinPatron} onChange={(e) => setHoraFinPatron(e.target.value)} style={{ ...input, marginBottom: 0, width: 120 }} />
-                    <button onClick={aplicarPatron} disabled={diasPatron.length === 0 || aplicandoPatron}
-                      style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: diasPatron.length === 0 || aplicandoPatron ? 0.5 : 1 }}>
-                      {aplicandoPatron ? "Aplicando..." : `Aplicar a ${MESES[mesDisponibilidad.mesIdx]}`}
-                    </button>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {BLOQUES_DIA.map((hora) => (
+                      <button key={hora} type="button" onClick={() => toggleBloquePatron(hora)}
+                        style={{
+                          borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          background: bloquesPatron.includes(hora) ? NAVY : "#FFFFFF", color: bloquesPatron.includes(hora) ? CREAM : "#6B6248",
+                          border: bloquesPatron.includes(hora) ? "none" : "1px solid #E4DBC3",
+                        }}>
+                        {hora}
+                      </button>
+                    ))}
                   </div>
+                  <button onClick={aplicarPatron} disabled={diasPatron.length === 0 || bloquesPatron.length === 0 || aplicandoPatron}
+                    style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: diasPatron.length === 0 || bloquesPatron.length === 0 || aplicandoPatron ? 0.5 : 1 }}>
+                    {aplicandoPatron ? "Aplicando..." : `Aplicar a ${MESES[mesDisponibilidad.mesIdx]}`}
+                  </button>
                 </div>
                 <CalendarioMes anio={mesDisponibilidad.anio} mesIdx={mesDisponibilidad.mesIdx} estadoDia={estadoDia} onClickDia={onClickDia}
                   onCambiarMes={(delta) => setMesDisponibilidad((prev) => {
                     const d = new Date(prev.anio, prev.mesIdx + delta, 1);
                     return { anio: d.getFullYear(), mesIdx: d.getMonth() };
-                  })} />
+                  })}
+                  seleccionado={diaSeleccionado} />
+                {diaSeleccionado && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #EDE4CE" }}>
+                    <p style={{ ...label, marginBottom: 8 }}>
+                      Bloques del {new Date(diaSeleccionado + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {BLOQUES_DIA.map((hora) => {
+                        const activo = bloquesDelDiaSeleccionado.includes(hora);
+                        return (
+                          <button key={hora} type="button" onClick={() => toggleBloqueDisponibilidad(objetivo, diaSeleccionado, hora)}
+                            style={{
+                              borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                              background: activo ? "#D8ECDE" : "#FFFFFF", color: activo ? "#2F6A46" : "#6B6248",
+                              border: activo ? "1.5px solid #2F6A46" : "1px solid #E4DBC3",
+                            }}>
+                            {hora}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}

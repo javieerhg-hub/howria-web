@@ -47,26 +47,26 @@ function horaChile(fechaISO) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: ZONA_CHILE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(fechaISO)) + ":00";
 }
 
-function calcularSlotsDisponibles({ rango, ocupados, duracionMin = DURACION_MIN }) {
-  if (!rango) return [];
-  const [fecha] = rango.fecha.split("T");
+// `bloques` es la lista de horas de inicio ("09:00") que el adiestrador
+// habilitó para esa fecha puntual (disponibilidad_fecha) — cada una es un
+// slot fijo de duracionMin, no un rango a trocear.
+function calcularSlotsDisponibles({ fecha, bloques, ocupados, duracionMin = DURACION_MIN }) {
+  if (!fecha || !bloques || bloques.length === 0) return [];
   const offset = offsetChileISO(fecha);
-  const slots = [];
-  let cursor = new Date(`${fecha}T${rango.horaInicio}${offset}`);
-  const fin = new Date(`${fecha}T${rango.horaFin}${offset}`);
   const ahora = Date.now();
-  while (cursor.getTime() + duracionMin * 60000 <= fin.getTime()) {
-    const inicioSlot = cursor.getTime();
+  const slots = [];
+  bloques.forEach((horaInicio) => {
+    const inicio = new Date(`${fecha}T${horaInicio}${offset}`);
+    const inicioSlot = inicio.getTime();
     const finSlot = inicioSlot + duracionMin * 60000;
     const choca = ocupados.some((o) => {
       const oIni = new Date(o.fecha_hora).getTime();
       const oFin = oIni + (o.duracion_min || 60) * 60000;
       return inicioSlot < oFin && finSlot > oIni;
     });
-    if (!choca && inicioSlot > ahora) slots.push(new Date(cursor).toISOString());
-    cursor = new Date(cursor.getTime() + duracionMin * 60000);
-  }
-  return slots;
+    if (!choca && inicioSlot > ahora) slots.push(inicio.toISOString());
+  });
+  return slots.sort();
 }
 
 export default async function handler(req, res) {
@@ -110,15 +110,18 @@ export default async function handler(req, res) {
       const limiteStr = fechaChile(limite.toISOString());
       const { data: filasDisponibilidad } = await admin
         .from("disponibilidad_fecha")
-        .select("fecha, disponible, hora_inicio, hora_fin")
+        .select("fecha, hora_inicio")
         .eq("adiestrador", adiestrador)
         .gte("fecha", hoyStr)
         .lte("fecha", limiteStr);
+      // Cada fecha con al menos un bloque habilitado cuenta como
+      // "disponible" para pintar el calendario — el detalle de cuáles
+      // bloques exactos sigue abajo, cuando se pide un día puntual.
       disponibilidadFechas = {};
-      (filasDisponibilidad || []).forEach((f) => { disponibilidadFechas[f.fecha] = f.disponible; });
+      (filasDisponibilidad || []).forEach((f) => { disponibilidadFechas[f.fecha] = true; });
 
       if (fecha) {
-        const filaDia = (filasDisponibilidad || []).find((f) => f.fecha === fecha);
+        const bloquesDia = (filasDisponibilidad || []).filter((f) => f.fecha === fecha).map((f) => f.hora_inicio);
         const { data: ocupados } = await admin
           .from("citas_agenda")
           .select("fecha_hora, duracion_min")
@@ -126,10 +129,7 @@ export default async function handler(req, res) {
           .in("estado", ["pendiente", "agendada"])
           .gte("fecha_hora", `${fecha}T00:00:00${offsetChileISO(fecha)}`)
           .lt("fecha_hora", `${fecha}T23:59:59${offsetChileISO(fecha)}`);
-        slots = calcularSlotsDisponibles({
-          rango: filaDia && filaDia.disponible ? { fecha, horaInicio: filaDia.hora_inicio, horaFin: filaDia.hora_fin } : null,
-          ocupados: ocupados || [],
-        });
+        slots = calcularSlotsDisponibles({ fecha, bloques: bloquesDia, ocupados: ocupados || [] });
       }
     }
 
@@ -215,19 +215,20 @@ export default async function handler(req, res) {
       return;
     }
 
-    // re-chequeo de que el día/hora pedido esté realmente habilitado — el
-    // calendario público ya no debería dejar elegir un día bloqueado o sin
+    // re-chequeo de que el bloque pedido esté realmente habilitado — el
+    // calendario público ya no debería dejar elegir un bloque cerrado o sin
     // marcar, pero se valida también acá por si acaso (mismo criterio de
     // defensa que el re-chequeo de choque de horario de más abajo).
     const fechaSolicitada = fechaChile(fechaISO);
     const horaSolicitada = horaChile(fechaISO);
-    const { data: filaDisponibilidad } = await admin
+    const { data: bloqueHabilitado } = await admin
       .from("disponibilidad_fecha")
-      .select("disponible, hora_inicio, hora_fin")
+      .select("id")
       .eq("adiestrador", adiestrador)
       .eq("fecha", fechaSolicitada)
+      .eq("hora_inicio", horaSolicitada)
       .maybeSingle();
-    if (!filaDisponibilidad || !filaDisponibilidad.disponible || horaSolicitada < filaDisponibilidad.hora_inicio || horaSolicitada >= filaDisponibilidad.hora_fin) {
+    if (!bloqueHabilitado) {
       res.status(409).json({ error: "Ese día u horario ya no está disponible — elige otro" });
       return;
     }
