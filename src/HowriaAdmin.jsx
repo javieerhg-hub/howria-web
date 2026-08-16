@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
-import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan } from "./lib/calculosBoletas.js";
+import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 
 // Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
 // cuando de verdad se entra a esa pestaña — así un paseador (que solo ve
@@ -1742,8 +1742,11 @@ function SeleccionarPerrito({ opciones, onElegir, onSalir }) {
 // ---------- Portal del cliente ----------
 function PortalCliente({ cliente, boletasCliente, onSalir }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
-  const boletasOrdenadas = [...boletasCliente].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  const pendientes = boletasCliente.filter((b) => b.estado === "pendiente_pago" || b.estado === "no_enviada");
+  // Una boleta "no_enviada" es un borrador que el equipo todavía no revisó
+  // — no tiene sentido que el cliente la vea en su historial ni que cuente
+  // como algo que debe, antes de que el equipo la acepte.
+  const boletasOrdenadas = [...boletasCliente].filter((b) => b.estado !== "no_enviada").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  const pendientes = boletasCliente.filter(esPorCobrar);
   const totalPendiente = pendientes.reduce((acc, b) => acc + b.total, 0);
 
   return (
@@ -1840,7 +1843,15 @@ function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquip
   const hoyStr0 = fechaKey(hoy);
   const avisos = [];
 
-  const pendientes = boletasEmitidas.filter((b) => b.estado === "pendiente_pago" || b.estado === "no_enviada");
+  // "No enviada" necesita que el equipo la revise y la acepte primero —
+  // es una acción distinta (y más urgente) a "pendiente_pago", que solo
+  // necesita que el cliente pague, así que van en avisos separados.
+  const porRevisar = boletasEmitidas.filter((b) => b.estado === "no_enviada");
+  if (porRevisar.length > 0) {
+    avisos.push({ tipo: "factura-revisar", icono: "📝", texto: `${porRevisar.length} factura(s) por revisar y aceptar`, clave: `revisar-${porRevisar.length}` });
+  }
+
+  const pendientes = boletasEmitidas.filter(esPorCobrar);
   const montoPendiente = pendientes.reduce((acc, b) => acc + b.total, 0);
   if (pendientes.length > 0) {
     avisos.push({ tipo: "factura", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}` });
@@ -2609,7 +2620,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dow));
   const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
 
-  const pendientesCobro = boletasEmitidas.filter((b) => b.estado === "pendiente_pago" || b.estado === "no_enviada");
+  const pendientesCobro = boletasEmitidas.filter(esPorCobrar);
   const montoPendiente = pendientesCobro.reduce((acc, b) => acc + b.total, 0);
 
   const { desde, hasta } = rangoPeriodo("semana", hoy);
@@ -2617,11 +2628,12 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   const objetivosSemana = objetivosSemanales.filter((o) => o.semanaKey === semanaKey);
   const objetivosCumplidos = objetivosSemana.filter((o) => o.cumplido).length;
 
-  const ingresosSemana = boletasEmitidas.filter((b) => { const f = new Date(b.fechaISO); return f >= desde && f < hasta; });
+  const boletasVenta = boletasEmitidas.filter(esVenta);
+  const ingresosSemana = boletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= desde && f < hasta; });
   const totalIngresosSemana = ingresosSemana.reduce((acc, b) => acc + b.total, 0);
   const dataGraficoSemana = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(desde); d.setDate(d.getDate() + i);
-    const total = boletasEmitidas.filter((b) => fechaKey(new Date(b.fechaISO)) === fechaKey(d)).reduce((acc, b) => acc + b.total, 0);
+    const total = boletasVenta.filter((b) => fechaKey(new Date(b.fechaISO)) === fechaKey(d)).reduce((acc, b) => acc + b.total, 0);
     return { etiqueta: DIAS_SEMANA[i], total };
   });
 
@@ -2833,24 +2845,32 @@ export function Spinner({ size = 22, color = GOLD, pista = "rgba(255,255,255,0.2
   );
 }
 
-// ---------- Confirmación de borrado (dos pasos) ----------
-export function BotonEliminar({ onConfirm, label = "Eliminar", style, disabled = false, title }) {
+// ---------- Confirmación en dos pasos (genérico) ----------
+// Cualquier acción de bajo riesgo y reversible a mano (borrar, cancelar,
+// revertir un estado) usa este mismo patrón: un clic muestra confirmar/
+// cancelar inline, sin modal. `BotonEliminar` es el caso particular para
+// borrar (rojo, label "Eliminar").
+export function BotonConfirmable({ onConfirm, label, confirmLabel = "Confirmar", cancelLabel = "Cancelar", colorConfirmar = RUST, style, disabled = false, title }) {
   const [confirmando, setConfirmando] = useState(false);
   if (confirmando) {
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <button onClick={() => { onConfirm(); setConfirmando(false); }}
-          style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
-          Confirmar
+          style={{ border: "none", background: colorConfirmar, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+          {confirmLabel}
         </button>
         <button onClick={() => setConfirmando(false)}
           style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
-          Cancelar
+          {cancelLabel}
         </button>
       </div>
     );
   }
   return <button onClick={() => setConfirmando(true)} disabled={disabled} title={title} style={{ ...style, opacity: disabled ? 0.5 : 1 }}>{label}</button>;
+}
+
+export function BotonEliminar({ onConfirm, label = "Eliminar", style, disabled = false, title }) {
+  return <BotonConfirmable onConfirm={onConfirm} label={label} colorConfirmar={RUST} style={style} disabled={disabled} title={title} />;
 }
 
 // Modal real (overlay + tarjeta centrada) para las acciones irreversibles

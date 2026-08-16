@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
+  esVenta, esPorCobrar,
 } from "./calculosBoletas.js";
 
 describe("esFinDeSemanaOFeriado", () => {
@@ -138,5 +139,35 @@ describe("calcularTotales", () => {
 
   it("lista vacía da todo en cero", () => {
     expect(calcularTotales([])).toEqual({ ingresos: 0, paseos: 0, descuentos: 0, cantidad: 0 });
+  });
+});
+
+describe("esVenta", () => {
+  it("no_enviada no cuenta como venta", () => {
+    expect(esVenta({ estado: "no_enviada" })).toBe(false);
+  });
+  it("pendiente_pago cuenta como venta", () => {
+    expect(esVenta({ estado: "pendiente_pago" })).toBe(true);
+  });
+  it("pagada cuenta como venta", () => {
+    expect(esVenta({ estado: "pagada" })).toBe(true);
+  });
+  it("cancelada no cuenta como venta", () => {
+    expect(esVenta({ estado: "cancelada" })).toBe(false);
+  });
+});
+
+describe("esPorCobrar", () => {
+  it("no_enviada no cuenta como por cobrar (todavía no la revisó el equipo)", () => {
+    expect(esPorCobrar({ estado: "no_enviada" })).toBe(false);
+  });
+  it("pendiente_pago sí cuenta como por cobrar", () => {
+    expect(esPorCobrar({ estado: "pendiente_pago" })).toBe(true);
+  });
+  it("pagada ya no cuenta como por cobrar", () => {
+    expect(esPorCobrar({ estado: "pagada" })).toBe(false);
+  });
+  it("cancelada no cuenta como por cobrar", () => {
+    expect(esPorCobrar({ estado: "cancelada" })).toBe(false);
   });
 });

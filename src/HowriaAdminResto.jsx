@@ -13,6 +13,7 @@ import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
+  esVenta, esPorCobrar,
 } from "./lib/calculosBoletas.js";
 import { CalendarioMes, fechaKeyMes } from "./lib/CalendarioMes.jsx";
 import { jsPDF } from "jspdf";
@@ -25,7 +26,7 @@ import {
   ESTADOS_FACTURA, ESTADOS_PROSPECTO, ORIGENES_PROSPECTO, ROLES_APP, TODOS_LOS_TABS,
   PASOS_CAPACITACION, LOGO_B64, HUELLA_B64,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
-  Spinner, FilaLista, BotonEliminar, ModalConfirmacion,
+  Spinner, FilaLista, BotonEliminar, BotonConfirmable, ModalConfirmacion,
   fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo, inicioSemana, slugEmailUsuario,
   showToast, comprimirImagen,
   boletaToDb, dbToBoleta, boletaAdiestramientoToDb, dbToBoletaAdiestramiento, dbToCorreo,
@@ -1236,7 +1237,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
     ...boletasAdiestramientoCliente.map((b) => ({ ...b, _tipo: "adiestramiento" })),
   ].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  const totalHistorico = calcularTotales(historialVentas).ingresos;
+  const totalHistorico = calcularTotales(historialVentas.filter(esVenta)).ingresos;
   const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
@@ -1614,6 +1615,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     ...boletasEmitidas,
     ...boletasAdiestramiento.map((b) => ({ ...b, cantidad: 0, descuento: (b.descuentoPackMonto || 0) })),
   ], [boletasEmitidas, boletasAdiestramiento]);
+  // Solo lo aceptado/pagado cuenta como venta real — un borrador sin
+  // revisar o una boleta cancelada no deben sumar en ningún ingreso.
+  const todasLasBoletasVenta = useMemo(() => todasLasBoletas.filter(esVenta), [todasLasBoletas]);
 
   const { actualDesde, anteriorDesde, anteriorHasta } = useMemo(() => {
     if (periodo === "semana") {
@@ -1631,8 +1635,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return { actualDesde: inicioActual, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
   }, [periodo]);
 
-  const filtradas = useMemo(() => todasLasBoletas.filter((b) => new Date(b.fechaISO) >= actualDesde), [todasLasBoletas, actualDesde]);
-  const anteriores = useMemo(() => todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }), [todasLasBoletas, anteriorDesde, anteriorHasta]);
+  const filtradas = useMemo(() => todasLasBoletasVenta.filter((b) => new Date(b.fechaISO) >= actualDesde), [todasLasBoletasVenta, actualDesde]);
+  const anteriores = useMemo(() => todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }), [todasLasBoletasVenta, anteriorDesde, anteriorHasta]);
 
   const actual = calcularTotales(filtradas);
   const anterior = calcularTotales(anteriores);
@@ -1655,7 +1659,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     if (periodo === "año") {
       return MESES.map((m, i) => ({
         etiqueta: m.slice(0, 3),
-        total: todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === i && f.getFullYear() === hoy.getFullYear(); }).reduce((acc, b) => acc + b.total, 0),
+        total: todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === i && f.getFullYear() === hoy.getFullYear(); }).reduce((acc, b) => acc + b.total, 0),
       }));
     }
     const mapa = {};
@@ -1665,7 +1669,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       mapa[clave] = (mapa[clave] || 0) + b.total;
     });
     return Object.entries(mapa).map(([etiqueta, total]) => ({ etiqueta, total }));
-  }, [filtradas, periodo, todasLasBoletas]);
+  }, [filtradas, periodo, todasLasBoletasVenta]);
 
   const clientesSinBoletaEsteMes = useMemo(() => {
     return clientes.filter((c) => !todasLasBoletas.some((b) => {
@@ -1686,7 +1690,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return clientes.filter((c) => (c.estadoCliente || "activo") === "activo")
       .reduce((acc, c) => acc + diasSegunPlan(mesActualIdx, anioActualN, c.diasHabituales || []).length * Number(c.valorPaseoRef || 0), 0);
   }, [clientes, mesActualIdx, anioActualN]);
-  const facturadoEsteMes = todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === mesActualIdx && f.getFullYear() === anioActualN; }).reduce((acc, b) => acc + b.total, 0);
+  const facturadoEsteMes = todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === mesActualIdx && f.getFullYear() === anioActualN; }).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
 
   const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año" }[periodo];
@@ -2329,6 +2333,18 @@ export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRe
 // ---------- Facturas ----------
 const FORMAS_PAGO = ["Transferencia", "Efectivo", "Webpay/Tarjeta", "Otro"];
 
+// Tarjeta chica de resumen para la tira de KPI arriba de Facturas — mismos
+// colores que ya usa cada estado en ESTADOS_FACTURA, para no inventar una
+// paleta nueva que aprender.
+function TarjetaResumenFactura({ titulo, valor, color, bg }) {
+  return (
+    <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
+      <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: 0.5 }}>{titulo}</p>
+      <p style={{ margin: 0, fontSize: 20, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{valor}</p>
+    </div>
+  );
+}
+
 export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, cargandoBoletas, nombreUsuario }) {
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [filtroCliente, setFiltroCliente] = useState("todos");
@@ -2337,7 +2353,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const [busqueda, setBusqueda] = useState("");
   const [pagoPendienteDbId, setPagoPendienteDbId] = useState(null);
   const [pagoPendienteTipo, setPagoPendienteTipo] = useState(null);
-  const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null); // solo para mostrar el N° en el modal, no para identificar la boleta
+  const [pagoPendienteNumero, setPagoPendienteNumero] = useState(null);
   const [editandoBoleta, setEditandoBoleta] = useState(null);
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
@@ -2363,17 +2379,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     return tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
   }
 
-  function cambiarEstado(boleta, estado) {
-    if (!boleta._dbId) return; // todavía guardándose, el select ya está disabled pero por las dudas
-    if (estado === "pagada") {
-      setPagoPendienteDbId(boleta._dbId);
-      setPagoPendienteTipo(boleta._tipo);
-      setPagoPendienteNumero(boleta.numero);
-      setFechaPagoForm(new Date().toISOString().slice(0, 10));
-      setFormaPagoForm(FORMAS_PAGO[0]);
-      return;
-    }
-    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado, fechaPago: undefined, formaPago: undefined });
+  function abrirFormPago(boleta) {
+    if (!boleta._dbId) return;
+    setPagoPendienteDbId(boleta._dbId);
+    setPagoPendienteTipo(boleta._tipo);
+    setPagoPendienteNumero(boleta.numero);
+    setFechaPagoForm(new Date().toISOString().slice(0, 10));
+    setFormaPagoForm(FORMAS_PAGO[0]);
   }
 
   function confirmarPago() {
@@ -2383,11 +2395,32 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     setPagoPendienteNumero(null);
   }
 
+  // Cancelar/reactivar/revertir un pago son cambios de estado "hacia atrás"
+  // — antes se podían hacer con un simple <select>, sin ninguna
+  // confirmación (incluía poder revertir una boleta ya pagada con un solo
+  // clic sin querer). Ahora cada uno pasa por BotonConfirmable.
+  function cancelarBoleta(boleta) {
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "cancelada" });
+  }
+  function revertirAPendiente(boleta) {
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "pendiente_pago", fechaPago: undefined, formaPago: undefined });
+  }
+  function reactivarBoleta(boleta) {
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "pendiente_pago" });
+  }
+
   const conteos = useMemo(() => {
     const c = { todas: todasLasBoletas.length };
     ESTADOS_FACTURA.forEach((e) => { c[e.id] = todasLasBoletas.filter((b) => b.estado === e.id).length; });
     return c;
   }, [todasLasBoletas]);
+
+  // Resumen general (independiente de los filtros de la tabla, para que
+  // sirva como panorama estable) — le da un efecto real y visible al
+  // botón "Aceptar": antes de aceptar una boleta no suma en "Ventas
+  // confirmadas" ni en "Por cobrar".
+  const ventasConfirmadas = useMemo(() => calcularTotales(todasLasBoletas.filter(esVenta)).ingresos, [todasLasBoletas]);
+  const porCobrarMonto = useMemo(() => calcularTotales(todasLasBoletas.filter(esPorCobrar)).ingresos, [todasLasBoletas]);
 
   const lista = useMemo(() => {
     return todasLasBoletas
@@ -2406,6 +2439,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>Facturas</h2>
       <p style={hint}>Todas las boletas generadas por el sistema, con quién es cada una y en qué estado de pago se encuentra.</p>
+
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, margin: "16px 0" }}>
+        <TarjetaResumenFactura titulo="Ventas confirmadas" valor={fmtCLP(ventasConfirmadas)} color={ESTADOS_FACTURA[2].color} bg={ESTADOS_FACTURA[2].bg} />
+        <TarjetaResumenFactura titulo="Por cobrar" valor={fmtCLP(porCobrarMonto)} color={ESTADOS_FACTURA[1].color} bg={ESTADOS_FACTURA[1].bg} />
+        <TarjetaResumenFactura titulo="Por revisar" valor={`${conteos.no_enviada || 0} factura(s)`} color={ESTADOS_FACTURA[0].color} bg={ESTADOS_FACTURA[0].bg} />
+        <TarjetaResumenFactura titulo="Canceladas" valor={`${conteos.cancelada || 0} factura(s)`} color={ESTADOS_FACTURA[3].color} bg={ESTADOS_FACTURA[3].bg} />
+      </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "16px 0" }}>
         <button onClick={() => setFiltroEstado("todas")}
@@ -2487,10 +2527,9 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                         <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
                         <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
                         <td style={{ padding: "10px" }}>
-                          <select value={b.estado} disabled={!b._dbId} onChange={(e) => cambiarEstado(b, e.target.value)}
-                            style={{ border: "none", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: b._dbId ? "pointer" : "default", background: est.bg, color: est.color, opacity: b._dbId ? 1 : 0.6 }}>
-                            {ESTADOS_FACTURA.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                          </select>
+                          <span style={{ display: "inline-block", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, background: est.bg, color: est.color }}>
+                            {est.nombre}
+                          </span>
                         </td>
                         <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
                         <td style={{ padding: "10px" }}>
@@ -2504,11 +2543,24 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                               {b.estado === "no_enviada" && (
                                 <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
                               )}
+                              {b.estado === "pendiente_pago" && (
+                                <button onClick={() => abrirFormPago(b)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Marcar pagada</button>
+                              )}
+                              <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
+                                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: descargando === claveFila ? 0.5 : 1 }}>
+                                {descargando === claveFila ? "Generando..." : "Descargar PDF"}
+                              </button>
+                              {(b.estado === "no_enviada" || b.estado === "pendiente_pago") && (
+                                <BotonConfirmable onConfirm={() => cancelarBoleta(b)} label="Cancelar" colorConfirmar={RUST}
+                                  style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                              )}
                               {b.estado === "pagada" && (
-                                <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
-                                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: descargando === claveFila ? 0.5 : 1 }}>
-                                  {descargando === claveFila ? "Generando..." : "Descargar PDF"}
-                                </button>
+                                <BotonConfirmable onConfirm={() => revertirAPendiente(b)} label="Revertir a pendiente" colorConfirmar={NAVY}
+                                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12 }} />
+                              )}
+                              {b.estado === "cancelada" && (
+                                <BotonConfirmable onConfirm={() => reactivarBoleta(b)} label="Reactivar" colorConfirmar={"#2F6A46"}
+                                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }} />
                               )}
                               <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
                               <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
@@ -2516,10 +2568,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                           )}
                         </td>
                       </tr>
-                      {pagoPendienteDbId === b._dbId && (
+                      {pagoPendienteDbId === b._dbId && pagoPendienteTipo === b._tipo && (
                         <tr>
                           <td colSpan={10} style={{ padding: "0 10px 12px" }}>
                             <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ fontSize: 12.5, color: "#2F6A46", fontWeight: 600 }}>Marcando pagada la N°{String(pagoPendienteNumero).padStart(3, "0")}:</span>
                               <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
                               <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
                                 {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -5528,12 +5581,10 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
               {boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
                 <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
               )}
-              {(boleta.editadaPor || boleta.estado === "pagada") && (
-                <button onClick={descargarComprobante} disabled={generandoComprobante}
-                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, opacity: generandoComprobante ? 0.5 : 1 }}>
-                  {generandoComprobante ? "Generando..." : boleta.editadaPor ? "Descargar comprobante actualizado" : "Descargar PDF"}
-                </button>
-              )}
+              <button onClick={descargarComprobante} disabled={generandoComprobante}
+                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, opacity: generandoComprobante ? 0.5 : 1 }}>
+                {generandoComprobante ? "Generando..." : boleta.editadaPor ? "Descargar comprobante actualizado" : "Descargar PDF"}
+              </button>
               <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
               <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
             </>

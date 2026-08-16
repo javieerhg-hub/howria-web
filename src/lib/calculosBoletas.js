@@ -89,3 +89,18 @@ export function calcularTotales(lista) {
   const descuentos = lista.reduce((acc, b) => acc + (b.descuento || 0), 0);
   return { ingresos, paseos, descuentos, cantidad: lista.length };
 }
+
+// Una boleta solo cuenta como venta real una vez que el equipo la aceptó
+// (pendiente_pago) o el cliente ya pagó (pagada) — un borrador sin revisar
+// (no_enviada) o una boleta cancelada no deben sumar en ningún cálculo de
+// ingresos/ventas.
+export function esVenta(boleta) {
+  return boleta.estado === "pendiente_pago" || boleta.estado === "pagada";
+}
+
+// Solo una boleta aceptada y todavía sin pagar es plata que el cliente
+// realmente debe — un borrador sin revisar (no_enviada) no debería
+// mostrarse como deuda, ni interna ni al propio cliente.
+export function esPorCobrar(boleta) {
+  return boleta.estado === "pendiente_pago";
+}
