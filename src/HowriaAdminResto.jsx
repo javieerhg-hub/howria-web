@@ -6180,30 +6180,35 @@ export function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolv
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, fontSize: 12, color: "#8A7E5C", textAlign: "center", marginBottom: 8 }}>
           {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <span key={d}>{d}</span>)}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+        <div className="howria-cal-grid" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
           {celdas.map((dia, i) => {
             if (!dia) return <div key={`vacio-${i}`} />;
             const key = fechaKey(new Date(anio, mesIdx, dia));
             const citasDia = (porDia[key] || []).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
             const esHoy = key === fechaKey(hoy);
             return (
-              <div key={key}
-                style={{ minHeight: 92, borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
+              <div key={key} className="howria-cal-celda"
+                style={{ borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
                   background: citasDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
-                <button onClick={() => setDiaSel(diaSel === key ? null : key)}
-                  style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
-                  {dia}
-                </button>
-                {citasDia.slice(0, 2).map((c) => (
-                  <button key={c._dbId || c.id} onClick={() => setCitaSel(c)}
-                    style={{ border: "none", background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46",
-                      borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.perro}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <button onClick={() => setDiaSel(diaSel === key ? null : key)}
+                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
+                    {dia}
                   </button>
-                ))}
-                {citasDia.length > 2 && (
-                  <span style={{ fontSize: 10, color: "#8A7E5C", paddingLeft: 5 }}>+{citasDia.length - 2} más</span>
-                )}
+                  {citasDia.length > 0 && <span className="howria-cal-punto" style={{ width: 7, height: 7, borderRadius: "50%", background: GOLD, flex: "none" }} />}
+                </div>
+                <div className="howria-cal-nombres" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {citasDia.slice(0, 2).map((c) => (
+                    <button key={c._dbId || c.id} onClick={() => setCitaSel(c)}
+                      style={{ border: "none", background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46",
+                        borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.perro}
+                    </button>
+                  ))}
+                  {citasDia.length > 2 && (
+                    <span style={{ fontSize: 10, color: "#8A7E5C", paddingLeft: 5 }}>+{citasDia.length - 2} más</span>
+                  )}
+                </div>
               </div>
             );
           })}

@@ -3693,6 +3693,8 @@ export default function HowriaAdmin() {
         .howria-facturas-tabla { display: block; }
         .howria-facturas-tarjetas { display: none; }
         .howria-agenda-link-boton { display: none; }
+        .howria-cal-celda { min-height: 92px; }
+        .howria-cal-punto { display: none; }
         @media (min-width: 681px) {
           .howria-sidebar { display: flex; }
           .howria-header { display: none; }
@@ -3735,6 +3737,10 @@ export default function HowriaAdmin() {
           .howria-agenda-disponibilidad { order: 5; }
           .howria-agenda-precios { order: 6; }
           .howria-agenda-historial { order: 7; }
+          .howria-cal-grid { gap: 4px !important; }
+          .howria-cal-celda { min-height: 38px !important; padding: 3px !important; }
+          .howria-cal-nombres { display: none !important; }
+          .howria-cal-punto { display: block !important; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
