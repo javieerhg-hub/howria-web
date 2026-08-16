@@ -2376,7 +2376,7 @@ function TarjetaResumenFactura({ titulo, valor, color, bg }) {
   );
 }
 
-export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, cargandoBoletas, nombreUsuario }) {
+export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, clientes, setClientes, usuarios, cargandoBoletas, nombreUsuario }) {
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [filtroCliente, setFiltroCliente] = useState("todos");
   const [desde, setDesde] = useState("");
@@ -2419,6 +2419,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   // resto de la app para asociar boleta↔cliente).
   function responsableDe(b) {
     return clientes.find((c) => esBoletaDeCliente(b, c))?.responsableNombre;
+  }
+
+  // El responsable es del cliente, no de la boleta puntual — cambiar acá
+  // actualiza a todo el cliente dueño de esta boleta, igual que el
+  // selector de FormularioCliente.
+  function actualizarResponsable(b, nuevoNombre) {
+    setClientes((prev) => prev.map((c) => (esBoletaDeCliente(b, c) ? { ...c, responsableNombre: nuevoNombre || undefined } : c)));
   }
 
   function abrirFormPago(boleta) {
@@ -2484,6 +2491,31 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 
   const totalListado = calcularTotales(lista).ingresos;
   const nombresClientes = [...new Set(todasIngresadas.map((b) => b.cliente))];
+
+  // Formulario de "marcar pagada" y editor de boleta — el mismo contenido
+  // se usa tanto en la fila expandida de la tabla (desktop) como dentro
+  // de la ficha mobile, para no duplicar la lógica en dos lugares.
+  function BloquePagoInline() {
+    return (
+      <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 12.5, color: "#2F6A46", fontWeight: 600 }}>Marcando pagada la N°{String(pagoPendienteNumero).padStart(3, "0")}:</span>
+        <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
+        <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
+          {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
+        <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
+      </div>
+    );
+  }
+
+  function BloqueEditorInline(b) {
+    return (
+      <EditorBoletaBasico boleta={b} tipo={b._tipo}
+        onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditandoBoleta(null); }}
+        onCancelar={() => setEditandoBoleta(null)} />
+    );
+  }
 
   // Una fila de la tabla (más sus filas de expansión: formulario de pago
   // y editor) — se comparte entre "Por revisar" y "Facturas ya
@@ -2553,28 +2585,111 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
         {pagoPendienteDbId === b._dbId && pagoPendienteTipo === b._tipo && (
           <tr>
             <td colSpan={11} style={{ padding: "0 10px 12px" }}>
-              <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12.5, color: "#2F6A46", fontWeight: 600 }}>Marcando pagada la N°{String(pagoPendienteNumero).padStart(3, "0")}:</span>
-                <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
-                <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
-                  {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
-                <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
-                <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
-              </div>
+              <BloquePagoInline />
             </td>
           </tr>
         )}
         {editandoBoleta === claveFila && (
           <tr>
             <td colSpan={11} style={{ padding: "0 10px 12px" }}>
-              <EditorBoletaBasico boleta={b} tipo={b._tipo}
-                onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditandoBoleta(null); }}
-                onCancelar={() => setEditandoBoleta(null)} />
+              <BloqueEditorInline b={b} />
             </td>
           </tr>
         )}
       </Fragment>
+    );
+  }
+
+  // Versión ficha de la misma boleta, para mobile — mismo estado y
+  // handlers que renderFilaFactura, solo cambia el layout. Acá además se
+  // puede cambiar el responsable del dinero sin salir de Facturas.
+  function renderTarjetaFactura(b) {
+    const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
+    const claveFila = `${b._tipo}-${b._dbId}`;
+    const responsable = responsableDe(b);
+    const hayAccionPrincipal = b.estado === "no_enviada" || b.estado === "pendiente_pago";
+    return (
+      <div key={claveFila} className="howria-card" style={{ background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 12, padding: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: "#8A7E5C", fontWeight: 600 }}>
+            N°{String(b.numero).padStart(3, "0")} · {b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}
+            {b.editadaPor && (
+              <span title={`Corregida por ${b.editadaPor} el ${new Date(b.editadaEn).toLocaleString("es-CL")}`} style={{ marginLeft: 5, color: GOLD, cursor: "help" }}>✎</span>
+            )}
+          </span>
+          <span style={{ display: "inline-block", borderRadius: 20, padding: "5px 10px", fontSize: 12, fontWeight: 600, background: est.bg, color: est.color }}>
+            {est.nombre}
+          </span>
+        </div>
+
+        <p style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 700, color: NAVY }}>{b.cliente}</p>
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: "#6B6248" }}>{b.perro ? `🐾 ${b.perro}` : "Sin perro asociado"}</p>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`} · Emitida {b.fecha}</span>
+          <span style={{ fontSize: 19, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>{fmtCLP(b.total)}</span>
+        </div>
+        {b.estado === "pagada" && b.formaPago && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#8A7E5C" }}>Pagada: {b.formaPago} · {b.fechaPago}</p>
+        )}
+
+        <div style={{ margin: "10px 0 12px" }}>
+          <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
+            Responsable del dinero
+          </label>
+          <select value={responsable || ""} onChange={(e) => actualizarResponsable(b, e.target.value)} style={{ ...input, marginBottom: 0, width: "100%" }}>
+            <option value="">Sin asignar</option>
+            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+        </div>
+
+        {!b._dbId ? (
+          <p style={{ fontSize: 12.5, color: "#8A7E5C" }}>Guardando…</p>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {b.estado === "no_enviada" && (
+                <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)}
+                  style={{ ...botonPrincipal, marginTop: 0, background: "#2F6A46", flex: 1, minHeight: 44 }}>Aceptar</button>
+              )}
+              {b.estado === "pendiente_pago" && (
+                <button onClick={() => abrirFormPago(b)}
+                  style={{ ...botonPrincipal, marginTop: 0, background: "#2F6A46", flex: 1, minHeight: 44 }}>Marcar pagada</button>
+              )}
+              <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
+                style={{ ...botonSecundario, flex: hayAccionPrincipal ? "0 0 auto" : 1, minHeight: 44, opacity: descargando === claveFila ? 0.5 : 1 }}>
+                {descargando === claveFila ? "Generando..." : "PDF"}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+              {hayAccionPrincipal && (
+                <BotonConfirmable onConfirm={() => cancelarBoleta(b)} label="Cancelar" colorConfirmar={RUST}
+                  style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+              )}
+              {b.estado === "pagada" && (
+                <BotonConfirmable onConfirm={() => revertirAPendiente(b)} label="Revertir a pendiente" colorConfirmar={NAVY}
+                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5 }} />
+              )}
+              {b.estado === "cancelada" && (
+                <BotonConfirmable onConfirm={() => reactivarBoleta(b)} label="Reactivar" colorConfirmar={"#2F6A46"}
+                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12.5, fontWeight: 600 }} />
+              )}
+              <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)}
+                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
+              <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)}
+                style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+            </div>
+          </>
+        )}
+
+        {pagoPendienteDbId === b._dbId && pagoPendienteTipo === b._tipo && (
+          <div style={{ marginTop: 12 }}><BloquePagoInline /></div>
+        )}
+        {editandoBoleta === claveFila && (
+          <div style={{ marginTop: 12 }}><BloqueEditorInline b={b} /></div>
+        )}
+      </div>
     );
   }
 
@@ -2616,11 +2731,14 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             ) : (
               <>
                 <p style={{ ...hint, marginTop: 2, marginBottom: 10 }}>Boletas recién generadas, todavía sin revisar — al aceptarlas pasan a "Facturas ya ingresadas" y empiezan a contar como venta.</p>
-                <div style={{ overflowX: "auto" }}>
+                <div className="howria-facturas-tabla" style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                     <EncabezadoTabla />
                     <tbody>{porRevisar.map(renderFilaFactura)}</tbody>
                   </table>
+                </div>
+                <div className="howria-facturas-tarjetas" style={{ flexDirection: "column", gap: 12 }}>
+                  {porRevisar.map(renderTarjetaFactura)}
                 </div>
               </>
             )}
@@ -2680,7 +2798,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                 <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
               </div>
 
-              <div style={{ overflowX: "auto" }}>
+              <div className="howria-facturas-tabla" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                   <EncabezadoTabla />
                   <tbody>
@@ -2690,6 +2808,12 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="howria-facturas-tarjetas" style={{ flexDirection: "column", gap: 12 }}>
+                {lista.map(renderTarjetaFactura)}
+                {lista.length === 0 && (
+                  <p style={{ ...hint, textAlign: "center" }}>No hay facturas que coincidan.</p>
+                )}
               </div>
             </div>
           )}
