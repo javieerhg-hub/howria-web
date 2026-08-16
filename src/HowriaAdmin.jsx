@@ -3300,6 +3300,7 @@ export default function HowriaAdmin() {
         @media (min-width: 681px) {
           .howria-sidebar { display: flex; }
           .howria-header { display: none; }
+          .howria-shell-contenido { margin-left: 232px; }
         }
         @media (max-width: 680px) {
           .howria-g2, .howria-g3, .howria-g4, .howria-split, .howria-photo-row {
@@ -3344,7 +3345,7 @@ export default function HowriaAdmin() {
       </div>
 
       <div className="howria-shell">
-        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "sticky", top: 0, alignSelf: "flex-start", height: "100vh" }}>
+        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 25 }}>
           <div style={{ padding: "4px 10px 20px", flex: "none" }}>
             <LogoHowria height={38} />
           </div>
@@ -3387,7 +3388,7 @@ export default function HowriaAdmin() {
             })}
           </nav>
 
-          <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14 }}>
+          <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" }}>
               {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
               <BotonNotificacionesPush usuarioEmail={user.email} />
