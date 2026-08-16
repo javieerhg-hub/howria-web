@@ -1493,15 +1493,28 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 }
 
 // ---------- Clientes (base de datos madre) ----------
+
+// Filtros/orden de la lista (no la búsqueda de texto, que es más
+// puntual) sobreviven a un refresh — se guardan en localStorage apenas
+// cambian, mismo criterio que howria_pago_ajustes.
+function cargarFiltrosClientesGuardados() {
+  try { return JSON.parse(localStorage.getItem("howria_filtros_clientes") || "{}"); } catch { return {}; }
+}
+
 export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroPaseador, setFiltroPaseador] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [soloEvaluacion, setSoloEvaluacion] = useState(false);
-  const [orden, setOrden] = useState("nombre-asc");
+  const filtrosGuardados = cargarFiltrosClientesGuardados();
+  const [filtroPaseador, setFiltroPaseador] = useState(filtrosGuardados.filtroPaseador || "todos");
+  const [filtroEstado, setFiltroEstado] = useState(filtrosGuardados.filtroEstado || "todos");
+  const [soloEvaluacion, setSoloEvaluacion] = useState(filtrosGuardados.soloEvaluacion || false);
+  const [orden, setOrden] = useState(filtrosGuardados.orden || "nombre-asc");
+
+  useEffect(() => {
+    try { localStorage.setItem("howria_filtros_clientes", JSON.stringify({ filtroPaseador, filtroEstado, soloEvaluacion, orden })); } catch {}
+  }, [filtroPaseador, filtroEstado, soloEvaluacion, orden]);
 
   useEffect(() => {
     if (!saltarClienteDbId) return;
