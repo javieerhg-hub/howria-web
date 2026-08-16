@@ -6174,6 +6174,7 @@ function paseoComoItem(cliente, key, registroPaseos) {
   const registro = registroPaseos[`${cliente.id}_${key}`];
   return {
     id: `paseo-${cliente.id}-${key}`,
+    clienteId: cliente.id,
     tipo: "paseo",
     clienteNombre: cliente.nombre,
     perro: cliente.perro,
@@ -6183,6 +6184,7 @@ function paseoComoItem(cliente, key, registroPaseos) {
     adiestrador: cliente.paseadorNombre,
     lat: cliente.lat,
     lng: cliente.lng,
+    horaHabitual: cliente.horaHabitual || null,
     fechaISO: `${key}T00:00:00`,
     estado: registro?.realizado ? "realizada" : registro?.cancelado ? "cancelada" : "pendiente",
     notas: registro?.nota || "",
@@ -6227,19 +6229,34 @@ function construirItinerarioDia(items, { horaInicioPaseos, duracionPaseoMin, tra
       .map((it) => ({ ...it, _inicioMin: minutosDeISO(it.fechaISO), _finMin: minutosDeISO(it.fechaISO) + (it.duracionMin || 60), _estimado: false }));
 
     const paseos = itemsPersona.filter((it) => it.tipo === "paseo");
-    const conGeo = paseos.filter((p) => p.lat && p.lng);
-    const sinGeo = paseos.filter((p) => !(p.lat && p.lng));
+
+    // Los paseos con hora habitual ya configurada en la ficha del cliente
+    // (mismo campo cliente.horaHabitual que ya usa Mis paseos para ordenar
+    // y marcar atrasos) van directo a esa hora, sin pasar por la estimación.
+    const conHoraFija = paseos
+      .filter((p) => p.horaHabitual)
+      .map((p) => {
+        const inicio = minutosDesdeHora(p.horaHabitual);
+        return { ...p, _inicioMin: inicio, _finMin: inicio + duracionPaseoMin, _estimado: false };
+      });
+
+    // El resto se ordena por cercanía geográfica y se apila desde la
+    // hora de inicio — misma estimación de siempre, marcada "estimado"
+    // hasta que alguien le fije una hora real (arrastrando o con el +).
+    const sinHora = paseos.filter((p) => !p.horaHabitual);
+    const conGeo = sinHora.filter((p) => p.lat && p.lng);
+    const sinGeo = sinHora.filter((p) => !(p.lat && p.lng));
     const paseosOrdenados = [...ordenarRutaCercanoMasProximo(conGeo), ...sinGeo];
 
     let cursor = minutosDesdeHora(horaInicioPaseos);
-    const paseosConHora = paseosOrdenados.map((p) => {
+    const paseosEstimados = paseosOrdenados.map((p) => {
       const inicio = cursor;
       const fin = inicio + duracionPaseoMin;
       cursor = fin + trayectoMin;
       return { ...p, _inicioMin: inicio, _finMin: fin, _estimado: true };
     });
 
-    const todos = [...citasReales, ...paseosConHora].sort((a, b) => a._inicioMin - b._inicioMin);
+    const todos = [...citasReales, ...conHoraFija, ...paseosEstimados].sort((a, b) => a._inicioMin - b._inicioMin);
     return { persona, items: todos, inicioMin: todos[0]?._inicioMin ?? 0 };
   });
 
@@ -6250,7 +6267,7 @@ function construirItinerarioDia(items, { horaInicioPaseos, duracionPaseoMin, tra
 // persona (paseador/adiestrador) — clic en un día del calendario. Las
 // horas de paseo son una estimación (el sistema no guarda hora fija por
 // cliente, solo el día de la semana), por eso quedan editables arriba.
-function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin, onVerDetalle, onCerrar }) {
+function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas, setClientes, horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin, onVerDetalle, onCerrar }) {
   useEffect(() => {
     function alEscape(e) { if (e.key === "Escape") onCerrar(); }
     window.addEventListener("keydown", alEscape);
@@ -6265,7 +6282,7 @@ function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInici
           <h3 id="modal-itinerario-titulo" style={{ margin: 0, textTransform: "capitalize", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{fechaLabel}</h3>
           <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
         </div>
-        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#8A7E5C" }}>Evaluaciones y clases van a su hora agendada. Los paseos no tienen hora fija en el sistema (solo el día), así que se estiman en orden de cercanía a partir de la hora de inicio — ajustala si no calza con la realidad.</p>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#8A7E5C" }}>Evaluaciones y clases van a su hora agendada. Los paseos sin hora configurada se estiman en orden de cercanía a partir de la hora de inicio — arrastralos o tocá el + para fijarles una hora real, así queda guardada para la próxima vez.</p>
 
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 18, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 8 }}>
           <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -6285,10 +6302,32 @@ function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInici
         {grupos.length === 0 ? (
           <p style={hint}>Sin actividades este día.</p>
         ) : (
-          <GrillaHorariaDia grupos={grupos} onVerDetalle={onVerDetalle} />
+          <GrillaHorariaDia grupos={grupos} onVerDetalle={onVerDetalle} diaKey={diaKey} citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes} />
         )}
       </div>
     </div>
+  );
+}
+
+// Bloque individual arrastrable dentro de la grilla — mismos sensores
+// (distancia mínima antes de activar el arrastre) que ya usa MapaRutas,
+// así que un simple clic sigue abriendo el detalle normal y solo un
+// arrastre de verdad mueve el horario.
+function BloqueItinerario({ it, top, alto, tono, arrastrable, onVerDetalle }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: it.id, disabled: !arrastrable });
+  return (
+    <button ref={setNodeRef} {...(arrastrable ? { ...listeners, ...attributes } : {})} onClick={() => onVerDetalle(it)}
+      style={{ position: "absolute", top, height: alto, left: 3, right: 3, border: "none", borderRadius: 6,
+        background: tono?.bg || "#EDE4CE", color: tono?.color || INK, textAlign: "left",
+        cursor: arrastrable ? (isDragging ? "grabbing" : "grab") : "pointer",
+        padding: "3px 6px", overflow: "hidden", fontSize: 10.5, lineHeight: 1.3,
+        boxShadow: isDragging ? "0 4px 12px rgba(0,0,0,0.3)" : "0 1px 2px rgba(0,0,0,0.1)",
+        transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+        zIndex: isDragging ? 5 : 1, touchAction: "none" }}>
+      <div style={{ fontWeight: 700 }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</div>
+      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}</div>
+      {it._estimado && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
+    </button>
   );
 }
 
@@ -6296,8 +6335,23 @@ function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInici
 // filas de una hora, cada actividad se dibuja como un bloque posicionado
 // y alto según su hora de inicio y duración (mismo lenguaje visual que
 // un Google Calendar de un día, para que se entienda de un vistazo).
-function GrillaHorariaDia({ grupos, onVerDetalle }) {
+// Cada bloque se puede arrastrar verticalmente para reacomodar el
+// horario: una evaluación/clase agendada se reprograma de verdad
+// (persiste en citas_agenda, validando choque de horario); un paseo sin
+// hora configurada (bloque "estimado") arrastra o suma con el + para
+// fijarle una hora habitual — eso se guarda en cliente.horaHabitual,
+// el mismo campo que ya usa Mis paseos para ordenar y marcar atrasos,
+// así queda configurado en el sistema y deja de depender de la
+// estimación automática.
+function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setCitas, setClientes }) {
   const PX_POR_HORA = 56;
+  const SNAP_MIN = 5;
+  const [editandoHoraId, setEditandoHoraId] = useState(null);
+  const sensoresGrilla = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } })
+  );
+
   const todosItems = grupos.flatMap((g) => g.items);
   const minInicio = todosItems.length ? Math.min(...todosItems.map((it) => it._inicioMin)) : 9 * 60;
   const maxFin = todosItems.length ? Math.max(...todosItems.map((it) => it._finMin)) : 18 * 60;
@@ -6307,41 +6361,95 @@ function GrillaHorariaDia({ grupos, onVerDetalle }) {
   for (let h = horaGridInicio; h < horaGridFin; h++) horas.push(h);
   const altoGrid = horas.length * PX_POR_HORA;
 
+  function fijarHoraPaseo(clienteId, horaStr) {
+    if (!setClientes || !clienteId || !horaStr) return;
+    setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, horaHabitual: horaStr } : c)));
+    showToast(`Hora de paseo guardada: ${horaStr}.`, "exito");
+  }
+
+  function onDragEnd(event) {
+    const { active, delta } = event;
+    if (!delta) return;
+    const deltaMin = Math.round((delta.y / PX_POR_HORA) * 60 / SNAP_MIN) * SNAP_MIN;
+    if (!deltaMin) return;
+
+    const it = todosItems.find((x) => x.id === active.id);
+    if (!it) return;
+    const duracion = it._finMin - it._inicioMin;
+    const nuevoInicio = Math.max(0, Math.min(it._inicioMin + deltaMin, 24 * 60 - duracion));
+    if (nuevoInicio === it._inicioMin) return;
+
+    if (it.tipo === "paseo") {
+      fijarHoraPaseo(it.clienteId, horaDesdeMinutos(nuevoInicio));
+      return;
+    }
+
+    if (!setCitas || !diaKey) return;
+    const nuevaFecha = new Date(`${diaKey}T00:00:00`);
+    nuevaFecha.setMinutes(nuevoInicio);
+    const nuevaISO = nuevaFecha.toISOString();
+    const otras = citasAgenda.filter((c) => c.id !== it.id);
+    if (hayChoqueHorario(otras, it.adiestrador, nuevaISO, duracion)) {
+      showToast(`${it.adiestrador} ya tiene otra cita agendada en ese horario.`);
+      return;
+    }
+    setCitas((prev) => prev.map((c) => (c.id === it.id ? { ...c, fechaISO: nuevaISO } : c)));
+    showToast(`Movido a las ${horaDesdeMinutos(nuevoInicio)}.`, "exito");
+  }
+
   return (
-    <div style={{ display: "flex", overflowX: "auto" }}>
-      <div style={{ flex: "none", width: 42 }}>
-        <div style={{ height: 26 }} />
-        {horas.map((h) => (
-          <div key={h} style={{ height: PX_POR_HORA, borderTop: "1px solid #EDE4CE", fontSize: 10.5, color: "#8A7E5C", paddingTop: 2 }}>
-            {String(h).padStart(2, "0")}:00
+    <DndContext sensors={sensoresGrilla} onDragEnd={onDragEnd}>
+      <p style={{ margin: "0 0 10px", fontSize: 11, color: "#8A7E5C" }}>Arrastrá un bloque hacia arriba o abajo para moverlo de horario.</p>
+      <div style={{ display: "flex", overflowX: "auto" }}>
+        <div style={{ flex: "none", width: 42 }}>
+          <div style={{ height: 26 }} />
+          {horas.map((h) => (
+            <div key={h} style={{ height: PX_POR_HORA, borderTop: "1px solid #EDE4CE", fontSize: 10.5, color: "#8A7E5C", paddingTop: 2 }}>
+              {String(h).padStart(2, "0")}:00
+            </div>
+          ))}
+        </div>
+        {grupos.map((g) => (
+          <div key={g.persona} style={{ flex: "1 0 150px", minWidth: 150, borderLeft: "1px solid #EDE4CE" }}>
+            <div style={{ height: 26, fontSize: 11.5, fontWeight: 700, color: NAVY, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px" }}>
+              {g.persona}
+            </div>
+            <div style={{ position: "relative", height: altoGrid, background: `repeating-linear-gradient(to bottom, transparent, transparent ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA}px)` }}>
+              {g.items.map((it) => {
+                const arrastrable = it.tipo === "paseo" || ["agendada", "pendiente"].includes(it.estado);
+                const top = (it._inicioMin / 60 - horaGridInicio) * PX_POR_HORA;
+                const puedeConfigurar = it.tipo === "paseo" && it._estimado && setClientes;
+                return (
+                  <div key={it.id}>
+                    <BloqueItinerario it={it}
+                      top={top}
+                      alto={Math.max(((it._finMin - it._inicioMin) / 60) * PX_POR_HORA, 22)}
+                      tono={TIPOS_CALENDARIO_VISTA.find((t) => t.id === it.tipo)}
+                      arrastrable={arrastrable}
+                      onVerDetalle={onVerDetalle} />
+                    {puedeConfigurar && (
+                      editandoHoraId === it.id ? (
+                        <input type="time" step={300} autoFocus defaultValue={horaDesdeMinutos(it._inicioMin)}
+                          onChange={(e) => { if (e.target.value) { fijarHoraPaseo(it.clienteId, e.target.value); setEditandoHoraId(null); } }}
+                          onBlur={() => setEditandoHoraId(null)}
+                          onKeyDown={(e) => { if (e.key === "Escape") setEditandoHoraId(null); }}
+                          style={{ position: "absolute", top: top - 2, right: 3, width: 78, fontSize: 10, padding: "1px 2px", zIndex: 6, border: `1.5px solid ${NAVY}`, borderRadius: 4 }} />
+                      ) : (
+                        <button onClick={() => setEditandoHoraId(it.id)} title="Fijar hora real de este paseo"
+                          style={{ position: "absolute", top: top - 5, right: 2, width: 17, height: 17, borderRadius: "50%", zIndex: 6,
+                            border: `1.5px solid ${NAVY}`, background: "#FFFFFF", color: NAVY, fontSize: 11, fontWeight: 700, lineHeight: 1, cursor: "pointer", padding: 0 }}>
+                          +
+                        </button>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
-      {grupos.map((g) => (
-        <div key={g.persona} style={{ flex: "1 0 150px", minWidth: 150, borderLeft: "1px solid #EDE4CE" }}>
-          <div style={{ height: 26, fontSize: 11.5, fontWeight: 700, color: NAVY, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px" }}>
-            {g.persona}
-          </div>
-          <div style={{ position: "relative", height: altoGrid, background: `repeating-linear-gradient(to bottom, transparent, transparent ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA}px)` }}>
-            {g.items.map((it) => {
-              const top = (it._inicioMin / 60 - horaGridInicio) * PX_POR_HORA;
-              const alto = Math.max(((it._finMin - it._inicioMin) / 60) * PX_POR_HORA, 22);
-              const tono = TIPOS_CALENDARIO_VISTA.find((t) => t.id === it.tipo);
-              return (
-                <button key={it.id} onClick={() => onVerDetalle(it)}
-                  style={{ position: "absolute", top, height: alto, left: 3, right: 3, border: "none", borderRadius: 6,
-                    background: tono?.bg || "#EDE4CE", color: tono?.color || INK, cursor: "pointer", textAlign: "left",
-                    padding: "3px 6px", overflow: "hidden", fontSize: 10.5, lineHeight: 1.3, boxShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>
-                  <div style={{ fontWeight: 700 }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</div>
-                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}</div>
-                  {it._estimado && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
+    </DndContext>
   );
 }
 
@@ -6351,7 +6459,7 @@ function GrillaHorariaDia({ grupos, onVerDetalle }) {
 // grandes para que se divise bien). Los 3 tipos se pueden mostrar u
 // ocultar por separado con las pastillas de arriba; con las 3 activas se
 // ven todos juntos en el mismo calendario.
-export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], registroPaseos = {}, rolActual, nombreActual, onVolver }) {
+export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual, onVolver }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesIdx, setMesIdx] = useState(hoy.getMonth());
@@ -6483,7 +6591,9 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
       {diaSel && (
         <ModalItinerarioDia
           fechaLabel={new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+          diaKey={diaSel}
           grupos={gruposItinerario}
+          citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes}
           horaInicioPaseos={horaInicioPaseos} setHoraInicioPaseos={setHoraInicioPaseos}
           duracionPaseoMin={duracionPaseoMin} setDuracionPaseoMin={setDuracionPaseoMin}
           trayectoMin={trayectoMin} setTrayectoMin={setTrayectoMin}
@@ -6595,7 +6705,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
       onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
   }
   if (vista === "calendario") {
-    return <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitas} clientes={clientes} registroPaseos={registroPaseos} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
+    return <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitas} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
   }
 
   const alumnosConProgreso = misAlumnos.map((c) => {
