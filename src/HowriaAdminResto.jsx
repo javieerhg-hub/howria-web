@@ -724,15 +724,6 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
   return (
     <div className="howria-split" style={{ display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 28 }}>
       <div className="howria-card" style={tarjeta}>
-        <div style={{ marginBottom: 22, padding: "14px 16px", background: CREAM_SOFT, borderRadius: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: "#6B6248" }}>⚙️ Recargo por fin de semana / feriado:</span>
-          <input type="number" min="0" max="100" value={recargoPct}
-            onChange={(e) => actualizarRecargoPct(Number(e.target.value) || 0)}
-            style={{ width: 70, padding: "6px 8px", border: "1px solid #DCD2B4", borderRadius: 6, fontSize: 14, textAlign: "center" }} />
-          <span style={{ fontSize: 13, color: "#6B6248" }}>%</span>
-          <span style={{ fontSize: 11.5, color: "#9A9179" }}>(se aplica a las boletas nuevas — las ya generadas no cambian)</span>
-        </div>
-
         <h2 style={sectionTitle}>1. Cliente y mes</h2>
         <p style={label} id="boleta-paseador-label">Paseador</p>
         <div role="group" aria-labelledby="boleta-paseador-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
@@ -780,12 +771,6 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
           <p style={{ ...hint, marginTop: -10 }}>Se reutilizó el valor y el patrón de días de la última boleta de este cliente — puedes ajustarlos si cambiaron.</p>
         )}
 
-        <div style={{ marginTop: 20, padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8 }}>
-          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }} htmlFor="boleta-mensaje">💬 Mensaje personalizado para esta boleta</label>
-          <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 10px" }}>Cualquier trabajador puede agregar aquí una nota para el tutor — aparece en cursiva dorada dentro de la boleta.</p>
-          <input id="boleta-mensaje" type="text" placeholder="ej. ¡Gracias por otro mes con nosotros!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
-        </div>
-
         <h2 style={{ ...sectionTitle, marginTop: 26 }} id="boleta-plan-label">2. Plan de paseos</h2>
         <div role="group" aria-labelledby="boleta-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
           {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
@@ -828,6 +813,14 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
         <Calendario anio={anio} mesIdx={mesIdx} seleccionados={dias} onToggle={toggleDia} />
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }}>3. Valor y descuentos</h2>
+        <div style={{ marginBottom: 16, padding: "14px 16px", background: CREAM_SOFT, borderRadius: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "#6B6248" }}>⚙️ Recargo por fin de semana / feriado:</span>
+          <input type="number" min="0" max="100" value={recargoPct}
+            onChange={(e) => actualizarRecargoPct(Number(e.target.value) || 0)}
+            style={{ width: 70, padding: "6px 8px", border: "1px solid #DCD2B4", borderRadius: 6, fontSize: 14, textAlign: "center" }} />
+          <span style={{ fontSize: 13, color: "#6B6248" }}>%</span>
+          <span style={{ fontSize: 11.5, color: "#9A9179" }}>(se aplica a las boletas nuevas — las ya generadas no cambian)</span>
+        </div>
         <label style={label} htmlFor="boleta-valor-paseo">Valor del paseo este mes</label>
         <input id="boleta-valor-paseo" type="number" value={valorPaseo} onChange={(e) => { setValorPaseo(e.target.value); setEmitida(null); }} style={input} />
         <label style={label} htmlFor="boleta-paseos-cancelados">Paseos cancelados el mes anterior a descontar</label>
@@ -883,6 +876,12 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
           <input type="checkbox" checked={mostrarIva} onChange={(e) => { setMostrarIva(e.target.checked); setEmitida(null); }} style={{ width: 16, height: 16 }} />
           <span style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>Mostrar desglose de IVA (19%) en la boleta</span>
         </label>
+
+        <div style={{ padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8 }}>
+          <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }} htmlFor="boleta-mensaje">💬 Mensaje personalizado para esta boleta</label>
+          <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 10px" }}>Cualquier trabajador puede agregar aquí una nota para el tutor — aparece en cursiva dorada dentro de la boleta.</p>
+          <input id="boleta-mensaje" type="text" placeholder="ej. ¡Gracias por otro mes con nosotros!" value={mensajePersonalizado} onChange={(e) => { setMensajePersonalizado(e.target.value); setEmitida(null); }} style={{ ...input, marginBottom: 0 }} />
+        </div>
 
         <div style={{ marginTop: 8, padding: "18px 20px", background: PANEL_BG, borderRadius: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK }}>
