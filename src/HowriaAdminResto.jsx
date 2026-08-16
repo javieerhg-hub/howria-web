@@ -6814,10 +6814,10 @@ export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, 
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
           <h2 style={{ ...sectionTitle, textTransform: "capitalize", fontSize: 20 }}>{fechaLabel}</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button onClick={() => cambiarDia(-1)} style={botonSecundario}>← Día anterior</button>
             <button onClick={() => setDiaSel(fechaKey(new Date()))} style={botonSecundario}>Hoy</button>
-            <input type="date" value={diaSel} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
+            <input type="date" value={diaSel} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150, flex: "1 1 130px" }} />
             <button onClick={() => cambiarDia(1)} style={botonSecundario}>Día siguiente →</button>
           </div>
         </div>
