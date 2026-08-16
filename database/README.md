@@ -85,7 +85,8 @@ no un runner de migraciones.
 | 057 | `permisos_roles_unificar_ingreso_personal.sql` | 2026-08-15 | Limpieza de datos en `permisos_roles.tabs`: "Ingreso personal nuevo" se unificó dentro de "Agregar usuario" (pestaña Usuarios), así que `'ingreso-personal'` deja de existir como tab id — este script lo reemplaza/limpia en los roles que lo tenían. |
 | 058 | `disponibilidad_por_fecha.sql` | 2026-08-15 | Crea `disponibilidad_fecha` (una fila por adiestrador+fecha) para reemplazar la plantilla semanal fija de `disponibilidad_adiestrador` (028) — control de disponibilidad por fecha concreta en vez de por día de semana genérico. La tabla vieja queda sin uso, no se borra. |
 | 059 | `disponibilidad_fecha_bloques.sql` | 2026-08-15 | Rehace `disponibilidad_fecha`: ahora una fila = un bloque de 1 hora habilitado (adiestrador, fecha, hora_inicio), en vez de un solo rango hora_inicio/hora_fin por día — el adiestrador habilita bloques específicos dentro del día, no todo el día de corrido. |
-| 060 | `clientes_responsable.sql` | 2026-08-15 | Agrega `responsable_nombre` a `clientes` (mismo patrón que `paseador_nombre`/`adiestrador_nombre`) — permite Finanzas personal por administrador, cada cliente queda a cargo de un administrador fijo y sus boletas heredan ese responsable. |
+| 060 | `clientes_responsable.sql` | 2026-08-15 | Agrega `responsable_nombre` a `clientes` (mismo patrón que `paseador_nombre`/`adiestrador_nombre`) — permite Finanzas personal por responsable de cuenta, cada cliente queda a cargo de una persona fija y sus boletas heredan ese responsable. |
+| 061 | `clientes_responsable_desde_paseador.sql` | 2026-08-16 | Migración de datos (no de esquema): copia `paseador_nombre` a `responsable_nombre` para los clientes donde ese campo ya tenía puesto "Javier Herrera" o "Javier Arniaz" — los únicos dos responsables de cuenta del negocio. El resto de los clientes queda sin responsable, a asignar a mano. |
 
 ## Nota sobre el orden 001–023
 

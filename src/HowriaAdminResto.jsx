@@ -966,7 +966,7 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 // ---------- Formulario de registro / edición de cliente ----------
 const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
-function FormularioCliente({ inicial, paseadores, entrenadores, administradores, onGuardar, onCancelar }) {
+function FormularioCliente({ inicial, paseadores, entrenadores, responsables, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
@@ -1099,9 +1099,9 @@ function FormularioCliente({ inicial, paseadores, entrenadores, administradores,
       <p style={label}>Responsable de la cuenta</p>
       <select value={form.responsableNombre} onChange={(e) => setForm({ ...form, responsableNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
         <option value="">Sin asignar</option>
-        {administradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+        {responsables.map((r) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
       </select>
-      <p style={{ ...hint, marginTop: -10 }}>Define de quién son las ventas de este cliente en la Finanzas personal de cada administrador.</p>
+      <p style={{ ...hint, marginTop: -10 }}>Quién es el dueño del caso (ej. Javier Herrera o Javier Arniaz) — define de quién son las ventas de este cliente en la Finanzas personal de esa persona, sin importar su rol en la app.</p>
 
       {intentoGuardar && formInvalido && (
         <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
@@ -1515,7 +1515,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
           inicial={editandoId ? clientes.find((c) => c.id === editandoId) : null}
           paseadores={usuarios}
           entrenadores={usuarios.filter((u) => u.rol === "entrenador")}
-          administradores={usuarios.filter((u) => u.rol === "administrador")}
+          responsables={usuarios}
           onGuardar={guardar}
           onCancelar={() => { setMostrarForm(false); setEditandoId(null); }}
         />
@@ -1606,28 +1606,36 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // quede automáticamente acotado, sin duplicar lógica.
   const esPaseador = user?.rol === "paseador";
   const esEntrenador = user?.rol === "entrenador";
-  // Cada administrador (ej. Javier Herrera, Javier Arniaz) tiene su
-  // propia cartera de clientes vía clientes.responsable_nombre — su
-  // Finanzas personal se acota igual que la de paseador/entrenador, pero
-  // ve tanto boletas de paseo como de adiestramiento (es dueño del caso
-  // completo, no de una sola disciplina).
-  const esAdministrador = user?.rol === "administrador";
-  const vistaPersonal = esPaseador || esEntrenador || esAdministrador;
-  const clientes = esPaseador
+  // "Responsable de la cuenta" es un rol de negocio (dueño del caso,
+  // ej. Javier Herrera o Javier Arniaz) que no está atado a un rol fijo
+  // de la app — Arniaz, por ejemplo, es "entrenador" en el sistema pero
+  // también es responsable de varios clientes. Si esta persona figura
+  // como responsable de al menos un cliente, su Finanzas personal se
+  // acota a esos clientes (viendo paseo Y adiestramiento juntos, es
+  // dueño del caso completo) — esto manda por encima de cualquier
+  // acotamiento más angosto que ya tuviera por su rol de app.
+  const misClientesComoResponsable = clientesProp.filter((c) => c.responsableNombre === user?.nombre);
+  const esResponsable = misClientesComoResponsable.length > 0;
+  const vistaPersonal = esResponsable || esPaseador || esEntrenador;
+  const clientes = esResponsable
+    ? misClientesComoResponsable
+    : esPaseador
     ? clientesProp.filter((c) => c.paseadorNombre === user.nombre)
     : esEntrenador
     ? clientesProp.filter((c) => c.adiestradorNombre === user.nombre)
-    : esAdministrador
-    ? clientesProp.filter((c) => c.responsableNombre === user.nombre)
     : clientesProp;
-  const boletasEmitidas = esEntrenador
+  const boletasEmitidas = esResponsable
+    ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
+    : esEntrenador
     ? []
-    : (esPaseador || esAdministrador)
+    : esPaseador
     ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : boletasEmitidasProp;
-  const boletasAdiestramiento = esPaseador
+  const boletasAdiestramiento = esResponsable
+    ? boletasAdiestramientoProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
+    : esPaseador
     ? []
-    : (esEntrenador || esAdministrador)
+    : esEntrenador
     ? boletasAdiestramientoProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : boletasAdiestramientoProp;
   const pagosRegistrados = vistaPersonal ? [] : pagosRegistradosProp;
@@ -1796,7 +1804,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       )}
       {vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          {esAdministrador
+          {esResponsable
             ? "Esto es lo facturado en este período a los clientes de los que eres responsable."
             : 'Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.'}
         </p>
