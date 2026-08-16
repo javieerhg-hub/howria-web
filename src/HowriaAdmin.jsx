@@ -2592,7 +2592,7 @@ function EvaluacionesPorConfirmar({ citas, setTab }) {
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -2638,6 +2638,11 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     // ("★ Agregar a Inicio") para entrar directo sin pasar por la lista.
     const alumnosDestacados = clientes.filter((c) => c.accesoRapido && c.adiestradorNombre === user.nombre);
 
+    // Clientes que entraron por el link público pidiendo evaluación con
+    // él — automático (no requiere marcarlos a mano como los alumnos
+    // destacados), mismo estilo de chip para reconocerlos igual de rápido.
+    const clientesEvaluacionPropios = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && c.adiestradorNombre === user.nombre && (c.estadoCliente || "activo") !== "baja");
+
     // Evaluaciones que pidieron hora CON ÉL por el link público y siguen
     // sin confirmar — prioridad 2 en su Inicio, justo después de sus
     // alumnos destacados (prioridad 1).
@@ -2655,6 +2660,21 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
               {alumnosDestacados.map((c) => (
                 <button key={c.id} onClick={() => onAbrirAlumno && onAbrirAlumno(c._dbId)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 20, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer" }}>
+                  <span style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                  <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {clientesEvaluacionPropios.length > 0 && (
+          <div className="howria-card" style={tarjeta}>
+            <h2 style={sectionTitle}>Evaluación</h2>
+            <p style={{ ...hint, marginTop: 8 }}>Clientes que pidieron evaluación contigo por el link público.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+              {clientesEvaluacionPropios.map((c) => (
+                <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 20, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer" }}>
                   <span style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
                   <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro}</span>
@@ -2826,11 +2846,11 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
 
@@ -2875,6 +2895,10 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   const evaluacionesPendientesTodas = citasAgenda
     .filter((c) => c.tipo === "evaluacion" && c.estado === "pendiente")
     .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+  // Todos los clientes que entraron por evaluación (cualquier entrenador),
+  // mismo criterio que la vista del entrenador pero sin acotar por quién
+  // los atiende — coordinación/administrador ven el negocio completo.
+  const clientesEvaluacionTodos = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && (c.estadoCliente || "activo") !== "baja");
   const equipoActivo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
@@ -2900,6 +2924,22 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
       </div>
 
       <LauncherMobile tabs={tabs} setTab={setTab} />
+
+      {clientesEvaluacionTodos.length > 0 && (
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Evaluación</h2>
+          <p style={{ ...hint, marginTop: 8 }}>Clientes que entraron pidiendo evaluación por el link público.</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+            {clientesEvaluacionTodos.map((c) => (
+              <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 20, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer" }}>
+                <span style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <EvaluacionesPorConfirmar citas={evaluacionesPendientesTodas} setTab={setTab} />
 
@@ -3781,7 +3821,7 @@ export default function HowriaAdmin() {
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}

@@ -1295,6 +1295,9 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
                 {(() => { const e = ESTADOS_CLIENTE.find((x) => x.id === (cliente.estadoCliente || "activo")); return (
                   <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: e.bg, color: e.color, verticalAlign: "middle" }}>{e.nombre}</span>
                 ); })()}
+                {cliente.tipoServicio?.includes("evaluacion") && (
+                  <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A", verticalAlign: "middle" }}>Evaluación</span>
+                )}
               </h2>
               <p style={{ margin: "0 0 4px", color: "#8A7E5C", fontSize: 14 }}>Dueño/a: {cliente.nombre}</p>
               <p style={{ margin: 0, color: "#8A7E5C", fontSize: 14 }}>{cliente.telefono || "sin teléfono"} {cliente.email ? `· ${cliente.email}` : "· sin correo (no puede entrar a su portal)"}</p>
@@ -1439,6 +1442,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   const [busqueda, setBusqueda] = useState("");
   const [filtroPaseador, setFiltroPaseador] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [soloEvaluacion, setSoloEvaluacion] = useState(false);
   const [orden, setOrden] = useState("nombre-asc");
 
   useEffect(() => {
@@ -1492,6 +1496,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
       if (q && !(c.nombre.toLowerCase().includes(q) || c.perro.toLowerCase().includes(q))) return false;
       if (filtroPaseador !== "todos" && c.paseadorNombre !== filtroPaseador) return false;
       if (filtroEstado !== "todos" && (c.estadoCliente || "activo") !== filtroEstado) return false;
+      if (soloEvaluacion && !c.tipoServicio?.includes("evaluacion")) return false;
       return true;
     })
     .sort((a, b) => {
@@ -1530,7 +1535,20 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         />
       )}
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18, marginBottom: 4 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+        <button onClick={() => setSoloEvaluacion(false)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+          border: !soloEvaluacion ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+          background: !soloEvaluacion ? NAVY : "#FFFFFF", color: !soloEvaluacion ? CREAM : INK, fontWeight: !soloEvaluacion ? 600 : 400 }}>
+          Todos ({clientes.length})
+        </button>
+        <button onClick={() => setSoloEvaluacion(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+          border: soloEvaluacion ? "1.5px solid #1E5A7A" : "1px solid #DCD2B4",
+          background: soloEvaluacion ? "#D6E6EE" : "#FFFFFF", color: "#1E5A7A", fontWeight: soloEvaluacion ? 600 : 400 }}>
+          Evaluación ({clientes.filter((c) => c.tipoServicio?.includes("evaluacion")).length})
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, marginBottom: 4 }}>
         <div style={{ position: "relative", flex: "1 1 220px" }}>
           <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
           <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
@@ -1571,7 +1589,12 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
               const estado = ESTADOS_CLIENTE.find((e) => e.id === (c.estadoCliente || "activo"));
               return (
                 <button key={c.id} onClick={() => setPerfilId(c.id)} className="howria-card" style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 14, padding: 16, cursor: "pointer", font: "inherit", position: "relative" }}>
-                  <span style={{ position: "absolute", top: 14, right: 14, fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
+                  <div style={{ position: "absolute", top: 14, right: 14, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
+                    {c.tipoServicio?.includes("evaluacion") && (
+                      <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A" }}>Evaluación</span>
+                    )}
+                  </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", paddingRight: 70 }}>
                     <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
                     <div>
