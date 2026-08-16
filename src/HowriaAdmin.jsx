@@ -3540,13 +3540,23 @@ export default function HowriaAdmin() {
       window.history.replaceState(null, "", url.pathname + url.search);
     } catch {}
     // Safari/iOS a veces queda con el zoom trabado (todo se ve chico,
-    // como aplastado) cuando un toque reemplaza de golpe el contenido
-    // debajo del botón tocado — ej. entrar a un cliente desde un
-    // acceso directo de Inicio. Sacarle el foco al elemento recién
-    // tocado y volver el scroll arriba evita que quede en ese estado
-    // (Javier lo reportó — se arreglaba solo al refrescar la página).
+    // como aplastado, sin importar el scroll/foco) cuando un toque
+    // reemplaza de golpe el contenido debajo del botón tocado — ej.
+    // entrar a un cliente desde un acceso directo de Inicio. Javier lo
+    // confirmó reproducible siempre (no es al azar) y que el blur/scroll
+    // solo no alcanzaba. Forzar `maximum-scale` un instante obliga a
+    // Safari a recalcular el zoom real de la página a 100% — truco
+    // conocido para "despegar" un WebView que quedó en una escala
+    // vieja tras un cambio de contenido muy abrupto — y se revierte
+    // enseguida para no bloquear que el usuario pueda hacer zoom normal.
     document.activeElement?.blur?.();
     window.scrollTo(0, 0);
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (meta) {
+      const original = meta.getAttribute("content");
+      meta.setAttribute("content", `${original}, maximum-scale=1.0`);
+      setTimeout(() => meta.setAttribute("content", original), 300);
+    }
   }, [tab]);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
