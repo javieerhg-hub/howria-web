@@ -964,9 +964,9 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 }
 
 // ---------- Formulario de registro / edición de cliente ----------
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
-function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCancelar }) {
+function FormularioCliente({ inicial, paseadores, entrenadores, administradores, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
@@ -1095,6 +1095,13 @@ function FormularioCliente({ inicial, paseadores, entrenadores, onGuardar, onCan
         {entrenadores.map((e) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
       </select>
       <p style={{ ...hint, marginTop: -10 }}>Define de quién son "sus" clientes en la Finanzas personal del entrenador.</p>
+
+      <p style={label}>Responsable de la cuenta</p>
+      <select value={form.responsableNombre} onChange={(e) => setForm({ ...form, responsableNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
+        <option value="">Sin asignar</option>
+        {administradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+      </select>
+      <p style={{ ...hint, marginTop: -10 }}>Define de quién son las ventas de este cliente en la Finanzas personal de cada administrador.</p>
 
       {intentoGuardar && formInvalido && (
         <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
@@ -1342,6 +1349,11 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           </p>
         </div>
 
+        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
+          <p style={{ ...label, marginBottom: 8 }}>Responsable de la cuenta</p>
+          <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{cliente.responsableNombre || "Sin asignar"}</p>
+        </div>
+
         <div style={{ marginTop: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
             <p style={{ ...label, margin: 0 }}>Mascotas {mascotasDelCliente.length > 1 ? `(${mascotasDelCliente.length})` : ""}</p>
@@ -1503,6 +1515,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
           inicial={editandoId ? clientes.find((c) => c.id === editandoId) : null}
           paseadores={usuarios}
           entrenadores={usuarios.filter((u) => u.rol === "entrenador")}
+          administradores={usuarios.filter((u) => u.rol === "administrador")}
           onGuardar={guardar}
           onCancelar={() => { setMostrarForm(false); setEditandoId(null); }}
         />
@@ -1593,20 +1606,28 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // quede automáticamente acotado, sin duplicar lógica.
   const esPaseador = user?.rol === "paseador";
   const esEntrenador = user?.rol === "entrenador";
-  const vistaPersonal = esPaseador || esEntrenador;
+  // Cada administrador (ej. Javier Herrera, Javier Arniaz) tiene su
+  // propia cartera de clientes vía clientes.responsable_nombre — su
+  // Finanzas personal se acota igual que la de paseador/entrenador, pero
+  // ve tanto boletas de paseo como de adiestramiento (es dueño del caso
+  // completo, no de una sola disciplina).
+  const esAdministrador = user?.rol === "administrador";
+  const vistaPersonal = esPaseador || esEntrenador || esAdministrador;
   const clientes = esPaseador
     ? clientesProp.filter((c) => c.paseadorNombre === user.nombre)
     : esEntrenador
     ? clientesProp.filter((c) => c.adiestradorNombre === user.nombre)
+    : esAdministrador
+    ? clientesProp.filter((c) => c.responsableNombre === user.nombre)
     : clientesProp;
   const boletasEmitidas = esEntrenador
     ? []
-    : esPaseador
+    : (esPaseador || esAdministrador)
     ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : boletasEmitidasProp;
   const boletasAdiestramiento = esPaseador
     ? []
-    : esEntrenador
+    : (esEntrenador || esAdministrador)
     ? boletasAdiestramientoProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : boletasAdiestramientoProp;
   const pagosRegistrados = vistaPersonal ? [] : pagosRegistradosProp;
@@ -1775,7 +1796,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       )}
       {vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.
+          {esAdministrador
+            ? "Esto es lo facturado en este período a los clientes de los que eres responsable."
+            : 'Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.'}
         </p>
       )}
 
@@ -2358,6 +2381,10 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
   const [descargando, setDescargando] = useState(null);
+  // Colapsada por defecto — apenas se acepta una factura, desaparece de
+  // "Por revisar" y pasa para acá, pero sin ocupar pantalla salvo que se
+  // abra a propósito.
+  const [yaIngresadasAbiertas, setYaIngresadasAbiertas] = useState(false);
 
   async function descargarPdf(b, claveFila) {
     setDescargando(claveFila);
@@ -2377,6 +2404,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 
   function setterDe(tipo) {
     return tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
+  }
+
+  // El responsable vive en el cliente, no en la boleta — se resuelve
+  // buscando al cliente dueño de cada boleta (mismo match que usa el
+  // resto de la app para asociar boleta↔cliente).
+  function responsableDe(b) {
+    return clientes.find((c) => esBoletaDeCliente(b, c))?.responsableNombre;
   }
 
   function abrirFormPago(boleta) {
@@ -2422,187 +2456,237 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const ventasConfirmadas = useMemo(() => calcularTotales(todasLasBoletas.filter(esVenta)).ingresos, [todasLasBoletas]);
   const porCobrarMonto = useMemo(() => calcularTotales(todasLasBoletas.filter(esPorCobrar)).ingresos, [todasLasBoletas]);
 
+  // "Por revisar" = todavía sin aceptar, la cola de trabajo activa.
+  // "Ya ingresadas" = todo lo que ya pasó por Aceptar (o se canceló) —
+  // vive colapsado aparte para no ocupar la vista principal.
+  const porRevisar = useMemo(() =>
+    todasLasBoletas.filter((b) => b.estado === "no_enviada").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO)),
+    [todasLasBoletas]);
+  const todasIngresadas = useMemo(() => todasLasBoletas.filter((b) => b.estado !== "no_enviada"), [todasLasBoletas]);
+
   const lista = useMemo(() => {
-    return todasLasBoletas
+    return todasIngresadas
       .filter((b) => filtroEstado === "todas" || b.estado === filtroEstado)
       .filter((b) => filtroCliente === "todos" || b.cliente === filtroCliente)
       .filter((b) => !desde || fechaKey(new Date(b.fechaISO)) >= desde)
       .filter((b) => !hasta || fechaKey(new Date(b.fechaISO)) <= hasta)
       .filter((b) => !busqueda.trim() || b.cliente.toLowerCase().includes(busqueda.trim().toLowerCase()) || (b.perro || "").toLowerCase().includes(busqueda.trim().toLowerCase()))
       .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  }, [todasLasBoletas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
+  }, [todasIngresadas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
 
   const totalListado = calcularTotales(lista).ingresos;
-  const nombresClientes = [...new Set(todasLasBoletas.map((b) => b.cliente))];
+  const nombresClientes = [...new Set(todasIngresadas.map((b) => b.cliente))];
+
+  // Una fila de la tabla (más sus filas de expansión: formulario de pago
+  // y editor) — se comparte entre "Por revisar" y "Facturas ya
+  // ingresadas", que son la misma tabla partida en dos por estado.
+  function renderFilaFactura(b) {
+    const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
+    const claveFila = `${b._tipo}-${b._dbId}`;
+    const responsable = responsableDe(b);
+    return (
+      <Fragment key={claveFila}>
+        <tr style={{ borderTop: "1px solid #EDE4CE" }}>
+          <td style={{ padding: "10px" }}>
+            {String(b.numero).padStart(3, "0")}
+            {b.editadaPor && (
+              <span title={`Corregida por ${b.editadaPor} el ${new Date(b.editadaEn).toLocaleString("es-CL")}`} style={{ marginLeft: 5, fontSize: 11, color: GOLD, cursor: "help" }}>✎</span>
+            )}
+          </td>
+          <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
+          <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
+          <td style={{ padding: "10px", fontSize: 12, color: responsable ? "#6B6248" : "#B0A587" }}>{responsable || "Sin asignar"}</td>
+          <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
+          <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`}</td>
+          <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
+          <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
+          <td style={{ padding: "10px" }}>
+            <span style={{ display: "inline-block", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, background: est.bg, color: est.color }}>
+              {est.nombre}
+            </span>
+          </td>
+          <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
+          <td style={{ padding: "10px" }}>
+            {!b._dbId ? (
+              // Todavía no vuelve el id real de Supabase — sin él,
+              // aceptar/editar/eliminar no tienen forma confiable de
+              // saber a cuál boleta se refieren.
+              <span style={{ fontSize: 12, color: "#8A7E5C" }}>Guardando…</span>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {b.estado === "no_enviada" && (
+                  <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
+                )}
+                {b.estado === "pendiente_pago" && (
+                  <button onClick={() => abrirFormPago(b)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Marcar pagada</button>
+                )}
+                <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
+                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: descargando === claveFila ? 0.5 : 1 }}>
+                  {descargando === claveFila ? "Generando..." : "Descargar PDF"}
+                </button>
+                {(b.estado === "no_enviada" || b.estado === "pendiente_pago") && (
+                  <BotonConfirmable onConfirm={() => cancelarBoleta(b)} label="Cancelar" colorConfirmar={RUST}
+                    style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                )}
+                {b.estado === "pagada" && (
+                  <BotonConfirmable onConfirm={() => revertirAPendiente(b)} label="Revertir a pendiente" colorConfirmar={NAVY}
+                    style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12 }} />
+                )}
+                {b.estado === "cancelada" && (
+                  <BotonConfirmable onConfirm={() => reactivarBoleta(b)} label="Reactivar" colorConfirmar={"#2F6A46"}
+                    style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }} />
+                )}
+                <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
+                <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+              </div>
+            )}
+          </td>
+        </tr>
+        {pagoPendienteDbId === b._dbId && pagoPendienteTipo === b._tipo && (
+          <tr>
+            <td colSpan={11} style={{ padding: "0 10px 12px" }}>
+              <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 12.5, color: "#2F6A46", fontWeight: 600 }}>Marcando pagada la N°{String(pagoPendienteNumero).padStart(3, "0")}:</span>
+                <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
+                <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
+                  {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
+                <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
+              </div>
+            </td>
+          </tr>
+        )}
+        {editandoBoleta === claveFila && (
+          <tr>
+            <td colSpan={11} style={{ padding: "0 10px 12px" }}>
+              <EditorBoletaBasico boleta={b} tipo={b._tipo}
+                onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditandoBoleta(null); }}
+                onCancelar={() => setEditandoBoleta(null)} />
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  }
+
+  function EncabezadoTabla() {
+    return (
+      <thead>
+        <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
+          <th style={{ padding: "8px 10px" }}>N°</th>
+          <th style={{ padding: "8px 10px" }}>Tipo</th>
+          <th style={{ padding: "8px 10px" }}>Cliente</th>
+          <th style={{ padding: "8px 10px" }}>Responsable</th>
+          <th style={{ padding: "8px 10px" }}>Perro</th>
+          <th style={{ padding: "8px 10px" }}>Período</th>
+          <th style={{ padding: "8px 10px" }}>Emitida</th>
+          <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
+          <th style={{ padding: "8px 10px" }}>Estado</th>
+          <th style={{ padding: "8px 10px" }}>Pago</th>
+          <th style={{ padding: "8px 10px" }}>Acciones</th>
+        </tr>
+      </thead>
+    );
+  }
 
   return (
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>Facturas</h2>
       <p style={hint}>Todas las boletas generadas por el sistema, con quién es cada una y en qué estado de pago se encuentra.</p>
 
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, margin: "16px 0" }}>
-        <TarjetaResumenFactura titulo="Ventas confirmadas" valor={fmtCLP(ventasConfirmadas)} color={ESTADOS_FACTURA[2].color} bg={ESTADOS_FACTURA[2].bg} />
-        <TarjetaResumenFactura titulo="Por cobrar" valor={fmtCLP(porCobrarMonto)} color={ESTADOS_FACTURA[1].color} bg={ESTADOS_FACTURA[1].bg} />
-        <TarjetaResumenFactura titulo="Por revisar" valor={`${conteos.no_enviada || 0} factura(s)`} color={ESTADOS_FACTURA[0].color} bg={ESTADOS_FACTURA[0].bg} />
-        <TarjetaResumenFactura titulo="Canceladas" valor={`${conteos.cancelada || 0} factura(s)`} color={ESTADOS_FACTURA[3].color} bg={ESTADOS_FACTURA[3].bg} />
-      </div>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "16px 0" }}>
-        <button onClick={() => setFiltroEstado("todas")}
-          style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-            border: filtroEstado === "todas" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
-            background: filtroEstado === "todas" ? NAVY : "#FFFFFF", color: filtroEstado === "todas" ? CREAM : INK,
-            fontWeight: filtroEstado === "todas" ? 600 : 400 }}>
-          Todas ({conteos.todas})
-        </button>
-        {ESTADOS_FACTURA.map((e) => (
-          <button key={e.id} onClick={() => setFiltroEstado(e.id)}
-            style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-              border: filtroEstado === e.id ? `1.5px solid ${e.color}` : "1px solid #DCD2B4",
-              background: filtroEstado === e.id ? e.bg : "#FFFFFF", color: e.color,
-              fontWeight: filtroEstado === e.id ? 600 : 400 }}>
-            {e.nombre} ({conteos[e.id] || 0})
-          </button>
-        ))}
-      </div>
-
-      <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-        <div style={{ position: "relative" }}>
-          <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-          <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-            style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
-        </div>
-        <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-          <option value="todos">Todos los clientes</option>
-          {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Desde" />
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Hasta" />
-        </div>
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#8A7E5C", margin: "0 0 10px" }}>
-        <span>{lista.length} factura(s) en este listado</span>
-        <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
-              <th style={{ padding: "8px 10px" }}>N°</th>
-              <th style={{ padding: "8px 10px" }}>Tipo</th>
-              <th style={{ padding: "8px 10px" }}>Cliente</th>
-              <th style={{ padding: "8px 10px" }}>Perro</th>
-              <th style={{ padding: "8px 10px" }}>Período</th>
-              <th style={{ padding: "8px 10px" }}>Emitida</th>
-              <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
-              <th style={{ padding: "8px 10px" }}>Estado</th>
-              <th style={{ padding: "8px 10px" }}>Pago</th>
-              <th style={{ padding: "8px 10px" }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cargandoBoletas ? (
-              <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando facturas…</span></td></tr>
+      {cargandoBoletas ? (
+        <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
+          <Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando facturas…
+        </p>
+      ) : (
+        <>
+          <div style={{ marginTop: 22 }}>
+            <h3 style={{ ...sectionTitle, fontSize: 15, marginBottom: 4 }}>Por revisar {porRevisar.length > 0 ? `(${porRevisar.length})` : ""}</h3>
+            {porRevisar.length === 0 ? (
+              <p style={{ ...hint, marginTop: 6 }}>No hay facturas por revisar — todo lo generado ya fue aceptado.</p>
             ) : (
               <>
-                {lista.map((b) => {
-                  const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
-                  const claveFila = `${b._tipo}-${b._dbId}`;
-                  return (
-                    <Fragment key={claveFila}>
-                      <tr style={{ borderTop: "1px solid #EDE4CE" }}>
-                        <td style={{ padding: "10px" }}>
-                          {String(b.numero).padStart(3, "0")}
-                          {b.editadaPor && (
-                            <span title={`Corregida por ${b.editadaPor} el ${new Date(b.editadaEn).toLocaleString("es-CL")}`} style={{ marginLeft: 5, fontSize: 11, color: GOLD, cursor: "help" }}>✎</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
-                        <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
-                        <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
-                        <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`}</td>
-                        <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
-                        <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
-                        <td style={{ padding: "10px" }}>
-                          <span style={{ display: "inline-block", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, background: est.bg, color: est.color }}>
-                            {est.nombre}
-                          </span>
-                        </td>
-                        <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b.estado === "pagada" && b.formaPago ? `${b.formaPago} · ${b.fechaPago}` : "—"}</td>
-                        <td style={{ padding: "10px" }}>
-                          {!b._dbId ? (
-                            // Todavía no vuelve el id real de Supabase — sin
-                            // él, aceptar/editar/eliminar no tienen forma
-                            // confiable de saber a cuál boleta se refieren.
-                            <span style={{ fontSize: 12, color: "#8A7E5C" }}>Guardando…</span>
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                              {b.estado === "no_enviada" && (
-                                <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
-                              )}
-                              {b.estado === "pendiente_pago" && (
-                                <button onClick={() => abrirFormPago(b)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Marcar pagada</button>
-                              )}
-                              <button onClick={() => descargarPdf(b, claveFila)} disabled={descargando === claveFila}
-                                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: descargando === claveFila ? 0.5 : 1 }}>
-                                {descargando === claveFila ? "Generando..." : "Descargar PDF"}
-                              </button>
-                              {(b.estado === "no_enviada" || b.estado === "pendiente_pago") && (
-                                <BotonConfirmable onConfirm={() => cancelarBoleta(b)} label="Cancelar" colorConfirmar={RUST}
-                                  style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-                              )}
-                              {b.estado === "pagada" && (
-                                <BotonConfirmable onConfirm={() => revertirAPendiente(b)} label="Revertir a pendiente" colorConfirmar={NAVY}
-                                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12 }} />
-                              )}
-                              {b.estado === "cancelada" && (
-                                <BotonConfirmable onConfirm={() => reactivarBoleta(b)} label="Reactivar" colorConfirmar={"#2F6A46"}
-                                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }} />
-                              )}
-                              <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
-                              <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                      {pagoPendienteDbId === b._dbId && pagoPendienteTipo === b._tipo && (
-                        <tr>
-                          <td colSpan={10} style={{ padding: "0 10px 12px" }}>
-                            <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                              <span style={{ fontSize: 12.5, color: "#2F6A46", fontWeight: 600 }}>Marcando pagada la N°{String(pagoPendienteNumero).padStart(3, "0")}:</span>
-                              <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />
-                              <select value={formaPagoForm} onChange={(e) => setFormaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 170 }}>
-                                {FORMAS_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
-                              </select>
-                              <button onClick={confirmarPago} style={{ ...botonPrincipal, width: "auto", padding: "8px 16px", marginTop: 0 }}>Confirmar</button>
-                              <button onClick={() => { setPagoPendienteDbId(null); setPagoPendienteTipo(null); setPagoPendienteNumero(null); }} style={botonSecundario}>Cancelar</button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      {editandoBoleta === claveFila && (
-                        <tr>
-                          <td colSpan={10} style={{ padding: "0 10px 12px" }}>
-                            <EditorBoletaBasico boleta={b} tipo={b._tipo}
-                              onGuardar={(cambios) => { editarBoleta(setterDe(b._tipo), b._dbId, { ...cambios, editadaPor: nombreUsuario, editadaEn: new Date().toISOString() }); setEditandoBoleta(null); }}
-                              onCancelar={() => setEditandoBoleta(null)} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                {lista.length === 0 && (
-                  <tr><td colSpan={10} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay facturas que coincidan.</td></tr>
-                )}
+                <p style={{ ...hint, marginTop: 2, marginBottom: 10 }}>Boletas recién generadas, todavía sin revisar — al aceptarlas pasan a "Facturas ya ingresadas" y empiezan a contar como venta.</p>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                    <EncabezadoTabla />
+                    <tbody>{porRevisar.map(renderFilaFactura)}</tbody>
+                  </table>
+                </div>
               </>
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          <button onClick={() => setYaIngresadasAbiertas((v) => !v)}
+            style={{ ...botonSecundario, width: "auto", marginTop: 22 }}>
+            {yaIngresadasAbiertas ? "▾" : "▸"} Facturas ya ingresadas ({todasIngresadas.length})
+          </button>
+
+          {yaIngresadasAbiertas && (
+            <div style={{ marginTop: 16 }}>
+              <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+                <TarjetaResumenFactura titulo="Ventas confirmadas" valor={fmtCLP(ventasConfirmadas)} color={ESTADOS_FACTURA[2].color} bg={ESTADOS_FACTURA[2].bg} />
+                <TarjetaResumenFactura titulo="Por cobrar" valor={fmtCLP(porCobrarMonto)} color={ESTADOS_FACTURA[1].color} bg={ESTADOS_FACTURA[1].bg} />
+                <TarjetaResumenFactura titulo="Por revisar" valor={`${conteos.no_enviada || 0} factura(s)`} color={ESTADOS_FACTURA[0].color} bg={ESTADOS_FACTURA[0].bg} />
+                <TarjetaResumenFactura titulo="Canceladas" valor={`${conteos.cancelada || 0} factura(s)`} color={ESTADOS_FACTURA[3].color} bg={ESTADOS_FACTURA[3].bg} />
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                <button onClick={() => setFiltroEstado("todas")}
+                  style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+                    border: filtroEstado === "todas" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                    background: filtroEstado === "todas" ? NAVY : "#FFFFFF", color: filtroEstado === "todas" ? CREAM : INK,
+                    fontWeight: filtroEstado === "todas" ? 600 : 400 }}>
+                  Todas ({todasIngresadas.length})
+                </button>
+                {ESTADOS_FACTURA.filter((e) => e.id !== "no_enviada").map((e) => (
+                  <button key={e.id} onClick={() => setFiltroEstado(e.id)}
+                    style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+                      border: filtroEstado === e.id ? `1.5px solid ${e.color}` : "1px solid #DCD2B4",
+                      background: filtroEstado === e.id ? e.bg : "#FFFFFF", color: e.color,
+                      fontWeight: filtroEstado === e.id ? 600 : 400 }}>
+                    {e.nombre} ({conteos[e.id] || 0})
+                  </button>
+                ))}
+              </div>
+
+              <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+                <div style={{ position: "relative" }}>
+                  <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                    style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
+                </div>
+                <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                  <option value="todos">Todos los clientes</option>
+                  {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Desde" />
+                  <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Hasta" />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#8A7E5C", margin: "0 0 10px" }}>
+                <span>{lista.length} factura(s) en este listado</span>
+                <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                  <EncabezadoTabla />
+                  <tbody>
+                    {lista.map(renderFilaFactura)}
+                    {lista.length === 0 && (
+                      <tr><td colSpan={11} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay facturas que coincidan.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
