@@ -3539,6 +3539,14 @@ export default function HowriaAdmin() {
       else url.searchParams.set("tab", tab);
       window.history.replaceState(null, "", url.pathname + url.search);
     } catch {}
+    // Safari/iOS a veces queda con el zoom trabado (todo se ve chico,
+    // como aplastado) cuando un toque reemplaza de golpe el contenido
+    // debajo del botón tocado — ej. entrar a un cliente desde un
+    // acceso directo de Inicio. Sacarle el foco al elemento recién
+    // tocado y volver el scroll arriba evita que quede en ese estado
+    // (Javier lo reportó — se arreglaba solo al refrescar la página).
+    document.activeElement?.blur?.();
+    window.scrollTo(0, 0);
   }, [tab]);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
