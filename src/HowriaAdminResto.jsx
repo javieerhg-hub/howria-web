@@ -6256,11 +6256,42 @@ function construirItinerarioDia(items, { horaInicioPaseos, duracionPaseoMin, tra
       return { ...p, _inicioMin: inicio, _finMin: fin, _estimado: true };
     });
 
-    const todos = [...citasReales, ...conHoraFija, ...paseosEstimados].sort((a, b) => a._inicioMin - b._inicioMin);
+    const todos = agruparManadas([...citasReales, ...conHoraFija, ...paseosEstimados]).sort((a, b) => a._inicioMin - b._inicioMin);
     return { persona, items: todos, inicioMin: todos[0]?._inicioMin ?? 0 };
   });
 
   return grupos.sort((a, b) => a.inicioMin - b.inicioMin);
+}
+
+// Paseos del mismo paseador que terminan con la misma hora (porque el
+// usuario los unió arrastrando uno encima del otro, ver GrillaHorariaDia)
+// se combinan en un solo ítem "manada" — así se ve un bloque conjunto en
+// vez de dos bloques pisándose en el mismo horario.
+function agruparManadas(items) {
+  const porInicio = {};
+  const resto = [];
+  items.forEach((it) => {
+    if (it.tipo !== "paseo") { resto.push(it); return; }
+    (porInicio[it._inicioMin] = porInicio[it._inicioMin] || []).push(it);
+  });
+  const combinados = Object.values(porInicio).map((grupo) => {
+    if (grupo.length === 1) return grupo[0];
+    return {
+      id: `manada-${grupo.map((g) => g.clienteId).join("-")}`,
+      tipo: "paseo",
+      esManada: true,
+      miembros: grupo,
+      perro: grupo.map((g) => g.perro).join(" + "),
+      clienteNombre: grupo.map((g) => g.clienteNombre).join(", "),
+      adiestrador: grupo[0].adiestrador,
+      fechaISO: grupo[0].fechaISO,
+      estado: grupo[0].estado,
+      _inicioMin: grupo[0]._inicioMin,
+      _finMin: Math.max(...grupo.map((g) => g._finMin)),
+      _estimado: grupo.every((g) => g._estimado),
+    };
+  });
+  return [...resto, ...combinados];
 }
 
 // Ventana con el itinerario del día apilado por horario, agrupado por
@@ -6309,24 +6340,29 @@ function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas,
   );
 }
 
-// Bloque individual arrastrable dentro de la grilla — mismos sensores
+// Bloque individual arrastrable (y, si es paseo, también soltable encima
+// de otro para armar manada) dentro de la grilla — mismos sensores
 // (distancia mínima antes de activar el arrastre) que ya usa MapaRutas,
 // así que un simple clic sigue abriendo el detalle normal y solo un
 // arrastre de verdad mueve el horario.
-function BloqueItinerario({ it, top, alto, tono, arrastrable, onVerDetalle }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: it.id, disabled: !arrastrable });
+function BloqueItinerario({ it, top, alto, tono, arrastrable, resaltado, onVerDetalle }) {
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({ id: it.id, disabled: !arrastrable });
+  const { setNodeRef: setDropRef } = useDroppable({ id: it.id, disabled: it.tipo !== "paseo" });
+  const setNodeRef = (nodo) => { setDragRef(nodo); setDropRef(nodo); };
   return (
     <button ref={setNodeRef} {...(arrastrable ? { ...listeners, ...attributes } : {})} onClick={() => onVerDetalle(it)}
-      style={{ position: "absolute", top, height: alto, left: 3, right: 3, border: "none", borderRadius: 6,
+      style={{ position: "absolute", top, height: alto, left: 3, right: 3, borderRadius: 6,
+        border: resaltado ? `2px solid ${NAVY}` : "none",
         background: tono?.bg || "#EDE4CE", color: tono?.color || INK, textAlign: "left",
         cursor: arrastrable ? (isDragging ? "grabbing" : "grab") : "pointer",
         padding: "3px 6px", overflow: "hidden", fontSize: 10.5, lineHeight: 1.3,
-        boxShadow: isDragging ? "0 4px 12px rgba(0,0,0,0.3)" : "0 1px 2px rgba(0,0,0,0.1)",
+        boxShadow: isDragging ? "0 4px 12px rgba(0,0,0,0.3)" : resaltado ? "0 0 0 3px rgba(18,42,64,0.25)" : "0 1px 2px rgba(0,0,0,0.1)",
         transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
-        zIndex: isDragging ? 5 : 1, touchAction: "none" }}>
+        zIndex: isDragging ? 5 : resaltado ? 4 : 1, touchAction: "none" }}>
       <div style={{ fontWeight: 700 }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</div>
-      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}</div>
-      {it._estimado && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
+      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro}{!it.esManada && ` · ${it.clienteNombre}`}</div>
+      {it.esManada && <div style={{ fontStyle: "italic", opacity: 0.85 }}>en manada</div>}
+      {it._estimado && !it.esManada && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
     </button>
   );
 }
@@ -6342,15 +6378,24 @@ function BloqueItinerario({ it, top, alto, tono, arrastrable, onVerDetalle }) {
 // fijarle una hora habitual — eso se guarda en cliente.horaHabitual,
 // el mismo campo que ya usa Mis paseos para ordenar y marcar atrasos,
 // así queda configurado en el sistema y deja de depender de la
-// estimación automática.
+// estimación automática. Arrastrar un paseo y sostenerlo 1,5s encima de
+// otro paseo del mismo paseador los une en manada (misma hora para
+// ambos clientes) — construirItinerarioDia los combina en un solo
+// bloque conjunto la próxima vez que se recalcula el itinerario.
 function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setCitas, setClientes }) {
   const PX_POR_HORA = 56;
   const SNAP_MIN = 5;
+  const TIEMPO_MANADA_MS = 1500;
   const [editandoHoraId, setEditandoHoraId] = useState(null);
+  const [holdTargetId, setHoldTargetId] = useState(null);
+  const holdTimerRef = useRef(null);
+  const mergedRef = useRef(false);
   const sensoresGrilla = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } })
   );
+
+  useEffect(() => () => { if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }, []);
 
   const todosItems = grupos.flatMap((g) => g.items);
   const minInicio = todosItems.length ? Math.min(...todosItems.map((it) => it._inicioMin)) : 9 * 60;
@@ -6361,13 +6406,66 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
   for (let h = horaGridInicio; h < horaGridFin; h++) horas.push(h);
   const altoGrid = horas.length * PX_POR_HORA;
 
-  function fijarHoraPaseo(clienteId, horaStr) {
-    if (!setClientes || !clienteId || !horaStr) return;
-    setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, horaHabitual: horaStr } : c)));
-    showToast(`Hora de paseo guardada: ${horaStr}.`, "exito");
+  function idsDe(it) {
+    return it.esManada ? it.miembros.map((m) => m.clienteId) : [it.clienteId];
+  }
+  function nombresDe(it) {
+    return it.esManada ? it.miembros.map((m) => m.clienteNombre) : [it.clienteNombre];
+  }
+
+  function aplicarHoraAItem(it, horaStr) {
+    if (!setClientes || !horaStr) return;
+    const ids = idsDe(it);
+    setClientes((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, horaHabitual: horaStr } : c)));
+    showToast(it.esManada ? `Manada actualizada a las ${horaStr}.` : `Hora de paseo guardada: ${horaStr}.`, "exito");
+  }
+
+  function limpiarHold() {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    setHoldTargetId(null);
+  }
+
+  function unirManada(activo, destino) {
+    if (!setClientes) return;
+    const horaDestino = horaDesdeMinutos(destino._inicioMin);
+    const ids = [...idsDe(activo), ...idsDe(destino)];
+    setClientes((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, horaHabitual: horaDestino } : c)));
+    const nombres = [...nombresDe(activo), ...nombresDe(destino)];
+    showToast(`${nombres.join(" y ")} ahora salen en manada a las ${horaDestino}.`, "exito");
+  }
+
+  function onDragStart() {
+    mergedRef.current = false;
+  }
+
+  function onDragOver(event) {
+    const { active, over } = event;
+    if (!over || over.id === active.id) { limpiarHold(); return; }
+    const activo = todosItems.find((x) => x.id === active.id);
+    const destino = todosItems.find((x) => x.id === over.id);
+    if (!activo || !destino || activo.tipo !== "paseo" || destino.tipo !== "paseo" || activo.adiestrador !== destino.adiestrador) {
+      limpiarHold();
+      return;
+    }
+    if (holdTargetId === over.id) return;
+    limpiarHold();
+    setHoldTargetId(over.id);
+    holdTimerRef.current = setTimeout(() => {
+      unirManada(activo, destino);
+      mergedRef.current = true;
+      limpiarHold();
+    }, TIEMPO_MANADA_MS);
+  }
+
+  function onDragCancel() {
+    limpiarHold();
+    mergedRef.current = false;
   }
 
   function onDragEnd(event) {
+    limpiarHold();
+    if (mergedRef.current) { mergedRef.current = false; return; }
+
     const { active, delta } = event;
     if (!delta) return;
     const deltaMin = Math.round((delta.y / PX_POR_HORA) * 60 / SNAP_MIN) * SNAP_MIN;
@@ -6380,7 +6478,7 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
     if (nuevoInicio === it._inicioMin) return;
 
     if (it.tipo === "paseo") {
-      fijarHoraPaseo(it.clienteId, horaDesdeMinutos(nuevoInicio));
+      aplicarHoraAItem(it, horaDesdeMinutos(nuevoInicio));
       return;
     }
 
@@ -6398,8 +6496,8 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
   }
 
   return (
-    <DndContext sensors={sensoresGrilla} onDragEnd={onDragEnd}>
-      <p style={{ margin: "0 0 10px", fontSize: 11, color: "#8A7E5C" }}>Arrastrá un bloque hacia arriba o abajo para moverlo de horario.</p>
+    <DndContext sensors={sensoresGrilla} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
+      <p style={{ margin: "0 0 10px", fontSize: 11, color: "#8A7E5C" }}>Arrastrá un bloque hacia arriba o abajo para moverlo de horario — sostenelo 1,5s sobre otro paseo del mismo paseador para unirlos en manada.</p>
       <div style={{ display: "flex", overflowX: "auto" }}>
         <div style={{ flex: "none", width: 42 }}>
           <div style={{ height: 26 }} />
@@ -6426,11 +6524,12 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
                       alto={Math.max(((it._finMin - it._inicioMin) / 60) * PX_POR_HORA, 22)}
                       tono={TIPOS_CALENDARIO_VISTA.find((t) => t.id === it.tipo)}
                       arrastrable={arrastrable}
+                      resaltado={holdTargetId === it.id}
                       onVerDetalle={onVerDetalle} />
                     {puedeConfigurar && (
                       editandoHoraId === it.id ? (
                         <input type="time" step={300} autoFocus defaultValue={horaDesdeMinutos(it._inicioMin)}
-                          onChange={(e) => { if (e.target.value) { fijarHoraPaseo(it.clienteId, e.target.value); setEditandoHoraId(null); } }}
+                          onChange={(e) => { if (e.target.value) { aplicarHoraAItem(it, e.target.value); setEditandoHoraId(null); } }}
                           onBlur={() => setEditandoHoraId(null)}
                           onKeyDown={(e) => { if (e.key === "Escape") setEditandoHoraId(null); }}
                           style={{ position: "absolute", top: top - 2, right: 3, width: 78, fontSize: 10, padding: "1px 2px", zIndex: 6, border: `1.5px solid ${NAVY}`, borderRadius: 4 }} />
