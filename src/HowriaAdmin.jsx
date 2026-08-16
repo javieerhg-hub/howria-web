@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
-  GraduationCap,
+  GraduationCap, KeyRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -3079,6 +3079,74 @@ export function ModalConfirmacion({ titulo, mensaje, textoConfirmar = "Eliminar"
 }
 
 
+// Cambiar la propia contraseña, disponible para cualquier rol logueado
+// (paseador, entrenador, coordinador, administrador) — antes la única
+// forma de cambiarla era que un administrador la reseteara desde
+// Usuarios. supabase.auth.updateUser() actúa siempre sobre la sesión ya
+// autenticada, así que no hace falta la contraseña actual ni tocar la
+// service role key.
+export function ModalCambiarPassword({ onCerrar }) {
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    function alEscape(e) { if (e.key === "Escape") onCerrar(); }
+    window.addEventListener("keydown", alEscape);
+    return () => window.removeEventListener("keydown", alEscape);
+  }, [onCerrar]);
+
+  const muyCorta = nueva.length > 0 && nueva.length < 6;
+  const noCoincide = confirmar.length > 0 && nueva !== confirmar;
+  const valido = nueva.length >= 6 && nueva === confirmar;
+
+  async function guardar() {
+    if (!valido || guardando) return;
+    setGuardando(true);
+    setError("");
+    const { error: err } = await supabase.auth.updateUser({ password: nueva });
+    setGuardando(false);
+    if (err) {
+      setError(err.message || "No se pudo cambiar la contraseña.");
+      return;
+    }
+    showToast("Contraseña actualizada.", "exito");
+    onCerrar();
+  }
+
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-password-titulo"
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <h3 id="modal-password-titulo" style={{ margin: "0 0 10px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>Cambiar tu contraseña</h3>
+        <p style={{ margin: "0 0 18px", fontSize: 13, color: "#6B6248", lineHeight: 1.5 }}>Elige una contraseña nueva para tu cuenta — la vas a usar la próxima vez que inicies sesión.</p>
+
+        <label style={label} htmlFor="password-nueva">Contraseña nueva</label>
+        <input id="password-nueva" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)}
+          style={{ ...input, marginBottom: 12 }} autoFocus />
+
+        <label style={label} htmlFor="password-confirmar">Confirmar contraseña</label>
+        <input id="password-confirmar" type="password" value={confirmar} onChange={(e) => setConfirmar(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && guardar()} style={{ ...input, marginBottom: 6 }} />
+
+        {muyCorta && <p style={{ margin: "0 0 10px", fontSize: 12, color: RUST }}>Mínimo 6 caracteres.</p>}
+        {noCoincide && <p style={{ margin: "0 0 10px", fontSize: 12, color: RUST }}>Las contraseñas no coinciden.</p>}
+        {error && <p style={{ margin: "0 0 10px", fontSize: 12, color: RUST }}>{error}</p>}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onCerrar} style={{ ...botonSecundario, flex: "none" }}>Cancelar</button>
+          <button onClick={guardar} disabled={!valido || guardando}
+            style={{ border: "none", background: NAVY, color: "#fff", borderRadius: 999, padding: "10px 20px", fontSize: 13.5, fontWeight: 600,
+              cursor: valido && !guardando ? "pointer" : "default", opacity: valido && !guardando ? 1 : 0.5 }}>
+            {guardando ? "Guardando..." : "Guardar contraseña"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Notificaciones de error (toast) ----------
 let toastListeners = [];
 export function showToast(mensaje, tipo = "error") {
@@ -3412,6 +3480,8 @@ export default function HowriaAdmin() {
     setUser(null);
   }
 
+  const [mostrarCambiarPassword, setMostrarCambiarPassword] = useState(false);
+
   const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
@@ -3551,6 +3621,10 @@ export default function HowriaAdmin() {
             <div>{user.nombre}</div>
             <div style={{ fontSize: 11, color: "#9BAAB8", textTransform: "capitalize" }}>{user.rol}</div>
           </div>
+          <button onClick={() => setMostrarCambiarPassword(true)} title="Cambiar contraseña"
+            style={{ background: "none", border: "1px solid rgba(255,255,255,0.25)", color: "#C9CEDA", borderRadius: 6, padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+            <KeyRound size={14} />
+          </button>
           <button onClick={cerrarSesion} style={{ background: "none", border: "1px solid rgba(255,255,255,0.25)", color: "#C9CEDA", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
             Cerrar sesión
           </button>
@@ -3610,11 +3684,16 @@ export default function HowriaAdmin() {
               <div>{user.nombre}</div>
               <div style={{ fontSize: 11, color: "#9BAAB8", textTransform: "capitalize" }}>{user.rol}</div>
             </div>
-            <button onClick={cerrarSesion} style={{ marginTop: 10, width: "100%", background: "none", border: "1px solid rgba(255,255,255,0.25)", color: "#C9CEDA", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer" }}>
+            <button onClick={() => setMostrarCambiarPassword(true)} style={{ marginTop: 10, width: "100%", background: "none", border: "1px solid rgba(255,255,255,0.25)", color: "#C9CEDA", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <KeyRound size={13} /> Cambiar contraseña
+            </button>
+            <button onClick={cerrarSesion} style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid rgba(255,255,255,0.25)", color: "#C9CEDA", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer" }}>
               Cerrar sesión
             </button>
           </div>
         </aside>
+
+        {mostrarCambiarPassword && <ModalCambiarPassword onCerrar={() => setMostrarCambiarPassword(false)} />}
 
         <div className="howria-shell-contenido" style={{ flex: "1 1 auto", minWidth: 0 }}>
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
