@@ -6173,7 +6173,8 @@ function nombreTipoCalendario(tipo) {
 // Convierte un cliente con paseo agendado un día dado en un ítem con la
 // misma forma que una cita real, para poder mostrarlo y abrirlo en el
 // mismo ModalDetalleCita — sin _dbId (no vive en citas_agenda), así que
-// el modal nunca le ofrece el botón de eliminar.
+// el modal nunca le ofrece el botón de eliminar. Se guarda lat/lng para
+// poder ordenar el itinerario del día por cercanía geográfica.
 function paseoComoItem(cliente, key, registroPaseos) {
   const registro = registroPaseos[`${cliente.id}_${key}`];
   return {
@@ -6185,10 +6186,140 @@ function paseoComoItem(cliente, key, registroPaseos) {
     telefono: cliente.telefono,
     direccion: cliente.direccion,
     adiestrador: cliente.paseadorNombre,
+    lat: cliente.lat,
+    lng: cliente.lng,
     fechaISO: `${key}T00:00:00`,
     estado: registro?.realizado ? "realizada" : registro?.cancelado ? "cancelada" : "pendiente",
     notas: registro?.nota || "",
   };
+}
+
+function minutosDesdeHora(str) {
+  const [h, m] = (str || "09:00").split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function horaDesdeMinutos(mins) {
+  const total = ((mins % 1440) + 1440) % 1440;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function minutosDeISO(iso) {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+// Agrupa los ítems de un día por persona responsable (adiestrador o
+// paseador — mismo campo "adiestrador" en el ítem) y arma un itinerario
+// cronológico por persona: evaluaciones/clases usan su hora real; los
+// paseos no tienen hora fija en el sistema (solo día de la semana), así
+// que se apilan de forma estimada — ordenados por cercanía geográfica
+// (mismo criterio que MapaRutas, ordenarRutaCercanoMasProximo) a partir
+// de una hora de inicio configurable, con duración y trayecto fijos
+// entre cliente y cliente.
+function construirItinerarioDia(items, { horaInicioPaseos, duracionPaseoMin, trayectoMin }) {
+  const porPersona = {};
+  items.forEach((it) => {
+    const persona = it.adiestrador || "Sin asignar";
+    (porPersona[persona] = porPersona[persona] || []).push(it);
+  });
+
+  const grupos = Object.entries(porPersona).map(([persona, itemsPersona]) => {
+    const citasReales = itemsPersona
+      .filter((it) => it.tipo !== "paseo")
+      .map((it) => ({ ...it, _inicioMin: minutosDeISO(it.fechaISO), _finMin: minutosDeISO(it.fechaISO) + (it.duracionMin || 60), _estimado: false }));
+
+    const paseos = itemsPersona.filter((it) => it.tipo === "paseo");
+    const conGeo = paseos.filter((p) => p.lat && p.lng);
+    const sinGeo = paseos.filter((p) => !(p.lat && p.lng));
+    const paseosOrdenados = [...ordenarRutaCercanoMasProximo(conGeo), ...sinGeo];
+
+    let cursor = minutosDesdeHora(horaInicioPaseos);
+    const paseosConHora = paseosOrdenados.map((p) => {
+      const inicio = cursor;
+      const fin = inicio + duracionPaseoMin;
+      cursor = fin + trayectoMin;
+      return { ...p, _inicioMin: inicio, _finMin: fin, _estimado: true };
+    });
+
+    const todos = [...citasReales, ...paseosConHora].sort((a, b) => a._inicioMin - b._inicioMin);
+    return { persona, items: todos, inicioMin: todos[0]?._inicioMin ?? 0 };
+  });
+
+  return grupos.sort((a, b) => a.inicioMin - b.inicioMin);
+}
+
+// Ventana con el itinerario del día apilado por horario, agrupado por
+// persona (paseador/adiestrador) — clic en un día del calendario. Las
+// horas de paseo son una estimación (el sistema no guarda hora fija por
+// cliente, solo el día de la semana), por eso quedan editables arriba.
+function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin, onVerDetalle, onCerrar }) {
+  useEffect(() => {
+    function alEscape(e) { if (e.key === "Escape") onCerrar(); }
+    window.addEventListener("keydown", alEscape);
+    return () => window.removeEventListener("keydown", alEscape);
+  }, [onCerrar]);
+
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 280, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-itinerario-titulo"
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
+          <h3 id="modal-itinerario-titulo" style={{ margin: 0, textTransform: "capitalize", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{fechaLabel}</h3>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
+        </div>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#8A7E5C" }}>Evaluaciones y clases van a su hora agendada. Los paseos no tienen hora fija en el sistema (solo el día), así que se estiman en orden de cercanía a partir de la hora de inicio — ajustala si no calza con la realidad.</p>
+
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 18, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 8 }}>
+          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+            Inicio paseos
+            <input type="time" value={horaInicioPaseos} onChange={(e) => setHoraInicioPaseos(e.target.value)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 100 }} />
+          </label>
+          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+            Duración paseo (min)
+            <input type="number" min={5} step={5} value={duracionPaseoMin} onChange={(e) => setDuracionPaseoMin(Number(e.target.value) || 45)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
+          </label>
+          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+            Trayecto (min)
+            <input type="number" min={0} step={5} value={trayectoMin} onChange={(e) => setTrayectoMin(Number(e.target.value) || 0)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
+          </label>
+        </div>
+
+        {grupos.length === 0 ? (
+          <p style={hint}>Sin actividades este día.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 22 }}>
+            {grupos.map((g) => (
+              <div key={g.persona}>
+                <p style={{ ...label, marginBottom: 8 }}>{g.persona}</p>
+                <div style={{ display: "grid", gap: 0 }}>
+                  {g.items.map((it, i) => {
+                    const siguiente = g.items[i + 1];
+                    const trayecto = siguiente ? siguiente._inicioMin - it._finMin : null;
+                    return (
+                      <div key={it.id}>
+                        <button onClick={() => onVerDetalle(it)}
+                          style={{ display: "flex", width: "100%", textAlign: "left", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFDF7", cursor: "pointer" }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: NAVY, flex: "none" }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</span>
+                          <span style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}{it.tipo !== "paseo" && ` · ${nombreTipoCalendario(it.tipo)}`}</span>
+                          {it._estimado && <span style={{ fontSize: 10, color: "#8A7E5C", fontStyle: "italic", flex: "none" }}>estimado</span>}
+                        </button>
+                        {trayecto != null && trayecto > 0 && (
+                          <p style={{ margin: "4px 0 4px 12px", fontSize: 11, color: "#8A7E5C" }}>↓ trayecto ~{trayecto} min</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Calendario del mes con evaluaciones, clases y paseos — se usa tanto
@@ -6205,6 +6336,20 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
   const [citaSel, setCitaSel] = useState(null);
   const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
   const esEntrenador = rolActual === "entrenador";
+
+  // Config del itinerario del día (hora de inicio de paseos, duración y
+  // trayecto entre cliente y cliente) — se guarda en localStorage, mismo
+  // criterio que howria_filtros_clientes, para no reconfigurar cada vez.
+  const configItinerarioGuardada = (() => {
+    try { return JSON.parse(localStorage.getItem("howria_itinerario_calendario") || "{}"); } catch { return {}; }
+  })();
+  const [horaInicioPaseos, setHoraInicioPaseos] = useState(configItinerarioGuardada.horaInicioPaseos || "09:00");
+  const [duracionPaseoMin, setDuracionPaseoMin] = useState(configItinerarioGuardada.duracionPaseoMin || 45);
+  const [trayectoMin, setTrayectoMin] = useState(configItinerarioGuardada.trayectoMin ?? 15);
+
+  useEffect(() => {
+    try { localStorage.setItem("howria_itinerario_calendario", JSON.stringify({ horaInicioPaseos, duracionPaseoMin, trayectoMin })); } catch {}
+  }, [horaInicioPaseos, duracionPaseoMin, trayectoMin]);
 
   function toggleTipoVisible(id) {
     setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -6240,7 +6385,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
   const offset = (primerDiaMes.getDay() + 6) % 7; // 0 = lunes
   const celdas = [...Array(offset).fill(null), ...Array.from({ length: diasEnMes }, (_, i) => i + 1)];
   const nombreMes = primerDiaMes.toLocaleDateString("es-CL", { month: "long", year: "numeric" });
-  const itemsDelDiaSel = diaSel ? itemsDelDia(diaSel) : [];
+  const gruposItinerario = diaSel ? construirItinerarioDia(itemsDelDia(diaSel), { horaInicioPaseos, duracionPaseoMin, trayectoMin }) : [];
 
   function cambiarMes(delta) {
     let m = mesIdx + delta, a = anio;
@@ -6259,7 +6404,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
             <button onClick={() => cambiarMes(1)} style={botonSecundario}>→</button>
           </div>
         </div>
-        <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>Clientes por atender este mes — clic en un día para ver el detalle, o directo en un nombre.</p>
+        <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>Clientes por atender este mes — clic en un día para ver el itinerario completo, o directo en un nombre para ver ese detalle.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
           {TIPOS_CALENDARIO_VISTA.map((t) => {
             const activo = tiposVisibles[t.id];
@@ -6287,7 +6432,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
                 style={{ borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
                   background: itemsDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <button onClick={() => setDiaSel(diaSel === key ? null : key)}
+                  <button onClick={() => setDiaSel(key)}
                     style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
                     {dia}
                   </button>
@@ -6312,23 +6457,18 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
             );
           })}
         </div>
-
-        {diaSel && (
-          <div style={{ marginTop: 18 }}>
-            <p style={label}>{new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</p>
-            {itemsDelDiaSel.length === 0 ? (
-              <p style={{ ...hint, marginTop: 6 }}>Sin sesiones este día.</p>
-            ) : (
-              itemsDelDiaSel.map((c) => (
-                <button key={c.id} onClick={() => setCitaSel(c)} style={{ display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 6, border: "1px solid #EDE4CE", background: "#FFFFFF", marginBottom: 6, cursor: "pointer" }}>
-                  <span style={{ fontSize: 13 }}>{c.clienteNombre} · {c.perro} · {nombreTipoCalendario(c.tipo)}</span>
-                  <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{c.tipo === "paseo" ? (c.adiestrador || "Sin paseador") : new Date(c.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
       </div>
+      {diaSel && (
+        <ModalItinerarioDia
+          fechaLabel={new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+          grupos={gruposItinerario}
+          horaInicioPaseos={horaInicioPaseos} setHoraInicioPaseos={setHoraInicioPaseos}
+          duracionPaseoMin={duracionPaseoMin} setDuracionPaseoMin={setDuracionPaseoMin}
+          trayectoMin={trayectoMin} setTrayectoMin={setTrayectoMin}
+          onVerDetalle={(it) => setCitaSel(it)}
+          onCerrar={() => setDiaSel(null)}
+        />
+      )}
       {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} onEliminar={setCitas ? (dbId) => eliminarCita(setCitas, dbId) : undefined} />}
     </div>
   );
