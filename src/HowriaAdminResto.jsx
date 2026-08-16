@@ -1101,7 +1101,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         <option value="">Sin asignar</option>
         {responsables.map((r) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
       </select>
-      <p style={{ ...hint, marginTop: -10 }}>Quién es el dueño del caso (ej. Javier Herrera o Javier Arniaz) — define de quién son las ventas de este cliente en la Finanzas personal de esa persona, sin importar su rol en la app.</p>
+      <p style={{ ...hint, marginTop: -10 }}>Quién es el dueño del caso (ej. Javier Arniaz) — define de quién son las ventas de este cliente en la Finanzas personal de esa persona, sin importar su rol en la app.</p>
 
       {intentoGuardar && formInvalido && (
         <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
@@ -1607,9 +1607,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const esPaseador = user?.rol === "paseador";
   const esEntrenador = user?.rol === "entrenador";
   // "Responsable de la cuenta" es un rol de negocio (dueño del caso,
-  // ej. Javier Herrera o Javier Arniaz) que no está atado a un rol fijo
-  // de la app — Arniaz, por ejemplo, es "entrenador" en el sistema pero
-  // también es responsable de varios clientes. Si esta persona figura
+  // ej. Javier Arniaz) que no está atado a un rol fijo de la app —
+  // Arniaz, por ejemplo, es "entrenador" en el sistema pero también es
+  // responsable de varios clientes. Si esta persona figura
   // como responsable de al menos un cliente, su Finanzas personal se
   // acota a esos clientes (viendo paseo Y adiestramiento juntos, es
   // dueño del caso completo) — esto manda por encima de cualquier
@@ -1807,7 +1807,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         )}
         {!vistaPersonal && (
           <div style={{ background: utilidad >= 0 ? "#E7F0EA" : "#F5E4E0", borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Utilidad estimada</p>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Ganancia de Howria</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
           </div>
         )}
@@ -1822,7 +1822,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       </div>
       {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          La utilidad considera los pagos a paseadores ya registrados como pagados en esta app, y lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto — no incluye otros gastos del negocio.
+          Es lo que le queda a Howria después de los pagos a paseadores ya registrados como pagados en esta app, y de lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto — no incluye otros gastos del negocio.
         </p>
       )}
       {vistaPersonal && (
