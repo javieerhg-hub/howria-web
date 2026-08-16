@@ -40,8 +40,12 @@ const EVENTOS_NOTIFICACION = [
 // ---------- Utilidades de mapa (OpenStreetMap, sin API key) ----------
 const SANTIAGO_CENTRO = { lat: -33.4489, lng: -70.6693 };
 
-async function geocodificarDireccion(direccion) {
-  const q = encodeURIComponent(`${direccion}, Santiago, Chile`);
+// Sin la comuna real, Nominatim buscaba solo "..., Santiago, Chile" —
+// una misma calle puede existir en varias comunas y tomaba el primer
+// resultado sin desambiguar, dejando pines mal ubicados. Con la comuna
+// de la ficha del cliente la búsqueda queda acotada de verdad.
+async function geocodificarDireccion(direccion, comuna) {
+  const q = encodeURIComponent(`${direccion}, ${comuna || "Santiago"}, Chile`);
   const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
   const datos = await resp.json();
   if (!datos?.length) return null;
@@ -4530,7 +4534,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
     setGeocodificando(cliente.id);
     setErrorGeo("");
     try {
-      const coords = await geocodificarDireccion(cliente.direccion);
+      const coords = await geocodificarDireccion(cliente.direccion, cliente.comuna);
       if (!coords) {
         setErrorGeo(`No se encontró la dirección de ${cliente.nombre}. Revísala e intenta de nuevo.`);
       } else {
@@ -4578,15 +4582,23 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
     marcadoresRef.current.clearLayers();
     clientesConMapa.forEach((c) => {
       const enRuta = c.paseadorNombre === paseadorId && incluidos[c.id];
-      L.circleMarker([c.lat, c.lng], {
-        radius: 9,
-        weight: 2,
-        color: "#FFFFFF",
-        fillColor: enRuta ? GOLD : NAVY,
-        fillOpacity: 1,
-      })
-        .bindTooltip(`${c.nombre} · ${c.perro}`)
+      // Marker (no circleMarker) porque necesita soportar arrastre — un
+      // circleMarker es un layer vectorial y Leaflet no lo deja mover a
+      // mano. El ícono redondo replica el look anterior con un divIcon.
+      const icono = L.divIcon({
+        className: "",
+        html: `<div style="width:18px;height:18px;border-radius:50%;background:${enRuta ? GOLD : NAVY};border:2px solid #FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:grab;"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      });
+      const marker = L.marker([c.lat, c.lng], { icon: icono, draggable: true })
+        .bindTooltip(`${c.nombre} · ${c.perro} — arrastrá el pin si quedó mal ubicado`)
         .addTo(marcadoresRef.current);
+      marker.on("dragend", () => {
+        const { lat, lng } = marker.getLatLng();
+        setClientes((prev) => prev.map((x) => (x.id === c.id ? { ...x, lat, lng } : x)));
+        showToast(`Ubicación de ${c.nombre} corregida a mano.`, "exito");
+      });
     });
     if (clientesConMapa.length > 0) {
       mapa.invalidateSize();
@@ -4689,8 +4701,10 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
       <div className="howria-card" style={tarjeta}>
         <p style={label}>Mapa</p>
         <div ref={mapaDivRef} style={{ width: "100%", height: 420, borderRadius: 8, border: "1px solid #E4DBC3", background: "#EDE4CE" }} />
-        {clientesConMapa.length === 0 && (
+        {clientesConMapa.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Todavía no hay ningún cliente ubicado — usa "Ubicar en el mapa" arriba.</p>
+        ) : (
+          <p style={{ ...hint, marginTop: 8 }}>¿Un pin quedó mal ubicado? Arrastralo a la posición correcta — se guarda solo.</p>
         )}
         <p style={{ fontSize: 11, color: "#9A9179", marginTop: 8 }}>El punto dorado marca los clientes incluidos en la ruta calculada; el azul marino, los demás clientes ya ubicados. Se puede hacer zoom y arrastrar (mouse o dedo).</p>
       </div>
