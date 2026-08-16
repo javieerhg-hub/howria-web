@@ -4974,7 +4974,8 @@ function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
     return () => window.removeEventListener("keydown", alEscape);
   }, [onCerrar]);
 
-  const tipoTexto = TIPOS_CITA.find((t) => t.id === cita.tipo)?.nombre || cita.tipo;
+  const esPaseo = cita.tipo === "paseo";
+  const tipoTexto = esPaseo ? "Paseo" : TIPOS_CITA.find((t) => t.id === cita.tipo)?.nombre || cita.tipo;
   const estadoTexto = NOMBRES_ESTADO_CITA[cita.estado] || cita.estado;
   const puedeEliminar = onEliminar && cita._dbId && ["cancelada", "rechazada", "realizada"].includes(cita.estado);
 
@@ -4989,14 +4990,16 @@ function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
         <p style={{ margin: "0 0 20px", fontSize: 13, color: "#8A7E5C" }}>🐾 {cita.perro} · {tipoTexto} · {estadoTexto}</p>
 
         <div style={{ display: "grid", gap: 14 }}>
-          <FilaDetalleCita label="Fecha y hora" valor={new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} />
-          <FilaDetalleCita label="Adiestrador" valor={cita.adiestrador} />
+          <FilaDetalleCita label={esPaseo ? "Fecha" : "Fecha y hora"} valor={esPaseo
+            ? new Date(cita.fechaISO).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+            : new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} />
+          <FilaDetalleCita label={esPaseo ? "Paseador" : "Adiestrador"} valor={cita.adiestrador} />
           {cita.precio != null && <FilaDetalleCita label="Precio" valor={fmtCLP(cita.precio)} />}
           <FilaDetalleCita label="Correo" valor={cita.email || "Sin correo"} />
           <FilaDetalleCita label="Teléfono" valor={cita.telefono || "Sin teléfono"} />
           <FilaDetalleCita label="Dirección" valor={cita.direccion || "Sin dirección"} />
           {cita.notas && <FilaDetalleCita label="Notas" valor={cita.notas} />}
-          <FilaDetalleCita label="Origen" valor={cita.origen === "cliente" ? "Pedida por el cliente (agenda pública)" : "Agendada por el equipo"} />
+          {!esPaseo && <FilaDetalleCita label="Origen" valor={cita.origen === "cliente" ? "Pedida por el cliente (agenda pública)" : "Agendada por el equipo"} />}
           {cita.confirmadaEn && <FilaDetalleCita label="Confirmada el" valor={new Date(cita.confirmadaEn).toLocaleString("es-CL")} />}
         </div>
 
@@ -6139,37 +6142,92 @@ function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, 
   );
 }
 
-// Calendario del mes con las citas (clases/evaluaciones) de un
-// adiestrador — se usa tanto como sub-vista de Alumnos (con "onVolver")
-// como pestaña propia "Calendario" en el menú (sin "onVolver", vista
-// completa y celdas más grandes para que se divise bien).
-export function CalendarioAlumnos({ citasAgenda, setCitas, rolActual, nombreActual, onVolver }) {
+// Colores por tipo en el calendario — evaluación/clase vienen de
+// citas_agenda, paseo es un ítem "virtual" derivado de
+// clientes.diasHabituales (los paseos no viven en citas_agenda, son
+// recurrentes por día de semana, no fechas puntuales).
+const TIPOS_CALENDARIO_VISTA = [
+  { id: "evaluacion", nombre: "Evaluaciones", bg: "#F3E3B4", color: "#8A6A1E" },
+  { id: "clase", nombre: "Clases", bg: "#D8ECDE", color: "#2F6A46" },
+  { id: "paseo", nombre: "Paseos", bg: "#D6E6EE", color: "#1E5A7A" },
+];
+
+function nombreTipoCalendario(tipo) {
+  if (tipo === "paseo") return "Paseo";
+  return TIPOS_CITA.find((t) => t.id === tipo)?.nombre || tipo;
+}
+
+// Convierte un cliente con paseo agendado un día dado en un ítem con la
+// misma forma que una cita real, para poder mostrarlo y abrirlo en el
+// mismo ModalDetalleCita — sin _dbId (no vive en citas_agenda), así que
+// el modal nunca le ofrece el botón de eliminar.
+function paseoComoItem(cliente, key, registroPaseos) {
+  const registro = registroPaseos[`${cliente.id}_${key}`];
+  return {
+    id: `paseo-${cliente.id}-${key}`,
+    tipo: "paseo",
+    clienteNombre: cliente.nombre,
+    perro: cliente.perro,
+    email: cliente.email,
+    telefono: cliente.telefono,
+    direccion: cliente.direccion,
+    adiestrador: cliente.paseadorNombre,
+    fechaISO: `${key}T00:00:00`,
+    estado: registro?.realizado ? "realizada" : registro?.cancelado ? "cancelada" : "pendiente",
+    notas: registro?.nota || "",
+  };
+}
+
+// Calendario del mes con evaluaciones, clases y paseos — se usa tanto
+// como sub-vista de Alumnos (con "onVolver") como pestaña propia
+// "Calendario" en el menú (sin "onVolver", vista completa y celdas más
+// grandes para que se divise bien). Los 3 tipos se pueden mostrar u
+// ocultar por separado con las pastillas de arriba; con las 3 activas se
+// ven todos juntos en el mismo calendario.
+export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], registroPaseos = {}, rolActual, nombreActual, onVolver }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesIdx, setMesIdx] = useState(hoy.getMonth());
   const [diaSel, setDiaSel] = useState(null);
   const [citaSel, setCitaSel] = useState(null);
+  const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
   const esEntrenador = rolActual === "entrenador";
 
-  const citasFiltradas = useMemo(() =>
-    citasAgenda.filter((c) => (c.tipo === "clase" || c.tipo === "evaluacion") && (!esEntrenador || c.adiestrador === nombreActual)),
-    [citasAgenda, esEntrenador, nombreActual]);
+  function toggleTipoVisible(id) {
+    setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
-  const porDia = useMemo(() => {
+  const porDiaCitas = useMemo(() => {
+    const filtradas = citasAgenda.filter((c) =>
+      ((c.tipo === "evaluacion" && tiposVisibles.evaluacion) || (c.tipo === "clase" && tiposVisibles.clase)) &&
+      (!esEntrenador || c.adiestrador === nombreActual));
     const mapa = {};
-    citasFiltradas.forEach((c) => {
+    filtradas.forEach((c) => {
       const key = fechaKey(new Date(c.fechaISO));
       (mapa[key] = mapa[key] || []).push(c);
     });
     return mapa;
-  }, [citasFiltradas]);
+  }, [citasAgenda, esEntrenador, nombreActual, tiposVisibles.evaluacion, tiposVisibles.clase]);
+
+  // Mismo criterio que "Paseos de hoy" en Inicio: cualquier cliente con
+  // ese día en diasHabituales, sin filtrar por estadoCliente.
+  const clientesPaseo = useMemo(() =>
+    clientes.filter((c) => c.tipoServicio?.includes("paseos") && (!esEntrenador || c.paseadorNombre === nombreActual)),
+    [clientes, esEntrenador, nombreActual]);
+
+  function itemsDelDia(key) {
+    const dow = (new Date(key + "T00:00:00").getDay() + 6) % 7;
+    const paseosDia = tiposVisibles.paseo ? clientesPaseo.filter((c) => c.diasHabituales?.includes(dow)).map((c) => paseoComoItem(c, key, registroPaseos)) : [];
+    const citasDia = porDiaCitas[key] || [];
+    return [...paseosDia, ...citasDia].sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+  }
 
   const primerDiaMes = new Date(anio, mesIdx, 1);
   const diasEnMes = new Date(anio, mesIdx + 1, 0).getDate();
   const offset = (primerDiaMes.getDay() + 6) % 7; // 0 = lunes
   const celdas = [...Array(offset).fill(null), ...Array.from({ length: diasEnMes }, (_, i) => i + 1)];
   const nombreMes = primerDiaMes.toLocaleDateString("es-CL", { month: "long", year: "numeric" });
-  const citasDelDiaSel = diaSel ? (porDia[diaSel] || []) : [];
+  const itemsDelDiaSel = diaSel ? itemsDelDia(diaSel) : [];
 
   function cambiarMes(delta) {
     let m = mesIdx + delta, a = anio;
@@ -6189,6 +6247,19 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, rolActual, nombreActu
           </div>
         </div>
         <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>Clientes por atender este mes — clic en un día para ver el detalle, o directo en un nombre.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {TIPOS_CALENDARIO_VISTA.map((t) => {
+            const activo = tiposVisibles[t.id];
+            return (
+              <button key={t.id} onClick={() => toggleTipoVisible(t.id)}
+                style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+                  border: activo ? `1.5px solid ${t.color}` : "1px solid #DCD2B4",
+                  background: activo ? t.bg : "#FFFFFF", color: activo ? t.color : "#8A7E5C", fontWeight: activo ? 600 : 400 }}>
+                {t.nombre}
+              </button>
+            );
+          })}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, fontSize: 12, color: "#8A7E5C", textAlign: "center", marginBottom: 8 }}>
           {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <span key={d}>{d}</span>)}
         </div>
@@ -6196,29 +6267,32 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, rolActual, nombreActu
           {celdas.map((dia, i) => {
             if (!dia) return <div key={`vacio-${i}`} />;
             const key = fechaKey(new Date(anio, mesIdx, dia));
-            const citasDia = (porDia[key] || []).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+            const itemsDia = itemsDelDia(key);
             const esHoy = key === fechaKey(hoy);
             return (
               <div key={key} className="howria-cal-celda"
                 style={{ borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
-                  background: citasDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                  background: itemsDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <button onClick={() => setDiaSel(diaSel === key ? null : key)}
                     style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
                     {dia}
                   </button>
-                  {citasDia.length > 0 && <span className="howria-cal-punto" style={{ width: 7, height: 7, borderRadius: "50%", background: GOLD, flex: "none" }} />}
+                  {itemsDia.length > 0 && <span className="howria-cal-punto" style={{ width: 7, height: 7, borderRadius: "50%", background: GOLD, flex: "none" }} />}
                 </div>
                 <div className="howria-cal-nombres" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {citasDia.slice(0, 2).map((c) => (
-                    <button key={c._dbId || c.id} onClick={() => setCitaSel(c)}
-                      style={{ border: "none", background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46",
-                        borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.perro}
-                    </button>
-                  ))}
-                  {citasDia.length > 2 && (
-                    <span style={{ fontSize: 10, color: "#8A7E5C", paddingLeft: 5 }}>+{citasDia.length - 2} más</span>
+                  {itemsDia.slice(0, 2).map((c) => {
+                    const tono = TIPOS_CALENDARIO_VISTA.find((t) => t.id === c.tipo);
+                    return (
+                      <button key={c.id} onClick={() => setCitaSel(c)}
+                        style={{ border: "none", background: tono?.bg || "#EDE4CE", color: tono?.color || INK,
+                          borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.perro}
+                      </button>
+                    );
+                  })}
+                  {itemsDia.length > 2 && (
+                    <span style={{ fontSize: 10, color: "#8A7E5C", paddingLeft: 5 }}>+{itemsDia.length - 2} más</span>
                   )}
                 </div>
               </div>
@@ -6229,13 +6303,13 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, rolActual, nombreActu
         {diaSel && (
           <div style={{ marginTop: 18 }}>
             <p style={label}>{new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</p>
-            {citasDelDiaSel.length === 0 ? (
+            {itemsDelDiaSel.length === 0 ? (
               <p style={{ ...hint, marginTop: 6 }}>Sin sesiones este día.</p>
             ) : (
-              citasDelDiaSel.map((c) => (
-                <button key={c._dbId} onClick={() => setCitaSel(c)} style={{ display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 6, border: "1px solid #EDE4CE", background: "#FFFFFF", marginBottom: 6, cursor: "pointer" }}>
-                  <span style={{ fontSize: 13 }}>{c.clienteNombre} · {c.perro} · {TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre || c.tipo}</span>
-                  <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{new Date(c.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</span>
+              itemsDelDiaSel.map((c) => (
+                <button key={c.id} onClick={() => setCitaSel(c)} style={{ display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 6, border: "1px solid #EDE4CE", background: "#FFFFFF", marginBottom: 6, cursor: "pointer" }}>
+                  <span style={{ fontSize: 13 }}>{c.clienteNombre} · {c.perro} · {nombreTipoCalendario(c.tipo)}</span>
+                  <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{c.tipo === "paseo" ? (c.adiestrador || "Sin paseador") : new Date(c.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</span>
                 </button>
               ))
             )}
@@ -6276,7 +6350,7 @@ function renderFilaAlumno(a, onAbrir) {
   );
 }
 
-export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, setCitas, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
+export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, setCitas, registroPaseos = {}, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
   const [vista, setVista] = useState("lista"); // "lista" | "ingreso" | "caso" | "calendario"
   const [clienteSelId, setClienteSelId] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -6346,7 +6420,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
       onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
   }
   if (vista === "calendario") {
-    return <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitas} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
+    return <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitas} clientes={clientes} registroPaseos={registroPaseos} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
   }
 
   const alumnosConProgreso = misAlumnos.map((c) => {
