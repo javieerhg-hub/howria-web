@@ -104,3 +104,14 @@ export function esVenta(boleta) {
 export function esPorCobrar(boleta) {
   return boleta.estado === "pendiente_pago";
 }
+
+// Cuánto de una boleta de adiestramiento le corresponde al responsable
+// (entrenador a cargo del caso) vs a Howria. Si todavía no se definió a
+// mano, se asume que es 100% del responsable — mismo comportamiento que
+// existía antes de que este reparto se pudiera registrar. Las boletas de
+// paseo no tienen este reparto (el costo del paseador se calcula aparte,
+// vía tarifaPaseador), así que siempre devuelven el total completo.
+export function montoParaResponsable(boleta) {
+  if (boleta._tipo !== "adiestramiento") return boleta.total;
+  return boleta.montoResponsable ?? boleta.total;
+}

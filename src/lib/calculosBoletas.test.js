@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
-  esVenta, esPorCobrar,
+  esVenta, esPorCobrar, montoParaResponsable,
 } from "./calculosBoletas.js";
 
 describe("esFinDeSemanaOFeriado", () => {
@@ -169,5 +169,23 @@ describe("esPorCobrar", () => {
   });
   it("cancelada no cuenta como por cobrar", () => {
     expect(esPorCobrar({ estado: "cancelada" })).toBe(false);
+  });
+});
+
+describe("montoParaResponsable", () => {
+  it("una boleta de paseo siempre devuelve el total completo (sin reparto)", () => {
+    expect(montoParaResponsable({ _tipo: "paseo", total: 100000, montoResponsable: 30000 })).toBe(100000);
+  });
+
+  it("adiestramiento sin reparto definido devuelve el total completo", () => {
+    expect(montoParaResponsable({ _tipo: "adiestramiento", total: 220000 })).toBe(220000);
+  });
+
+  it("adiestramiento con reparto definido devuelve el monto del responsable", () => {
+    expect(montoParaResponsable({ _tipo: "adiestramiento", total: 220000, montoResponsable: 180000 })).toBe(180000);
+  });
+
+  it("un reparto de 0 (todo para Howria) se respeta, no cae al total", () => {
+    expect(montoParaResponsable({ _tipo: "adiestramiento", total: 220000, montoResponsable: 0 })).toBe(0);
   });
 });

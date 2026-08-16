@@ -13,7 +13,7 @@ import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
-  esVenta, esPorCobrar,
+  esVenta, esPorCobrar, montoParaResponsable,
 } from "./lib/calculosBoletas.js";
 import { CalendarioMes, fechaKeyMes } from "./lib/CalendarioMes.jsx";
 import { jsPDF } from "jspdf";
@@ -1641,8 +1641,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const pagosRegistrados = vistaPersonal ? [] : pagosRegistradosProp;
 
   const todasLasBoletas = useMemo(() => [
-    ...boletasEmitidas,
-    ...boletasAdiestramiento.map((b) => ({ ...b, cantidad: 0, descuento: (b.descuentoPackMonto || 0) })),
+    ...boletasEmitidas.map((b) => ({ ...b, _tipo: "paseo" })),
+    ...boletasAdiestramiento.map((b) => ({ ...b, _tipo: "adiestramiento", cantidad: 0, descuento: (b.descuentoPackMonto || 0) })),
   ], [boletasEmitidas, boletasAdiestramiento]);
   // Solo lo aceptado/pagado cuenta como venta real — un borrador sin
   // revisar o una boleta cancelada no deben sumar en ningún ingreso.
@@ -1674,7 +1674,18 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       .filter((p) => p.fechaPagoISO && new Date(p.fechaPagoISO) >= actualDesde)
       .reduce((acc, p) => acc + Number(p.monto || 0), 0),
     [pagosRegistrados, actualDesde]);
-  const utilidad = actual.ingresos - costosPeriodo;
+  // Plata pagada a responsables de cuenta en boletas de adiestramiento —
+  // costo real para Howria, igual que el pago a paseadores, así que
+  // también se resta de la utilidad general.
+  const costoResponsablesAdiestramiento = useMemo(() =>
+    filtradas.filter((b) => b._tipo === "adiestramiento").reduce((acc, b) => acc + montoParaResponsable(b), 0),
+    [filtradas]);
+  // "Tu parte" — lo que efectivamente le corresponde al responsable
+  // después del reparto con Howria en adiestramiento (los paseos no
+  // tienen reparto, van completos). Solo tiene sentido en la vista
+  // personal de un responsable de cuenta.
+  const tuParte = useMemo(() => filtradas.reduce((acc, b) => acc + montoParaResponsable(b), 0), [filtradas]);
+  const utilidad = actual.ingresos - costosPeriodo - costoResponsablesAdiestramiento;
   const promedioBoleta = actual.cantidad ? actual.ingresos / actual.cantidad : 0;
   const varIngresos = variacion(actual.ingresos, anterior.ingresos);
 
@@ -1763,7 +1774,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         ))}
       </div>
 
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? 3 : 5}, 1fr)`, gap: 14, marginBottom: 26 }}>
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 6}, 1fr)`, gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
@@ -1771,6 +1782,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
             {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
           </p>
         </div>
+        {vistaPersonal && esResponsable && (
+          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#2E5C41", textTransform: "uppercase", letterSpacing: 0.5 }}>Tu parte</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#2E5C41", fontFamily: "Georgia, serif" }}>{fmtCLP(tuParte)}</p>
+          </div>
+        )}
         {!vistaPersonal && (
           <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
@@ -1780,6 +1797,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 Ver en Pago trabajadores →
               </button>
             )}
+          </div>
+        )}
+        {!vistaPersonal && (
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a responsables (adiestramiento)</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costoResponsablesAdiestramiento)}</p>
           </div>
         )}
         {!vistaPersonal && (
@@ -1799,13 +1822,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       </div>
       {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          La utilidad considera solo pagos a paseadores ya registrados como pagados en esta app — no incluye otros gastos del negocio.
+          La utilidad considera los pagos a paseadores ya registrados como pagados en esta app, y lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto — no incluye otros gastos del negocio.
         </p>
       )}
       {vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
           {esResponsable
-            ? "Esto es lo facturado en este período a los clientes de los que eres responsable."
+            ? '"Ingresos" es lo facturado en este período a los clientes de los que eres responsable. "Tu parte" descuenta lo que le queda a Howria en las facturas de adiestramiento donde se definió un reparto — si no se definió, se cuenta completa como tuya.'
             : 'Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.'}
         </p>
       )}
@@ -2535,7 +2558,14 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           </td>
           <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
           <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
-          <td style={{ padding: "10px", fontSize: 12, color: responsable ? "#6B6248" : "#B0A587" }}>{responsable || "Sin asignar"}</td>
+          <td style={{ padding: "10px", fontSize: 12, color: responsable ? "#6B6248" : "#B0A587" }}>
+            {responsable || "Sin asignar"}
+            {b._tipo === "adiestramiento" && b.montoResponsable != null && (
+              <div style={{ fontSize: 10.5, color: "#8A7E5C", marginTop: 2 }}>
+                Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
+              </div>
+            )}
+          </td>
           <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
           <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`}</td>
           <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
@@ -2641,6 +2671,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             <option value="">Sin asignar</option>
             {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
           </select>
+          {b._tipo === "adiestramiento" && b.montoResponsable != null && (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8A7E5C" }}>
+              Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
+            </p>
+          )}
         </div>
 
         {!b._dbId ? (
@@ -6364,10 +6399,12 @@ function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
   const [mensaje, setMensaje] = useState(boleta.mensajePersonalizado || "");
   const [mes, setMes] = useState(boleta.mes || MESES[0]);
   const [anio, setAnio] = useState(boleta.anio || new Date().getFullYear());
+  const [montoResponsable, setMontoResponsable] = useState(boleta.montoResponsable ?? boleta.total);
 
   function guardar() {
     const cambios = { total: Number(total) || 0, mensajePersonalizado: mensaje.trim() || null };
     if (tipo === "paseo") { cambios.mes = mes; cambios.anio = Number(anio) || boleta.anio; }
+    if (tipo === "adiestramiento") { cambios.montoResponsable = Number(montoResponsable) || 0; }
     onGuardar(cambios);
   }
 
@@ -6393,6 +6430,14 @@ function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
                 onChange={(e) => setAnio(e.target.value)} style={{ ...input, marginBottom: 0 }} />
             </div>
           </>
+        )}
+        {tipo === "adiestramiento" && (
+          <div style={{ flex: "1 1 200px" }}>
+            <label style={label} htmlFor={`editar-boleta-monto-responsable-${boleta.numero}`}>Monto para el responsable</label>
+            <input id={`editar-boleta-monto-responsable-${boleta.numero}`} type="number" min="0" value={montoResponsable}
+              onChange={(e) => setMontoResponsable(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            <p style={{ ...hint, margin: "4px 0 0" }}>Para Howria: {fmtCLP((Number(total) || 0) - (Number(montoResponsable) || 0))}</p>
+          </div>
         )}
       </div>
       <div>

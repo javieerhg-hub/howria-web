@@ -94,6 +94,7 @@ no un runner de migraciones.
 | 066 | `planes_clases.sql` | 2026-08-16 | Crea `planes_clases` — el "pack" de clases de un alumno pasa a ser su propia entidad (número de clases, si incluye evaluación), creada directamente desde Alumnos, con enlace opcional a una `boletas_adiestramiento` ya enviada. |
 | 067 | `clases_realizadas_por_plan.sql` | 2026-08-16 | Recrea `clases_realizadas` (062, sin datos reales todavía) apuntando a `planes_clases` en vez de `boletas_adiestramiento` directamente. `numero_clase = 0` pasa a ser la convención para "Evaluación". |
 | 068 | `clientes_acceso_rapido.sql` | 2026-08-16 | Agrega `acceso_rapido` a `clientes` — el entrenador puede marcar un alumno como atajo en su propio Inicio. |
+| 069 | `boletas_adiestramiento_monto_responsable.sql` | 2026-08-16 | Agrega `monto_responsable` a `boletas_adiestramiento` — el reparto entre el responsable de la cuenta (entrenador) y Howria en cada factura, para que la Finanzas personal y la utilidad general reflejen lo que de verdad se lleva cada uno. |
 
 ## Nota sobre el orden 001–023
 
