@@ -2567,6 +2567,31 @@ export function PuntoClave({ label, valor }) {
   );
 }
 
+// Evaluaciones pedidas por el link público, todavía sin confirmar por el
+// equipo (citas_agenda con estado "pendiente") — acceso directo para no
+// tener que ir a buscarlas en Agenda. La usan tanto el Inicio del
+// entrenador (solo las suyas) como el de coordinador/administrador
+// (todas), cada uno con su propio filtro de entrada.
+function EvaluacionesPorConfirmar({ citas, setTab }) {
+  if (citas.length === 0) return null;
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <h2 style={sectionTitle}>Evaluaciones por confirmar</h2>
+      <p style={{ ...hint, marginTop: 8 }}>Pidieron hora por el link público — quedan acá hasta que se acepten o rechacen en Agenda.</p>
+      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+        {citas.map((c) => (
+          <button key={c.id} onClick={() => setTab("agenda")}
+            style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, textAlign: "left", padding: "10px", borderRadius: 10, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer", font: "inherit" }}>
+            <PuntoClave label="Tutor" valor={c.clienteNombre} />
+            <PuntoClave label="Perro" valor={c.perro || "—"} />
+            <PuntoClave label="Fecha" valor={new Date(c.fechaISO).toLocaleString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
@@ -2613,6 +2638,13 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     // ("★ Agregar a Inicio") para entrar directo sin pasar por la lista.
     const alumnosDestacados = clientes.filter((c) => c.accesoRapido && c.adiestradorNombre === user.nombre);
 
+    // Evaluaciones que pidieron hora CON ÉL por el link público y siguen
+    // sin confirmar — prioridad 2 en su Inicio, justo después de sus
+    // alumnos destacados (prioridad 1).
+    const evaluacionesPendientesPropias = citasAgenda
+      .filter((c) => c.tipo === "evaluacion" && c.estado === "pendiente" && c.adiestrador === user.nombre)
+      .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+
     return (
       <div style={{ display: "grid", gap: 20 }}>
         <div className="howria-inicio-entrenador-encabezado">{encabezado}</div>
@@ -2631,6 +2663,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
             </div>
           </div>
         )}
+        <EvaluacionesPorConfirmar citas={evaluacionesPendientesPropias} setTab={setTab} />
         <LauncherMobile tabs={tabs} setTab={setTab} destacar={["alumnos", "agenda"]} />
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Clientes por atender</h2>
@@ -2836,6 +2869,12 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   const hoyStr = fechaKey(hoy);
   const prospectosVencidos = prospectos.filter((p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido");
   const proximasCitas = citasAgenda.filter((c) => c.estado === "agendada" && new Date(c.fechaISO) >= hoy).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)).slice(0, 4);
+  // Todas las evaluaciones pedidas por el link público sin confirmar
+  // todavía (cualquier entrenador) — coordinación/administrador ven el
+  // negocio completo, a diferencia del entrenador que solo ve las suyas.
+  const evaluacionesPendientesTodas = citasAgenda
+    .filter((c) => c.tipo === "evaluacion" && c.estado === "pendiente")
+    .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
   const equipoActivo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
@@ -2861,6 +2900,8 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
       </div>
 
       <LauncherMobile tabs={tabs} setTab={setTab} />
+
+      <EvaluacionesPorConfirmar citas={evaluacionesPendientesTodas} setTab={setTab} />
 
       {avisos.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
