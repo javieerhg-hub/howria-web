@@ -1340,7 +1340,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flex: "none", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", gap: 8, flex: "none", maxWidth: "100%", flexWrap: "wrap", justifyContent: "flex-end" }}>
             {puedeAgendar && cliente._dbId && (
               <button onClick={copiarLinkAgenda} style={botonSecundario}>{linkCopiado ? "¡Copiado!" : "Copiar link de agenda"}</button>
             )}
