@@ -6294,10 +6294,41 @@ function agruparManadas(items) {
   return [...resto, ...combinados];
 }
 
+// Cuerpo del itinerario de un día — texto de ayuda, config de paseos
+// (hora de inicio/duración/trayecto) y la grilla horaria en sí. Se usa
+// tanto dentro de ModalItinerarioDia (clic en un día del calendario)
+// como directo en la pestaña Itinerario (sin pasar por el mes).
+function ContenidoItinerarioDia({ grupos, diaKey, citasAgenda, setCitas, setClientes, horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin, onVerDetalle }) {
+  return (
+    <>
+      <p style={{ margin: "0 0 16px", fontSize: 12, color: "#8A7E5C" }}>Evaluaciones y clases van a su hora agendada. Los paseos sin hora configurada se estiman en orden de cercanía a partir de la hora de inicio — arrastralos o tocá el + para fijarles una hora real, así queda guardada para la próxima vez.</p>
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 18, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 8 }}>
+        <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+          Inicio paseos
+          <input type="time" value={horaInicioPaseos} onChange={(e) => setHoraInicioPaseos(e.target.value)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 100 }} />
+        </label>
+        <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+          Duración paseo (min)
+          <input type="number" min={5} step={5} value={duracionPaseoMin} onChange={(e) => setDuracionPaseoMin(Number(e.target.value) || 45)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
+        </label>
+        <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
+          Trayecto (min)
+          <input type="number" min={0} step={5} value={trayectoMin} onChange={(e) => setTrayectoMin(Number(e.target.value) || 0)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
+        </label>
+      </div>
+
+      {grupos.length === 0 ? (
+        <p style={hint}>Sin actividades este día.</p>
+      ) : (
+        <GrillaHorariaDia grupos={grupos} onVerDetalle={onVerDetalle} diaKey={diaKey} citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes} />
+      )}
+    </>
+  );
+}
+
 // Ventana con el itinerario del día apilado por horario, agrupado por
-// persona (paseador/adiestrador) — clic en un día del calendario. Las
-// horas de paseo son una estimación (el sistema no guarda hora fija por
-// cliente, solo el día de la semana), por eso quedan editables arriba.
+// persona (paseador/adiestrador) — clic en un día del calendario.
 function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas, setClientes, horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin, onVerDetalle, onCerrar }) {
   useEffect(() => {
     function alEscape(e) { if (e.key === "Escape") onCerrar(); }
@@ -6313,28 +6344,11 @@ function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas,
           <h3 id="modal-itinerario-titulo" style={{ margin: 0, textTransform: "capitalize", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{fechaLabel}</h3>
           <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
         </div>
-        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#8A7E5C" }}>Evaluaciones y clases van a su hora agendada. Los paseos sin hora configurada se estiman en orden de cercanía a partir de la hora de inicio — arrastralos o tocá el + para fijarles una hora real, así queda guardada para la próxima vez.</p>
-
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 18, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 8 }}>
-          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
-            Inicio paseos
-            <input type="time" value={horaInicioPaseos} onChange={(e) => setHoraInicioPaseos(e.target.value)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 100 }} />
-          </label>
-          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
-            Duración paseo (min)
-            <input type="number" min={5} step={5} value={duracionPaseoMin} onChange={(e) => setDuracionPaseoMin(Number(e.target.value) || 45)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
-          </label>
-          <label style={{ fontSize: 11.5, color: "#6B6248", display: "flex", flexDirection: "column", gap: 3 }}>
-            Trayecto (min)
-            <input type="number" min={0} step={5} value={trayectoMin} onChange={(e) => setTrayectoMin(Number(e.target.value) || 0)} style={{ ...input, margin: 0, padding: "5px 8px", fontSize: 13, width: 70 }} />
-          </label>
-        </div>
-
-        {grupos.length === 0 ? (
-          <p style={hint}>Sin actividades este día.</p>
-        ) : (
-          <GrillaHorariaDia grupos={grupos} onVerDetalle={onVerDetalle} diaKey={diaKey} citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes} />
-        )}
+        <ContenidoItinerarioDia grupos={grupos} diaKey={diaKey} citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes}
+          horaInicioPaseos={horaInicioPaseos} setHoraInicioPaseos={setHoraInicioPaseos}
+          duracionPaseoMin={duracionPaseoMin} setDuracionPaseoMin={setDuracionPaseoMin}
+          trayectoMin={trayectoMin} setTrayectoMin={setTrayectoMin}
+          onVerDetalle={onVerDetalle} />
       </div>
     </div>
   );
@@ -6552,38 +6566,30 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
   );
 }
 
-// Calendario del mes con evaluaciones, clases y paseos — se usa tanto
-// como sub-vista de Alumnos (con "onVolver") como pestaña propia
-// "Calendario" en el menú (sin "onVolver", vista completa y celdas más
-// grandes para que se divise bien). Los 3 tipos se pueden mostrar u
-// ocultar por separado con las pastillas de arriba; con las 3 activas se
-// ven todos juntos en el mismo calendario.
-export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual, onVolver }) {
-  const hoy = new Date();
-  const [anio, setAnio] = useState(hoy.getFullYear());
-  const [mesIdx, setMesIdx] = useState(hoy.getMonth());
-  const [diaSel, setDiaSel] = useState(null);
-  const [citaSel, setCitaSel] = useState(null);
-  const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
-  const esEntrenador = rolActual === "entrenador";
-
-  // Config del itinerario del día (hora de inicio de paseos, duración y
-  // trayecto entre cliente y cliente) — se guarda en localStorage, mismo
-  // criterio que howria_filtros_clientes, para no reconfigurar cada vez.
-  const configItinerarioGuardada = (() => {
+// Config del itinerario del día (hora de inicio de paseos, duración y
+// trayecto entre cliente y cliente) — se guarda en localStorage, mismo
+// criterio que howria_filtros_clientes, para no reconfigurar cada vez.
+// Compartida entre CalendarioAlumnos e Itinerario, así ajustarla en una
+// pestaña también se refleja en la otra.
+function useConfigItinerario() {
+  const guardada = (() => {
     try { return JSON.parse(localStorage.getItem("howria_itinerario_calendario") || "{}"); } catch { return {}; }
   })();
-  const [horaInicioPaseos, setHoraInicioPaseos] = useState(configItinerarioGuardada.horaInicioPaseos || "09:00");
-  const [duracionPaseoMin, setDuracionPaseoMin] = useState(configItinerarioGuardada.duracionPaseoMin || 45);
-  const [trayectoMin, setTrayectoMin] = useState(configItinerarioGuardada.trayectoMin ?? 15);
-
+  const [horaInicioPaseos, setHoraInicioPaseos] = useState(guardada.horaInicioPaseos || "09:00");
+  const [duracionPaseoMin, setDuracionPaseoMin] = useState(guardada.duracionPaseoMin || 45);
+  const [trayectoMin, setTrayectoMin] = useState(guardada.trayectoMin ?? 15);
   useEffect(() => {
     try { localStorage.setItem("howria_itinerario_calendario", JSON.stringify({ horaInicioPaseos, duracionPaseoMin, trayectoMin })); } catch {}
   }, [horaInicioPaseos, duracionPaseoMin, trayectoMin]);
+  return { horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin };
+}
 
-  function toggleTipoVisible(id) {
-    setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
+// Arma la función itemsDelDia(key) — evaluaciones/clases reales de
+// citas_agenda + paseos virtuales derivados de diasHabituales, filtrados
+// por tipo visible y acotados al propio adiestrador/paseador si aplica.
+// Compartida entre CalendarioAlumnos e Itinerario.
+function useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles }) {
+  const esEntrenador = rolActual === "entrenador";
 
   const porDiaCitas = useMemo(() => {
     const filtradas = citasAgenda.filter((c) =>
@@ -6603,12 +6609,55 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setCli
     clientes.filter((c) => c.tipoServicio?.includes("paseos") && (!esEntrenador || c.paseadorNombre === nombreActual)),
     [clientes, esEntrenador, nombreActual]);
 
-  function itemsDelDia(key) {
+  return function itemsDelDia(key) {
     const dow = (new Date(key + "T00:00:00").getDay() + 6) % 7;
     const paseosDia = tiposVisibles.paseo ? clientesPaseo.filter((c) => c.diasHabituales?.includes(dow)).map((c) => paseoComoItem(c, key, registroPaseos)) : [];
     const citasDia = porDiaCitas[key] || [];
     return [...paseosDia, ...citasDia].sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+  };
+}
+
+// Pastillas para mostrar/ocultar evaluaciones/clases/paseos — compartidas
+// entre CalendarioAlumnos e Itinerario.
+function PastillasTipoCalendario({ tiposVisibles, toggleTipoVisible }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      {TIPOS_CALENDARIO_VISTA.map((t) => {
+        const activo = tiposVisibles[t.id];
+        return (
+          <button key={t.id} onClick={() => toggleTipoVisible(t.id)}
+            style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+              border: activo ? `1.5px solid ${t.color}` : "1px solid #DCD2B4",
+              background: activo ? t.bg : "#FFFFFF", color: activo ? t.color : "#8A7E5C", fontWeight: activo ? 600 : 400 }}>
+            {t.nombre}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Calendario del mes con evaluaciones, clases y paseos — se usa tanto
+// como sub-vista de Alumnos (con "onVolver") como pestaña propia
+// "Calendario" en el menú (sin "onVolver", vista completa y celdas más
+// grandes para que se divise bien). Los 3 tipos se pueden mostrar u
+// ocultar por separado con las pastillas de arriba; con las 3 activas se
+// ven todos juntos en el mismo calendario.
+export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual, onVolver }) {
+  const hoy = new Date();
+  const [anio, setAnio] = useState(hoy.getFullYear());
+  const [mesIdx, setMesIdx] = useState(hoy.getMonth());
+  const [diaSel, setDiaSel] = useState(null);
+  const [citaSel, setCitaSel] = useState(null);
+  const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
+
+  const { horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin } = useConfigItinerario();
+
+  function toggleTipoVisible(id) {
+    setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
   }
+
+  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles });
 
   const primerDiaMes = new Date(anio, mesIdx, 1);
   const diasEnMes = new Date(anio, mesIdx + 1, 0).getDate();
@@ -6635,19 +6684,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setCli
           </div>
         </div>
         <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>Clientes por atender este mes — clic en un día para ver el itinerario completo, o directo en un nombre para ver ese detalle.</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {TIPOS_CALENDARIO_VISTA.map((t) => {
-            const activo = tiposVisibles[t.id];
-            return (
-              <button key={t.id} onClick={() => toggleTipoVisible(t.id)}
-                style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-                  border: activo ? `1.5px solid ${t.color}` : "1px solid #DCD2B4",
-                  background: activo ? t.bg : "#FFFFFF", color: activo ? t.color : "#8A7E5C", fontWeight: activo ? 600 : 400 }}>
-                {t.nombre}
-              </button>
-            );
-          })}
-        </div>
+        <PastillasTipoCalendario tiposVisibles={tiposVisibles} toggleTipoVisible={toggleTipoVisible} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, fontSize: 12, color: "#8A7E5C", textAlign: "center", marginBottom: 8 }}>
           {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <span key={d}>{d}</span>)}
         </div>
@@ -6700,6 +6737,57 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setCli
           onCerrar={() => setDiaSel(null)}
         />
       )}
+      {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} onEliminar={setCitas ? (dbId) => eliminarCita(setCitas, dbId) : undefined} />}
+    </div>
+  );
+}
+
+// Pestaña "Itinerario" — el mismo itinerario de un día que se abre al
+// clicar un día en Calendario, pero directo como contenido de la
+// pestaña (sin pasar por el mes ni por una ventana), con flechas/fecha
+// para moverse de día. Mismos datos y misma lógica que CalendarioAlumnos
+// (useConfigItinerario/useItemsPorDia/construirItinerarioDia
+// compartidos), así que un fix ahí también aplica acá.
+export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual }) {
+  const [diaSel, setDiaSel] = useState(() => fechaKey(new Date()));
+  const [citaSel, setCitaSel] = useState(null);
+  const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
+
+  const { horaInicioPaseos, setHoraInicioPaseos, duracionPaseoMin, setDuracionPaseoMin, trayectoMin, setTrayectoMin } = useConfigItinerario();
+
+  function toggleTipoVisible(id) {
+    setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles });
+  const grupos = construirItinerarioDia(itemsDelDia(diaSel), { horaInicioPaseos, duracionPaseoMin, trayectoMin });
+  const fechaLabel = new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
+  function cambiarDia(delta) {
+    const d = new Date(diaSel + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    setDiaSel(fechaKey(d));
+  }
+
+  return (
+    <div>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          <h2 style={{ ...sectionTitle, textTransform: "capitalize", fontSize: 20 }}>{fechaLabel}</h2>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={() => cambiarDia(-1)} style={botonSecundario}>← Día anterior</button>
+            <button onClick={() => setDiaSel(fechaKey(new Date()))} style={botonSecundario}>Hoy</button>
+            <input type="date" value={diaSel} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
+            <button onClick={() => cambiarDia(1)} style={botonSecundario}>Día siguiente →</button>
+          </div>
+        </div>
+        <PastillasTipoCalendario tiposVisibles={tiposVisibles} toggleTipoVisible={toggleTipoVisible} />
+        <ContenidoItinerarioDia grupos={grupos} diaKey={diaSel} citasAgenda={citasAgenda} setCitas={setCitas} setClientes={setClientes}
+          horaInicioPaseos={horaInicioPaseos} setHoraInicioPaseos={setHoraInicioPaseos}
+          duracionPaseoMin={duracionPaseoMin} setDuracionPaseoMin={setDuracionPaseoMin}
+          trayectoMin={trayectoMin} setTrayectoMin={setTrayectoMin}
+          onVerDetalle={(it) => setCitaSel(it)} />
+      </div>
       {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} onEliminar={setCitas ? (dbId) => eliminarCita(setCitas, dbId) : undefined} />}
     </div>
   );
