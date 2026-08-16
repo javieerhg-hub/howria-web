@@ -22,7 +22,7 @@ import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, NAVY_LOGO,
   PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, ESTADOS_CLIENTE,
-  NIVELES_ENERGIA, TAGS_TEMPERAMENTO, FASES_PASEADOR,
+  NIVELES_ENERGIA, TAGS_TEMPERAMENTO, FASES_PASEADOR, TEMARIO_ADIESTRAMIENTO,
   ESTADOS_FACTURA, ESTADOS_PROSPECTO, ORIGENES_PROSPECTO, ROLES_APP, TODOS_LOS_TABS,
   PASOS_CAPACITACION, LOGO_B64, HUELLA_B64,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
@@ -5261,6 +5261,426 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
     </div>
   );
 }
+// ---------- Alumnos (seguimiento de clases de adiestramiento) ----------
+const TEMAS_ADIESTRAMIENTO_FLAT = TEMARIO_ADIESTRAMIENTO.flatMap((g) => g.temas);
+function nombreTema(id) {
+  return TEMAS_ADIESTRAMIENTO_FLAT.find((t) => t.id === id)?.nombre || id;
+}
+
+// Selector de temas agrupado por categoría — mismo botón-pastilla que ya
+// usa TAGS_TEMPERAMENTO en mascotas, pero con encabezado de grupo. Se
+// reusa tanto en la ficha de ingreso (temasObjetivo) como al marcar una
+// clase (temas trabajados ese día).
+function SelectorTemas({ seleccionados, onToggle, compacto = false }) {
+  return (
+    <>
+      {TEMARIO_ADIESTRAMIENTO.map((grupo) => (
+        <div key={grupo.grupo} style={{ marginBottom: compacto ? 6 : 10 }}>
+          <p style={{ margin: "0 0 5px", fontSize: compacto ? 11.5 : 12.5, fontWeight: 600, color: INK }}>{grupo.grupo}</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: compacto ? 5 : 6 }}>
+            {grupo.temas.map((t) => {
+              const activo = seleccionados.includes(t.id);
+              return (
+                <button key={t.id} type="button" onClick={() => onToggle(t.id)} aria-pressed={activo}
+                  style={{ padding: compacto ? "4px 10px" : "6px 12px", borderRadius: 20, fontSize: compacto ? 11 : 12, cursor: "pointer",
+                    border: activo ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                    background: activo ? NAVY : "#FFFFFF", color: activo ? CREAM : INK }}>
+                  {t.nombre}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreActual, onGuardar, onCancelar }) {
+  const [form, setForm] = useState(() => inicial
+    ? { id: inicial.id, nombre: inicial.nombre || "", perro: inicial.perro || "", telefono: inicial.telefono || "", email: inicial.email || "",
+        comuna: inicial.comuna || "", edad: inicial.edad || "", adiestradorNombre: inicial.adiestradorNombre || (esEntrenador ? nombreActual : ""),
+        temasObjetivo: inicial.temasObjetivo || [] }
+    : { nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: esEntrenador ? nombreActual : "", temasObjetivo: [] });
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  const formInvalido = !form.nombre.trim() || !form.perro.trim();
+
+  function toggleTema(id) {
+    setForm((prev) => ({ ...prev, temasObjetivo: prev.temasObjetivo.includes(id) ? prev.temasObjetivo.filter((t) => t !== id) : [...prev.temasObjetivo, id] }));
+  }
+
+  function guardar() {
+    setIntentoGuardar(true);
+    if (formInvalido) return;
+    onGuardar(form);
+  }
+
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <h2 style={sectionTitle}>{inicial ? "Editar ficha" : "Ficha de ingreso"}</h2>
+      <p style={hint}>Datos del alumno y con qué objetivo llega — se usan para armar su caso de adiestramiento.</p>
+
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+        <div>
+          <label style={label} htmlFor="alumno-perro">Nombre del perro</label>
+          <input id="alumno-perro" value={form.perro} onChange={(e) => setForm({ ...form, perro: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+        <div>
+          <label style={label} htmlFor="alumno-tutor">Tutor</label>
+          <input id="alumno-tutor" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+      </div>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div>
+          <label style={label} htmlFor="alumno-telefono">Teléfono</label>
+          <input id="alumno-telefono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+        <div>
+          <label style={label} htmlFor="alumno-email">Correo</label>
+          <input id="alumno-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+      </div>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div>
+          <label style={label} htmlFor="alumno-comuna">Comuna</label>
+          <input id="alumno-comuna" value={form.comuna} onChange={(e) => setForm({ ...form, comuna: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+        <div>
+          <label style={label} htmlFor="alumno-edad">Edad del perro</label>
+          <input id="alumno-edad" placeholder="Ej. 3 meses, 2 años" value={form.edad} onChange={(e) => setForm({ ...form, edad: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        </div>
+      </div>
+
+      <p style={{ ...label, marginTop: 16 }}>Entrenador asignado</p>
+      <select value={form.adiestradorNombre} disabled={esEntrenador} onChange={(e) => setForm({ ...form, adiestradorNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
+        <option value="">Sin asignar</option>
+        {entrenadores.map((en) => <option key={en.id} value={en.nombre}>{en.nombre}</option>)}
+      </select>
+
+      <p style={label}>Servicio / objetivo de ingreso</p>
+      <SelectorTemas seleccionados={form.temasObjetivo} onToggle={toggleTema} />
+
+      {intentoGuardar && formInvalido && (
+        <p style={{ color: RUST, fontSize: 12.5, margin: "10px 0 0" }}>Falta el nombre del perro y/o del tutor — son obligatorios para guardar.</p>
+      )}
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0, opacity: intentoGuardar && formInvalido ? 0.6 : 1 }}>Guardar</button>
+        <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// Un pack de clases (una boleta_adiestramiento) con sus casilleros — mismo
+// patrón "botón N/Total que expande una lista" que ya usa
+// capacitacion_completada en Usuarios, pero acá el total es dinámico
+// (numClases del pack) y marcar una clase abre un formulario chico en vez
+// de ser un simple checkbox (necesita fecha + temas, no solo un booleano).
+function PackClases({ pack, clasesDelPack, marcarClase, deshacerClase, nombreActual }) {
+  const [abierto, setAbierto] = useState(false);
+  const [marcando, setMarcando] = useState(null);
+  const [fechaForm, setFechaForm] = useState("");
+  const [temasForm, setTemasForm] = useState([]);
+  const [notasForm, setNotasForm] = useState("");
+
+  const hechas = clasesDelPack.length;
+  const slots = Array.from({ length: pack.numClases || 0 }, (_, i) => i + 1);
+
+  function abrirMarcar(n, existente) {
+    setMarcando(n);
+    setFechaForm(existente?.fechaRealizada || new Date().toISOString().slice(0, 10));
+    setTemasForm(existente?.temas || []);
+    setNotasForm(existente?.notas || "");
+  }
+  function toggleTemaForm(id) {
+    setTemasForm((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+  }
+  async function confirmarMarcar() {
+    await marcarClase(pack._dbId, marcando, { fechaRealizada: fechaForm, temas: temasForm, notas: notasForm, creadoPor: nombreActual });
+    setMarcando(null);
+  }
+
+  if (!pack._dbId) {
+    return <div style={{ border: "1px solid #EDE4CE", borderRadius: 8, padding: 14, marginBottom: 10 }}><p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>Guardando pack…</p></div>;
+  }
+
+  return (
+    <div style={{ border: "1px solid #EDE4CE", borderRadius: 8, padding: 14, marginBottom: 10 }}>
+      <button onClick={() => setAbierto((v) => !v)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: NAVY }}>N°{String(pack.numero).padStart(3, "0")} · {pack.modalidad === "grupal" ? "Grupal" : "Individual"} · {pack.numClases} clases</span>
+        <span style={{ fontSize: 12.5, color: "#8A7E5C" }}>{hechas}/{pack.numClases} {abierto ? "▾" : "▸"}</span>
+      </button>
+      {abierto && (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          {slots.map((n) => {
+            const existente = clasesDelPack.find((cr) => cr.numeroClase === n);
+            return (
+              <div key={n} style={{ border: "1px solid #EDE4CE", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: existente ? "#2F6A46" : INK }}>Clase {n} {existente ? `— ${existente.fechaRealizada}` : "— pendiente"}</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => abrirMarcar(n, existente)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      {existente ? "Editar" : "Marcar realizada"}
+                    </button>
+                    {existente && (
+                      <BotonConfirmable onConfirm={() => deshacerClase(pack._dbId, n)} label="Deshacer" colorConfirmar={RUST}
+                        style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                    )}
+                  </div>
+                </div>
+                {existente && existente.temas?.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                    {existente.temas.map((id) => <span key={id} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: CREAM_SOFT, color: NAVY }}>{nombreTema(id)}</span>)}
+                  </div>
+                )}
+                {existente?.notas && <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8A7E5C" }}>{existente.notas}</p>}
+                {marcando === n && (
+                  <div style={{ marginTop: 10, background: CREAM_SOFT, borderRadius: 6, padding: 10 }}>
+                    <input type="date" value={fechaForm} onChange={(e) => setFechaForm(e.target.value)} style={{ ...input, marginBottom: 8, width: 160 }} />
+                    <SelectorTemas seleccionados={temasForm} onToggle={toggleTemaForm} compacto />
+                    <input placeholder="Notas (opcional)" value={notasForm} onChange={(e) => setNotasForm(e.target.value)} style={{ ...input, marginBottom: 8, marginTop: 6 }} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={confirmarMarcar} style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0 }}>Guardar</button>
+                      <button onClick={() => setMarcando(null)} style={botonSecundario}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CasoAlumno({ cliente, packs, clasesRealizadas, marcarClase, deshacerClase, nombreActual, onEditar, onVolver }) {
+  return (
+    <div>
+      <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18 }}>← Volver a Alumnos</button>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ ...sectionTitle, fontSize: 22 }}>{cliente.perro}</h2>
+            <p style={{ margin: "2px 0 0", color: "#8A7E5C" }}>Tutor: {cliente.nombre} {cliente.telefono ? `· ${cliente.telefono}` : ""}</p>
+          </div>
+          <button onClick={onEditar} style={botonSecundario}>Editar ficha</button>
+        </div>
+
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 20 }}>
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+            <p style={{ ...label, marginBottom: 6 }}>Comuna</p>
+            <p style={{ margin: 0, color: NAVY, fontWeight: 600 }}>{cliente.comuna || "Sin dato"}</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+            <p style={{ ...label, marginBottom: 6 }}>Edad</p>
+            <p style={{ margin: 0, color: NAVY, fontWeight: 600 }}>{cliente.edad || "Sin dato"}</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+            <p style={{ ...label, marginBottom: 6 }}>Entrenador</p>
+            <p style={{ margin: 0, color: NAVY, fontWeight: 600 }}>{cliente.adiestradorNombre || "Sin asignar"}</p>
+          </div>
+        </div>
+
+        {(cliente.temasObjetivo || []).length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <p style={label}>Objetivo de ingreso</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+              {cliente.temasObjetivo.map((id) => <span key={id} style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: CREAM_SOFT, color: NAVY }}>{nombreTema(id)}</span>)}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 26 }}>
+          <p style={label}>Packs de clases</p>
+          {packs.length === 0 ? (
+            <p style={{ ...hint, marginTop: 8 }}>Todavía no tiene ningún pack de clases generado.</p>
+          ) : (
+            packs.map((pack) => (
+              <PackClases key={pack._dbId || pack.id} pack={pack} clasesDelPack={clasesRealizadas.filter((cr) => cr.boletaAdiestramientoId === pack._dbId)}
+                marcarClase={marcarClase} deshacerClase={deshacerClase} nombreActual={nombreActual} />
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolver }) {
+  const hoy = new Date();
+  const [anio, setAnio] = useState(hoy.getFullYear());
+  const [mesIdx, setMesIdx] = useState(hoy.getMonth());
+  const [diaSel, setDiaSel] = useState(null);
+  const [citaSel, setCitaSel] = useState(null);
+  const esEntrenador = rolActual === "entrenador";
+
+  const citasFiltradas = useMemo(() =>
+    citasAgenda.filter((c) => (c.tipo === "clase" || c.tipo === "evaluacion") && (!esEntrenador || c.adiestrador === nombreActual)),
+    [citasAgenda, esEntrenador, nombreActual]);
+
+  const porDia = useMemo(() => {
+    const mapa = {};
+    citasFiltradas.forEach((c) => {
+      const key = fechaKey(new Date(c.fechaISO));
+      (mapa[key] = mapa[key] || []).push(c);
+    });
+    return mapa;
+  }, [citasFiltradas]);
+
+  const primerDiaMes = new Date(anio, mesIdx, 1);
+  const diasEnMes = new Date(anio, mesIdx + 1, 0).getDate();
+  const offset = (primerDiaMes.getDay() + 6) % 7; // 0 = lunes
+  const celdas = [...Array(offset).fill(null), ...Array.from({ length: diasEnMes }, (_, i) => i + 1)];
+  const nombreMes = primerDiaMes.toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+  const citasDelDiaSel = diaSel ? (porDia[diaSel] || []) : [];
+
+  function cambiarMes(delta) {
+    let m = mesIdx + delta, a = anio;
+    if (m < 0) { m = 11; a--; } else if (m > 11) { m = 0; a++; }
+    setMesIdx(m); setAnio(a); setDiaSel(null);
+  }
+
+  return (
+    <div>
+      <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18 }}>← Volver a Alumnos</button>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{nombreMes}</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => cambiarMes(-1)} style={botonSecundario}>←</button>
+            <button onClick={() => cambiarMes(1)} style={botonSecundario}>→</button>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 11, color: "#8A7E5C", textAlign: "center", marginBottom: 6 }}>
+          {["L", "M", "X", "J", "V", "S", "D"].map((d) => <span key={d}>{d}</span>)}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {celdas.map((dia, i) => {
+            if (!dia) return <div key={`vacio-${i}`} />;
+            const key = fechaKey(new Date(anio, mesIdx, dia));
+            const citasDia = porDia[key] || [];
+            return (
+              <button key={key} onClick={() => setDiaSel(diaSel === key ? null : key)}
+                style={{ aspectRatio: "1", borderRadius: 6, border: diaSel === key ? `1.5px solid ${NAVY}` : "1px solid #EDE4CE",
+                  background: citasDia.length > 0 ? "#F3E3B4" : "#FFFFFF", cursor: "pointer", padding: 4,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 12, color: INK }}>{dia}</span>
+                {citasDia.length > 0 && <span style={{ fontSize: 10, color: "#8A6A1E", fontWeight: 600 }}>{citasDia.length}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {diaSel && (
+          <div style={{ marginTop: 18 }}>
+            <p style={label}>{new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</p>
+            {citasDelDiaSel.length === 0 ? (
+              <p style={{ ...hint, marginTop: 6 }}>Sin sesiones este día.</p>
+            ) : (
+              citasDelDiaSel.map((c) => (
+                <button key={c._dbId} onClick={() => setCitaSel(c)} style={{ display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 6, border: "1px solid #EDE4CE", background: "#FFFFFF", marginBottom: 6, cursor: "pointer" }}>
+                  <span style={{ fontSize: 13 }}>{c.clienteNombre} · {c.perro} · {TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre || c.tipo}</span>
+                  <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{new Date(c.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} />}
+    </div>
+  );
+}
+
+export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual }) {
+  const [vista, setVista] = useState("lista"); // "lista" | "ingreso" | "caso" | "calendario"
+  const [clienteSelId, setClienteSelId] = useState(null);
+  const esEntrenador = rolActual === "entrenador";
+  const entrenadores = usuarios.filter((u) => u.rol === "entrenador");
+
+  const misAlumnos = useMemo(() => {
+    return clientes.filter((c) => c.tipoServicio?.includes("clases"))
+      .filter((c) => !esEntrenador || c.adiestradorNombre === nombreActual)
+      .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
+  }, [clientes, esEntrenador, nombreActual]);
+
+  const clienteSel = clientes.find((c) => c.id === clienteSelId) || null;
+
+  function guardarAlumno(datos) {
+    const id = datos.id || Date.now();
+    if (datos.id) {
+      setClientes((prev) => prev.map((c) => (c.id === datos.id ? { ...c, ...datos } : c)));
+    } else {
+      const nuevo = {
+        nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: "", temasObjetivo: [],
+        diasHabituales: [], tipoServicio: ["clases"], estadoCliente: "activo",
+        ...datos, id,
+      };
+      setClientes((prev) => [...prev, nuevo]);
+    }
+    setClienteSelId(id);
+    setVista("caso");
+  }
+
+  if (vista === "ingreso") {
+    return <FormularioIngresoAlumno inicial={clienteSel} entrenadores={entrenadores} esEntrenador={esEntrenador} nombreActual={nombreActual}
+      onGuardar={guardarAlumno} onCancelar={() => setVista(clienteSel ? "caso" : "lista")} />;
+  }
+  if (vista === "caso" && clienteSel) {
+    return <CasoAlumno cliente={clienteSel} packs={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clienteSel)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO))}
+      clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} nombreActual={nombreActual}
+      onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
+  }
+  if (vista === "calendario") {
+    return <CalendarioAlumnos citasAgenda={citasAgenda} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
+  }
+
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={sectionTitle}>Alumnos</h2>
+          <p style={hint}>Seguimiento de clases de adiestramiento — quiénes son tus alumnos actuales y qué se ha trabajado con cada uno.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flex: "none" }}>
+          <button onClick={() => setVista("calendario")} style={botonSecundario}>Calendario</button>
+          <button onClick={() => { setClienteSelId(null); setVista("ingreso"); }} style={botonPrincipal}>+ Nuevo alumno</button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        {cargandoClasesRealizadas ? (
+          <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+        ) : misAlumnos.length === 0 ? (
+          <p style={hint}>No hay alumnos todavía — usa "+ Nuevo alumno" para cargar el primero.</p>
+        ) : (
+          misAlumnos.map((c) => {
+            const packs = boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, c)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+            const packActivo = packs[0];
+            const clasesPackActivo = packActivo ? clasesRealizadas.filter((cr) => cr.boletaAdiestramientoId === packActivo._dbId) : [];
+            const clasesDelCliente = clasesRealizadas.filter((cr) => packs.some((p) => p._dbId === cr.boletaAdiestramientoId));
+            const ultimaClase = [...clasesDelCliente].sort((a, b) => new Date(b.fechaRealizada) - new Date(a.fechaRealizada))[0];
+            return (
+              <button key={c.id} onClick={() => { setClienteSelId(c.id); setVista("caso"); }}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", textAlign: "left", padding: "12px 14px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFFFF", marginBottom: 8, cursor: "pointer" }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: NAVY }}>{c.perro} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· {c.nombre}</span></p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>{c.comuna || "Sin comuna"}</p>
+                </div>
+                <div style={{ display: "flex", gap: 18, alignItems: "center", fontSize: 12.5 }}>
+                  <span>{packActivo ? `${clasesPackActivo.length}/${packActivo.numClases} clases` : "Sin pack activo"}</span>
+                  <span style={{ color: "#8A7E5C" }}>{ultimaClase?.temas?.[0] ? nombreTema(ultimaClase.temas[0]) : "Sin clases aún"}</span>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", direccion: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 

@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
+  GraduationCap,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
@@ -22,6 +23,7 @@ const Coordinacion = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) 
 const MapaRutas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.MapaRutas })));
 const EquipoTrabajo = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EquipoTrabajo })));
 const Agenda = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Agenda })));
+const Alumnos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Alumnos })));
 const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Mail })));
 const Prospectos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Prospectos })));
 const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PanelAdmin })));
@@ -119,6 +121,9 @@ function clienteToDb(c) {
     tarifa_paseador: c.tarifaPaseador,
     adiestrador_nombre: c.adiestradorNombre || null,
     responsable_nombre: c.responsableNombre || null,
+    comuna: c.comuna || null,
+    edad: c.edad || null,
+    temas_objetivo: c.temasObjetivo || [],
     direccion: c.direccion,
     lat: c.lat,
     lng: c.lng,
@@ -146,6 +151,9 @@ function dbToCliente(row) {
     tarifaPaseador: row.tarifa_paseador,
     adiestradorNombre: row.adiestrador_nombre,
     responsableNombre: row.responsable_nombre,
+    comuna: row.comuna,
+    edad: row.edad,
+    temasObjetivo: row.temas_objetivo || [],
     direccion: row.direccion,
     lat: row.lat,
     lng: row.lng,
@@ -459,6 +467,28 @@ function dbToBloqueDisponibilidad(row) {
     // Postgres devuelve "time" como "HH:MM:SS" — se recorta a "HH:MM" para
     // que calce con BLOQUES_DIA y no rompa las comparaciones exactas.
     horaInicio: (row.hora_inicio || "").slice(0, 5),
+    _dbId: row.id,
+  };
+}
+
+function claseRealizadaToDb(c) {
+  return {
+    boleta_adiestramiento_id: c.boletaAdiestramientoId,
+    numero_clase: c.numeroClase,
+    fecha_realizada: c.fechaRealizada,
+    temas: c.temas || [],
+    notas: c.notas || null,
+    creado_por: c.creadoPor || null,
+  };
+}
+function dbToClaseRealizada(row) {
+  return {
+    boletaAdiestramientoId: row.boleta_adiestramiento_id,
+    numeroClase: row.numero_clase,
+    fechaRealizada: row.fecha_realizada,
+    temas: row.temas || [],
+    notas: row.notas,
+    creadoPor: row.creado_por,
     _dbId: row.id,
   };
 }
@@ -925,6 +955,37 @@ export const PASOS_CAPACITACION = [
   { id: "paseo_supervisado", texto: "Paseo supervisado de prueba" },
 ];
 
+// Temario de adiestramiento, agrupado — sirve para dos cosas distintas:
+// los "objetivos" que se eligen en la ficha de ingreso de un alumno
+// (clientes.temasObjetivo) y los temas que se anotan clase a clase, una
+// vez que la clase ya pasó (clases_realizadas.temas). Contenido
+// provisional a confirmar con Javier/el entrenador — es una primera
+// lectura de sus apuntes, no texto definitivo.
+export const TEMARIO_ADIESTRAMIENTO = [
+  {
+    grupo: "Formación de cachorros",
+    temas: [{ id: "cachorros", nombre: "Formación de cachorros" }],
+  },
+  {
+    grupo: "Obediencia",
+    temas: [
+      { id: "obediencia_basica", nombre: "Obediencia básica" },
+      { id: "obediencia_media", nombre: "Obediencia media" },
+      { id: "obediencia_avanzada", nombre: "Obediencia avanzada" },
+    ],
+  },
+  {
+    grupo: "Modificación de conducta",
+    temas: [
+      { id: "reactividad", nombre: "Reactividad" },
+      { id: "ansiedad_separacion", nombre: "Ansiedad por separación" },
+      { id: "tirones_correa", nombre: "Tirones de correa" },
+      { id: "fobias_miedos", nombre: "Fobias / miedos" },
+      { id: "evacuaciones_inadecuadas", nombre: "Evacuaciones inadecuadas" },
+    ],
+  },
+];
+
 export const ESTADOS_PROSPECTO = [
   { id: "nuevo", nombre: "Nuevo contacto", color: "#8A7E5C", bg: "#EDE4CE" },
   { id: "conversando", nombre: "En conversación", color: "#1F5C8A", bg: "#D6E6F0" },
@@ -946,6 +1007,7 @@ export const TODOS_LOS_TABS = [
   { id: "coordinacion", label: "Coordinación", grupo: "Trabajo diario" },
   { id: "mapa", label: "Mapa", grupo: "Trabajo diario" },
   { id: "agenda", label: "Agenda", grupo: "Trabajo diario" },
+  { id: "alumnos", label: "Alumnos", grupo: "Trabajo diario" },
   { id: "mail", label: "Mail", grupo: "Trabajo diario" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y boletas" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y boletas" },
@@ -967,6 +1029,7 @@ const ICONOS_TAB = {
   coordinacion: MapPinned,
   mapa: MapIcon,
   agenda: Calendar,
+  alumnos: GraduationCap,
   mail: MailIcon,
   clientes: Dog,
   boletas: Receipt,
@@ -1199,6 +1262,57 @@ function useDisponibilidadFecha(sessionVersion) {
   }
 
   return [filas, toggleBloque, cargando, aplicarPatronSemanal];
+}
+
+// Seguimiento de clases realizadas dentro de un pack de adiestramiento
+// (clases_realizadas, 062) — mismo espíritu que useDisponibilidadFecha:
+// se carga una vez y se muta por (boletaId, numeroClase) puntual, sin
+// necesidad de diffear un array completo (useSyncedTable). Marcar una
+// clase es un upsert (permite corregir fecha/temas de una clase ya
+// marcada); deshacerla es un delete.
+function useClasesRealizadas(sessionVersion) {
+  const [clases, setClases] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("clases_realizadas").select("*").then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar el seguimiento de clases: ${error.message}`);
+      else if (data) setClases(data.map(dbToClaseRealizada));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  async function marcarClase(boletaAdiestramientoId, numeroClase, { fechaRealizada, temas, notas, creadoPor }) {
+    const item = { boletaAdiestramientoId, numeroClase, fechaRealizada, temas: temas || [], notas: notas || null, creadoPor };
+    const { data, error } = await supabase.from("clases_realizadas")
+      .upsert(claseRealizadaToDb(item), { onConflict: "boleta_adiestramiento_id,numero_clase" })
+      .select().single();
+    if (error) {
+      showToast(`No se pudo guardar la clase: ${error.message}`);
+      return;
+    }
+    if (data) {
+      const guardada = dbToClaseRealizada(data);
+      setClases((prev) => [...prev.filter((c) => !(c.boletaAdiestramientoId === boletaAdiestramientoId && c.numeroClase === numeroClase)), guardada]);
+    }
+  }
+
+  async function deshacerClase(boletaAdiestramientoId, numeroClase) {
+    const existente = clases.find((c) => c.boletaAdiestramientoId === boletaAdiestramientoId && c.numeroClase === numeroClase);
+    if (!existente) return;
+    setClases((prev) => prev.filter((c) => c !== existente));
+    const { error } = await supabase.from("clases_realizadas").delete().eq("id", existente._dbId);
+    if (error) {
+      showToast(`No se pudo deshacer: ${error.message}`);
+      setClases((prev) => [...prev, existente]);
+    }
+  }
+
+  return [clases, marcarClase, cargando, deshacerClase];
 }
 
 // Precio de evaluación/clase por adiestrador (tarifas_adiestrador): una
@@ -3249,6 +3363,7 @@ export default function HowriaAdmin() {
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
   const [disponibilidadFecha, toggleBloqueDisponibilidad, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
+  const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
@@ -3452,6 +3567,7 @@ export default function HowriaAdmin() {
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}

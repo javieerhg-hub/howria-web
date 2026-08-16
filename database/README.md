@@ -87,6 +87,10 @@ no un runner de migraciones.
 | 059 | `disponibilidad_fecha_bloques.sql` | 2026-08-15 | Rehace `disponibilidad_fecha`: ahora una fila = un bloque de 1 hora habilitado (adiestrador, fecha, hora_inicio), en vez de un solo rango hora_inicio/hora_fin por día — el adiestrador habilita bloques específicos dentro del día, no todo el día de corrido. |
 | 060 | `clientes_responsable.sql` | 2026-08-15 | Agrega `responsable_nombre` a `clientes` (mismo patrón que `paseador_nombre`/`adiestrador_nombre`) — permite Finanzas personal por responsable de cuenta, cada cliente queda a cargo de una persona fija y sus boletas heredan ese responsable. |
 | 061 | `clientes_responsable_desde_paseador.sql` | 2026-08-16 | Migración de datos (no de esquema): copia `paseador_nombre` a `responsable_nombre` para los clientes donde ese campo ya tenía puesto "Javier Herrera" o "Javier Arniaz" — los únicos dos responsables de cuenta del negocio. El resto de los clientes queda sin responsable, a asignar a mano. |
+| 062 | `clases_realizadas.sql` | 2026-08-16 | Crea `clases_realizadas` (una fila = una clase realizada dentro de un pack de `boletas_adiestramiento`, con fecha y temas trabajados) — mismo patrón "la fila existe = pasó" que `disponibilidad_fecha`. Pestaña nueva "Alumnos". |
+| 063 | `clientes_comuna_edad_temas_objetivo.sql` | 2026-08-16 | Agrega `comuna`, `edad` (texto), `temas_objetivo` a `clientes` — ficha de ingreso de adiestramiento. |
+| 064 | `clientes_insert_update_entrenador.sql` | 2026-08-16 | Amplía las políticas de insert/update de `clientes` para incluir al rol entrenador (antes solo coordinador/administrador) — necesario para que el entrenador pueda cargar la ficha de ingreso de un alumno nuevo. |
+| 065 | `permisos_roles_tab_alumnos.sql` | 2026-08-16 | Registra la pestaña nueva `alumnos` en `permisos_roles` para entrenador/coordinador/administrador. |
 
 ## Nota sobre el orden 001–023
 
