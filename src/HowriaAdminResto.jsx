@@ -6165,11 +6165,6 @@ const TIPOS_CALENDARIO_VISTA = [
   { id: "paseo", nombre: "Paseos", bg: "#D6E6EE", color: "#1E5A7A" },
 ];
 
-function nombreTipoCalendario(tipo) {
-  if (tipo === "paseo") return "Paseo";
-  return TIPOS_CITA.find((t) => t.id === tipo)?.nombre || tipo;
-}
-
 // Convierte un cliente con paseo agendado un día dado en un ítem con la
 // misma forma que una cita real, para poder mostrarlo y abrirlo en el
 // mismo ModalDetalleCita — sin _dbId (no vive en citas_agenda), así que
@@ -6265,7 +6260,7 @@ function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInici
   return (
     <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 280, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-itinerario-titulo"
-        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 640, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
           <h3 id="modal-itinerario-titulo" style={{ margin: 0, textTransform: "capitalize", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{fechaLabel}</h3>
           <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
@@ -6290,34 +6285,62 @@ function ModalItinerarioDia({ fechaLabel, grupos, horaInicioPaseos, setHoraInici
         {grupos.length === 0 ? (
           <p style={hint}>Sin actividades este día.</p>
         ) : (
-          <div style={{ display: "grid", gap: 22 }}>
-            {grupos.map((g) => (
-              <div key={g.persona}>
-                <p style={{ ...label, marginBottom: 8 }}>{g.persona}</p>
-                <div style={{ display: "grid", gap: 0 }}>
-                  {g.items.map((it, i) => {
-                    const siguiente = g.items[i + 1];
-                    const trayecto = siguiente ? siguiente._inicioMin - it._finMin : null;
-                    return (
-                      <div key={it.id}>
-                        <button onClick={() => onVerDetalle(it)}
-                          style={{ display: "flex", width: "100%", textAlign: "left", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFDF7", cursor: "pointer" }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: NAVY, flex: "none" }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</span>
-                          <span style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}{it.tipo !== "paseo" && ` · ${nombreTipoCalendario(it.tipo)}`}</span>
-                          {it._estimado && <span style={{ fontSize: 10, color: "#8A7E5C", fontStyle: "italic", flex: "none" }}>estimado</span>}
-                        </button>
-                        {trayecto != null && trayecto > 0 && (
-                          <p style={{ margin: "4px 0 4px 12px", fontSize: 11, color: "#8A7E5C" }}>↓ trayecto ~{trayecto} min</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <GrillaHorariaDia grupos={grupos} onVerDetalle={onVerDetalle} />
         )}
       </div>
+    </div>
+  );
+}
+
+// Grilla de horario tipo calendario de día — una columna por persona,
+// filas de una hora, cada actividad se dibuja como un bloque posicionado
+// y alto según su hora de inicio y duración (mismo lenguaje visual que
+// un Google Calendar de un día, para que se entienda de un vistazo).
+function GrillaHorariaDia({ grupos, onVerDetalle }) {
+  const PX_POR_HORA = 56;
+  const todosItems = grupos.flatMap((g) => g.items);
+  const minInicio = todosItems.length ? Math.min(...todosItems.map((it) => it._inicioMin)) : 9 * 60;
+  const maxFin = todosItems.length ? Math.max(...todosItems.map((it) => it._finMin)) : 18 * 60;
+  const horaGridInicio = Math.min(8, Math.floor(minInicio / 60));
+  const horaGridFin = Math.max(20, Math.ceil(maxFin / 60));
+  const horas = [];
+  for (let h = horaGridInicio; h < horaGridFin; h++) horas.push(h);
+  const altoGrid = horas.length * PX_POR_HORA;
+
+  return (
+    <div style={{ display: "flex", overflowX: "auto" }}>
+      <div style={{ flex: "none", width: 42 }}>
+        <div style={{ height: 26 }} />
+        {horas.map((h) => (
+          <div key={h} style={{ height: PX_POR_HORA, borderTop: "1px solid #EDE4CE", fontSize: 10.5, color: "#8A7E5C", paddingTop: 2 }}>
+            {String(h).padStart(2, "0")}:00
+          </div>
+        ))}
+      </div>
+      {grupos.map((g) => (
+        <div key={g.persona} style={{ flex: "1 0 150px", minWidth: 150, borderLeft: "1px solid #EDE4CE" }}>
+          <div style={{ height: 26, fontSize: 11.5, fontWeight: 700, color: NAVY, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px" }}>
+            {g.persona}
+          </div>
+          <div style={{ position: "relative", height: altoGrid, background: `repeating-linear-gradient(to bottom, transparent, transparent ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA - 1}px, #EDE4CE ${PX_POR_HORA}px)` }}>
+            {g.items.map((it) => {
+              const top = (it._inicioMin / 60 - horaGridInicio) * PX_POR_HORA;
+              const alto = Math.max(((it._finMin - it._inicioMin) / 60) * PX_POR_HORA, 22);
+              const tono = TIPOS_CALENDARIO_VISTA.find((t) => t.id === it.tipo);
+              return (
+                <button key={it.id} onClick={() => onVerDetalle(it)}
+                  style={{ position: "absolute", top, height: alto, left: 3, right: 3, border: "none", borderRadius: 6,
+                    background: tono?.bg || "#EDE4CE", color: tono?.color || INK, cursor: "pointer", textAlign: "left",
+                    padding: "3px 6px", overflow: "hidden", fontSize: 10.5, lineHeight: 1.3, boxShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>
+                  <div style={{ fontWeight: 700 }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</div>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro} · {it.clienteNombre}</div>
+                  {it._estimado && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -6428,21 +6451,20 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], regist
             const itemsDia = itemsDelDia(key);
             const esHoy = key === fechaKey(hoy);
             return (
-              <div key={key} className="howria-cal-celda"
+              <div key={key} className="howria-cal-celda" role="button" tabIndex={0}
+                onClick={() => setDiaSel(key)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDiaSel(key); } }}
                 style={{ borderRadius: 8, border: diaSel === key ? `1.5px solid ${NAVY}` : esHoy ? `1.5px solid ${GOLD}` : "1px solid #EDE4CE",
-                  background: itemsDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                  background: itemsDia.length > 0 ? "#FBF6E9" : "#FFFFFF", padding: 6, display: "flex", flexDirection: "column", gap: 3, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <button onClick={() => setDiaSel(key)}
-                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, textAlign: "left", fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>
-                    {dia}
-                  </button>
+                  <span style={{ fontSize: 12, fontWeight: esHoy ? 700 : 400, color: esHoy ? GOLD : INK }}>{dia}</span>
                   {itemsDia.length > 0 && <span className="howria-cal-punto" style={{ width: 7, height: 7, borderRadius: "50%", background: GOLD, flex: "none" }} />}
                 </div>
                 <div className="howria-cal-nombres" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   {itemsDia.slice(0, 2).map((c) => {
                     const tono = TIPOS_CALENDARIO_VISTA.find((t) => t.id === c.tipo);
                     return (
-                      <button key={c.id} onClick={() => setCitaSel(c)}
+                      <button key={c.id} onClick={(e) => { e.stopPropagation(); setCitaSel(c); }}
                         style={{ border: "none", background: tono?.bg || "#EDE4CE", color: tono?.color || INK,
                           borderRadius: 4, padding: "2px 5px", fontSize: 10.5, fontWeight: 600, cursor: "pointer", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {c.perro}
