@@ -3467,11 +3467,11 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
   }
 
   return (
-    <div className="howria-bottom-nav" style={{ display: "none", position: "fixed", left: 12, right: 12, bottom: 12, zIndex: 70, justifyContent: "center" }}>
+    <div className="howria-bottom-nav" style={{ display: "none", position: "fixed", left: 12, right: 12, bottom: "calc(12px + env(safe-area-inset-bottom))", zIndex: 70, justifyContent: "center" }}>
       {masAbierto && (
         <>
           <div onClick={() => setMasAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
-          <div style={{ position: "absolute", bottom: 66, left: 0, right: 0, maxHeight: "60vh", overflowY: "auto", background: "#FFFFFF", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
+          <div style={{ position: "absolute", bottom: 66, left: 0, right: 0, maxHeight: "60vh", overflowY: "auto", background: "rgba(255,255,255,0.78)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(20,33,61,0.06)", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
             {ORDEN_GRUPOS.map((grupo) => {
               const tabsDelGrupo = resto.filter((t) => t.grupo === grupo);
               if (tabsDelGrupo.length === 0) return null;
@@ -3495,7 +3495,7 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
           </div>
         </>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#FFFFFF", borderRadius: 999, boxShadow: "0 8px 24px rgba(20,33,61,0.18)", padding: 6, position: "relative", zIndex: 70, maxWidth: 380, width: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.72)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(20,33,61,0.06)", borderRadius: 999, boxShadow: "0 8px 24px rgba(20,33,61,0.18)", padding: 6, position: "relative", zIndex: 70, maxWidth: 380, width: "100%" }}>
         {tieneInicio && <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />}
         {destacadas.map((t) => {
           const Icono = ICONOS_TAB[t.id] || Home;
@@ -3700,6 +3700,7 @@ export default function HowriaAdmin() {
   return (
     <div style={{ minHeight: "100vh", background: PANEL_BG, fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}>
       <style>{`
+        * { -webkit-tap-highlight-color: transparent; -webkit-overflow-scrolling: touch; }
         .howria-card { transition: box-shadow .18s ease, transform .18s ease; }
         .howria-card:hover { box-shadow: 0 6px 18px rgba(20,33,61,0.09); }
         button { font-family: 'Inter', sans-serif; }
