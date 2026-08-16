@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
-  Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Mail as MailIcon, Dog, Receipt,
+  Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
   GraduationCap, KeyRound,
 } from "lucide-react";
@@ -1036,6 +1036,7 @@ export const TODOS_LOS_TABS = [
   { id: "mapa", label: "Mapa", grupo: "Trabajo diario" },
   { id: "agenda", label: "Agenda", grupo: "Trabajo diario" },
   { id: "calendario", label: "Calendario", grupo: "Trabajo diario" },
+  { id: "itinerario", label: "Itinerario", grupo: "Trabajo diario" },
   { id: "alumnos", label: "Alumnos", grupo: "Trabajo diario" },
   { id: "mail", label: "Mail", grupo: "Trabajo diario" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y boletas" },
@@ -1059,6 +1060,7 @@ const ICONOS_TAB = {
   mapa: MapIcon,
   agenda: Calendar,
   calendario: CalendarDays,
+  itinerario: Route,
   alumnos: GraduationCap,
   mail: MailIcon,
   clientes: Dog,
@@ -3872,6 +3874,7 @@ export default function HowriaAdmin() {
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}

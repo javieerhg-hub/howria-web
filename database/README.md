@@ -100,6 +100,7 @@ no un runner de migraciones.
 | 072 | `clientes_bitacora.sql` | 2026-08-16 | Agrega `bitacora` a `clientes` (mismo patrón que `prospectos.bitacora`) — permite dejar notas libres en la ficha de un cliente, como parte del historial unificado por contacto. |
 | 073 | `howria_admin_acceso_total.sql` | 2026-08-16 | Fuerza el rol `administrador` en la cuenta "Howria" y le asegura todas las pestañas en `permisos_roles` — pasa a ser la cuenta general de la empresa, con acceso a todo. |
 | 074 | `permisos_roles_tab_calendario.sql` | 2026-08-16 | Registra la pestaña nueva "Calendario" (calendario del mes de citas del adiestrador, antes solo vivía dentro de Alumnos) en `permisos_roles` para entrenador/coordinador/administrador. |
+| 075 | `permisos_roles_tab_itinerario.sql` | 2026-08-16 | Registra la pestaña nueva "Itinerario" (copia de "Calendario", mismo componente/diseño/funcionamiento) en `permisos_roles` para entrenador/coordinador/administrador. |
 
 ## Nota sobre el orden 001–023
 
