@@ -1396,36 +1396,37 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           />
         )}
 
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 26 }}>
-          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
-            <p style={{ ...label, marginBottom: 8 }}>Plan habitual</p>
-            <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{plan?.nombre || "No definido"}</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
-            <p style={{ ...label, marginBottom: 8 }}>Valor de paseo referencial</p>
-            <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{fmtCLP(cliente.valorPaseoRef)}</p>
-          </div>
-          <div style={{ background: NAVY, borderRadius: 8, padding: 16 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Total facturado histórico</p>
-            <p style={{ margin: 0, color: CREAM, fontWeight: 700, fontSize: 15 }}>{fmtCLP(totalHistorico)}</p>
+        <div style={{ marginTop: 28, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <h3 style={sectionTitle}>Datos clave</h3>
+          <div className="howria-g5" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Plan habitual</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{plan?.nombre || "No definido"}</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Valor de paseo referencial</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{fmtCLP(cliente.valorPaseoRef)}</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Paseador asignado</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>
+                {cliente.paseadorNombre || "Sin asignar"}{cliente.tarifaPaseador ? ` · ${fmtCLP(cliente.tarifaPaseador)}/paseo` : ""}
+              </p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Responsable de la cuenta</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{cliente.responsableNombre || "Sin asignar"}</p>
+            </div>
+            <div style={{ background: NAVY, borderRadius: 8, padding: 14 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 }}>Total facturado histórico</p>
+              <p style={{ margin: 0, color: CREAM, fontWeight: 700, fontSize: 15 }}>{fmtCLP(totalHistorico)}</p>
+            </div>
           </div>
         </div>
 
-        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
-          <p style={{ ...label, marginBottom: 8 }}>Paseador asignado</p>
-          <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>
-            {cliente.paseadorNombre || "Sin asignar"} {cliente.tarifaPaseador ? `· se le paga ${fmtCLP(cliente.tarifaPaseador)} por paseo` : ""}
-          </p>
-        </div>
-
-        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14 }}>
-          <p style={{ ...label, marginBottom: 8 }}>Responsable de la cuenta</p>
-          <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{cliente.responsableNombre || "Sin asignar"}</p>
-        </div>
-
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <p style={{ ...label, margin: 0 }}>Mascotas {mascotasDelCliente.length > 1 ? `(${mascotasDelCliente.length})` : ""}</p>
+        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+            <h3 style={{ ...sectionTitle, marginBottom: 0 }}>Mascotas {mascotasDelCliente.length > 1 ? `(${mascotasDelCliente.length})` : ""}</h3>
             <button onClick={() => { setEditandoMascotaId(null); setMostrarFormMascota((v) => !v); }} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
               {mostrarFormMascota && !editandoMascotaId ? "Cancelar" : "+ Agregar mascota"}
             </button>
@@ -1451,35 +1452,39 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           )}
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
-          <div style={{ display: "flex", gap: 6 }}>
-            {DIAS_SEMANA.map((d, dow) => (
-              <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
-                background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
-                {d}
-              </span>
-            ))}
+        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <h3 style={sectionTitle}>Plan de trabajo</h3>
+          <div style={{ display: "grid", gap: 18 }}>
+            <div>
+              <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                {DIAS_SEMANA.map((d, dow) => (
+                  <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+                    background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p style={label}>Objetivos a cumplir</p>
+              <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
+            </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <p style={label}>Objetivos a cumplir</p>
-          <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
-        </div>
-
-        <div style={{ marginTop: 26 }}>
-          <p style={label}>Historial</p>
-          <p style={{ ...hint, marginTop: 2, marginBottom: 10 }}>Notas, correos y citas de este cliente, todo junto y por fecha.</p>
+        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <h3 style={sectionTitle}>Historial</h3>
+          <p style={{ ...hint, marginTop: -2 }}>Notas, correos y citas de este cliente, todo junto y por fecha — las boletas están más abajo, en Historial de ventas.</p>
           <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
             <HistorialUnificado notas={cliente.bitacora || []} onAgregarNota={agregarNotaCliente}
-              correos={correosCliente} citas={citasCliente} boletas={historialVentas}
+              correos={correosCliente} citas={citasCliente}
               placeholderNota="Ej. llamó para reagendar, quedamos el jueves..." />
           </div>
         </div>
 
-        <div style={{ marginTop: 26 }}>
-          <p style={label}>Historial de ventas</p>
+        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <h3 style={sectionTitle}>Historial de ventas</h3>
           {historialVentas.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>Todavía no se le ha generado ninguna boleta.</p>
           ) : (
@@ -1503,6 +1508,17 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
 // cambian, mismo criterio que howria_pago_ajustes.
 function cargarFiltrosClientesGuardados() {
   try { return JSON.parse(localStorage.getItem("howria_filtros_clientes") || "{}"); } catch { return {}; }
+}
+
+// Mismo lenguaje visual para las pastillas de filtro rápido de estado y
+// de evaluación — antes el estado era un <select> y evaluación una
+// pastilla aparte, dos widgets distintos para el mismo tipo de acción.
+function estiloPillaFiltro(activo, color, bg) {
+  return {
+    padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+    border: activo ? `1.5px solid ${color}` : "1px solid #DCD2B4",
+    background: activo ? bg : "#FFFFFF", color: activo ? color : "#8A7E5C", fontWeight: activo ? 600 : 400,
+  };
 }
 
 export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
@@ -1567,6 +1583,9 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   }
 
   const paseadoresDisponibles = [...new Set(clientes.map((c) => c.paseadorNombre).filter(Boolean))].sort();
+  const conteoPorEstado = { activo: 0, pausado: 0, baja: 0 };
+  clientes.forEach((c) => { conteoPorEstado[c.estadoCliente || "activo"] = (conteoPorEstado[c.estadoCliente || "activo"] || 0) + 1; });
+  const totalEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion")).length;
 
   const filtrados = clientes
     .filter((c) => {
@@ -1613,16 +1632,24 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         />
       )}
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginTop: 20 }}>
+        <TarjetaResumenFactura titulo="Total clientes" valor={clientes.length} color={NAVY} bg={CREAM_SOFT} />
+        <TarjetaResumenFactura titulo="Activos" valor={conteoPorEstado.activo} color={ESTADOS_CLIENTE[0].color} bg={ESTADOS_CLIENTE[0].bg} />
+        <TarjetaResumenFactura titulo="Pausados" valor={conteoPorEstado.pausado} color={ESTADOS_CLIENTE[1].color} bg={ESTADOS_CLIENTE[1].bg} />
+        <TarjetaResumenFactura titulo="Evaluación pendiente" valor={totalEvaluacion} color="#1E5A7A" bg="#D6E6EE" />
+      </div>
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
-        <button onClick={() => setSoloEvaluacion(false)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-          border: !soloEvaluacion ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
-          background: !soloEvaluacion ? NAVY : "#FFFFFF", color: !soloEvaluacion ? CREAM : INK, fontWeight: !soloEvaluacion ? 600 : 400 }}>
+        <button onClick={() => setFiltroEstado("todos")} style={estiloPillaFiltro(filtroEstado === "todos", NAVY, CREAM)}>
           Todos ({clientes.length})
         </button>
-        <button onClick={() => setSoloEvaluacion(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-          border: soloEvaluacion ? "1.5px solid #1E5A7A" : "1px solid #DCD2B4",
-          background: soloEvaluacion ? "#D6E6EE" : "#FFFFFF", color: "#1E5A7A", fontWeight: soloEvaluacion ? 600 : 400 }}>
-          Evaluación ({clientes.filter((c) => c.tipoServicio?.includes("evaluacion")).length})
+        {ESTADOS_CLIENTE.map((e) => (
+          <button key={e.id} onClick={() => setFiltroEstado(e.id)} style={estiloPillaFiltro(filtroEstado === e.id, e.color, e.bg)}>
+            {e.nombre} ({conteoPorEstado[e.id] || 0})
+          </button>
+        ))}
+        <button onClick={() => setSoloEvaluacion((v) => !v)} style={estiloPillaFiltro(soloEvaluacion, "#1E5A7A", "#D6E6EE")}>
+          Evaluación ({totalEvaluacion})
         </button>
       </div>
 
