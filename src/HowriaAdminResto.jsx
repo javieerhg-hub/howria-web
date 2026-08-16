@@ -5300,13 +5300,20 @@ function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreAc
   const [form, setForm] = useState(() => inicial
     ? { id: inicial.id, nombre: inicial.nombre || "", perro: inicial.perro || "", telefono: inicial.telefono || "", email: inicial.email || "",
         comuna: inicial.comuna || "", edad: inicial.edad || "", adiestradorNombre: inicial.adiestradorNombre || (esEntrenador ? nombreActual : ""),
-        temasObjetivo: inicial.temasObjetivo || [] }
-    : { nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: esEntrenador ? nombreActual : "", temasObjetivo: [] });
+        temasObjetivo: inicial.temasObjetivo || [], fotoUrl: inicial.fotoUrl || null }
+    : { nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: esEntrenador ? nombreActual : "", temasObjetivo: [], fotoUrl: null });
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
 
   function toggleTema(id) {
     setForm((prev) => ({ ...prev, temasObjetivo: prev.temasObjetivo.includes(id) ? prev.temasObjetivo.filter((t) => t !== id) : [...prev.temasObjetivo, id] }));
+  }
+
+  async function subirFotoAlumno(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fotoUrl = await comprimirImagen(file);
+    setForm((f) => ({ ...f, fotoUrl }));
   }
 
   function guardar() {
@@ -5319,6 +5326,16 @@ function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreAc
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>{inicial ? "Editar ficha" : "Ficha de ingreso"}</h2>
       <p style={hint}>Datos del alumno y con qué objetivo llega — se usan para armar su caso de adiestramiento.</p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 16 }}>
+        <div style={{ width: 76, height: 76, borderRadius: "50%", flex: "none", background: form.fotoUrl ? `url(${form.fotoUrl}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
+          {!form.fotoUrl && "Foto"}
+        </div>
+        <label style={{ ...botonSecundario, display: "inline-block", padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+          Subir foto
+          <input type="file" accept="image/*" onChange={subirFotoAlumno} style={{ display: "none" }} />
+        </label>
+      </div>
 
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
         <div>
@@ -5489,7 +5506,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
             <select value={plan.boletaAdiestramientoId || ""} onChange={(e) => actualizarPlan({ boletaAdiestramientoId: e.target.value || null })} style={{ ...input, marginBottom: 0 }}>
               <option value="">Sin vincular</option>
               {boletasDisponibles.map((b) => (
-                <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.numClases} clases · {fmtCLP(b.total)}</option>
+                <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases} clases · {fmtCLP(b.total)}</option>
               ))}
             </select>
           </div>
@@ -5544,7 +5561,7 @@ function FormularioNuevoPlan({ boletasDisponibles, onCrear, onCancelar }) {
       <select value={boletaId} onChange={(e) => setBoletaId(e.target.value)} style={{ ...input, marginBottom: 12 }}>
         <option value="">Sin vincular</option>
         {boletasDisponibles.map((b) => (
-          <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.numClases} clases · {fmtCLP(b.total)}</option>
+          <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases} clases · {fmtCLP(b.total)}</option>
         ))}
       </select>
       <div style={{ display: "flex", gap: 8 }}>
@@ -5555,9 +5572,21 @@ function FormularioNuevoPlan({ boletasDisponibles, onCrear, onCancelar }) {
   );
 }
 
-function CasoAlumno({ cliente, planes, boletasDelCliente, clasesRealizadas, marcarClase, deshacerClase, actualizarPlan, crearPlan, nombreActual, onEditar, onVolver }) {
+function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, marcarClase, deshacerClase, actualizarPlan, crearPlan, nombreActual, esAdmin, onEditar, onEliminar, onToggleAccesoRapido, onVolver }) {
   const [creandoPlan, setCreandoPlan] = useState(false);
-  const boletasSinVincular = boletasDelCliente.filter((b) => !planes.some((p) => p.boletaAdiestramientoId === b._dbId));
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
+
+  // No se filtra por "es de este cliente" — Javier pidió ver las
+  // facturas de adiestramiento recientes en general y elegir a mano,
+  // porque el match automático por nombre/id puede fallar (ej. el
+  // alumno se cargó con la ficha nueva y la factura se generó aparte
+  // con el nombre escrito distinto). Se muestran las últimas ~30 sin
+  // vincular a ningún plan todavía.
+  const idsVinculados = new Set(planes.map((p) => p.boletaAdiestramientoId).filter(Boolean));
+  const boletasRecientesSinVincular = boletasAdiestramiento
+    .filter((b) => b._dbId && !idsVinculados.has(b._dbId))
+    .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO))
+    .slice(0, 30);
 
   return (
     <div>
@@ -5571,8 +5600,28 @@ function CasoAlumno({ cliente, planes, boletasDelCliente, clasesRealizadas, marc
               <p style={{ margin: 0, color: "#8A7E5C" }}>Tutor: {cliente.nombre} {cliente.telefono ? `· ${cliente.telefono}` : ""}</p>
             </div>
           </div>
-          <button onClick={onEditar} style={botonSecundario}>Editar ficha</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {cliente._dbId && (
+              <button onClick={onToggleAccesoRapido} style={{ ...botonSecundario, color: cliente.accesoRapido ? GOLD : INK, borderColor: cliente.accesoRapido ? GOLD : "#DCD2B4" }}>
+                {cliente.accesoRapido ? "★ Quitar de Inicio" : "☆ Agregar a Inicio"}
+              </button>
+            )}
+            <button onClick={onEditar} style={botonSecundario}>Editar ficha</button>
+            {esAdmin && cliente._dbId && (
+              <button onClick={() => setConfirmandoEliminar(true)} style={{ ...botonSecundario, borderColor: RUST, color: RUST }}>Eliminar alumno</button>
+            )}
+          </div>
         </div>
+
+        {confirmandoEliminar && (
+          <ModalConfirmacion
+            titulo={`¿Eliminar a ${cliente.perro}?`}
+            mensaje={`Se borra la ficha de ${cliente.perro} y de su tutor ${cliente.nombre} — sus planes de clases, historial y datos de contacto quedan asociados a un alumno que ya no vas a poder ver ni editar.`}
+            textoConfirmar="Eliminar alumno"
+            onConfirmar={() => { onEliminar(); setConfirmandoEliminar(false); }}
+            onCancelar={() => setConfirmandoEliminar(false)}
+          />
+        )}
 
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 20 }}>
           <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
@@ -5612,7 +5661,7 @@ function CasoAlumno({ cliente, planes, boletasDelCliente, clasesRealizadas, marc
           ) : (
             <>
               {creandoPlan && (
-                <FormularioNuevoPlan boletasDisponibles={boletasSinVincular}
+                <FormularioNuevoPlan boletasDisponibles={boletasRecientesSinVincular}
                   onCrear={(datos) => { crearPlan(datos); setCreandoPlan(false); }}
                   onCancelar={() => setCreandoPlan(false)} />
               )}
@@ -5621,7 +5670,7 @@ function CasoAlumno({ cliente, planes, boletasDelCliente, clasesRealizadas, marc
               ) : (
                 planes.map((plan) => (
                   <PlanClases key={plan._dbId || plan.id} plan={plan}
-                    boletasDisponibles={plan.boletaAdiestramientoId ? [...boletasSinVincular, ...boletasDelCliente.filter((b) => b._dbId === plan.boletaAdiestramientoId)] : boletasSinVincular}
+                    boletasDisponibles={plan.boletaAdiestramientoId ? [...boletasRecientesSinVincular, ...boletasAdiestramiento.filter((b) => b._dbId === plan.boletaAdiestramientoId)] : boletasRecientesSinVincular}
                     clasesDelPlan={clasesRealizadas.filter((cr) => cr.planId === plan._dbId)}
                     marcarClase={marcarClase} deshacerClase={deshacerClase}
                     actualizarPlan={(cambios) => actualizarPlan(plan._dbId, cambios)}
@@ -5751,7 +5800,7 @@ function renderFilaAlumno(a, onAbrir) {
   );
 }
 
-export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual }) {
+export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
   const [vista, setVista] = useState("lista"); // "lista" | "ingreso" | "caso" | "calendario"
   const [clienteSelId, setClienteSelId] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -5765,6 +5814,15 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
   }, [clientes, esEntrenador, nombreActual]);
 
   const clienteSel = clientes.find((c) => c.id === clienteSelId) || null;
+
+  // Salto desde "Accesos directos" en el Inicio del entrenador — mismo
+  // patrón que saltarClienteDbId (Mail → Clientes).
+  useEffect(() => {
+    if (!saltarAlumnoDbId) return;
+    const c = clientes.find((x) => x._dbId === saltarAlumnoDbId);
+    if (c) { setClienteSelId(c.id); setVista("caso"); }
+    limpiarSaltoAlumno?.();
+  }, [saltarAlumnoDbId, clientes]);
 
   function guardarAlumno(datos) {
     const id = datos.id || Date.now();
@@ -5788,6 +5846,13 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
   function crearPlan(cliente, datos) {
     setPlanesClases((prev) => [...prev, { ...datos, clienteId: cliente._dbId, creadoPor: nombreActual, id: Date.now() }]);
   }
+  function toggleAccesoRapido(cliente) {
+    setClientes((prev) => prev.map((c) => (c.id === cliente.id ? { ...c, accesoRapido: !c.accesoRapido } : c)));
+  }
+  function eliminarAlumno(cliente) {
+    setClientes((prev) => prev.filter((c) => c.id !== cliente.id));
+    setVista("lista");
+  }
 
   if (vista === "ingreso") {
     return <FormularioIngresoAlumno inicial={clienteSel} entrenadores={entrenadores} esEntrenador={esEntrenador} nombreActual={nombreActual}
@@ -5796,10 +5861,13 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
   if (vista === "caso" && clienteSel) {
     return <CasoAlumno cliente={clienteSel}
       planes={planesClases.filter((p) => p.clienteId === clienteSel._dbId)}
-      boletasDelCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clienteSel))}
+      boletasAdiestramiento={boletasAdiestramiento}
       clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase}
       actualizarPlan={actualizarPlan} crearPlan={(datos) => crearPlan(clienteSel, datos)}
-      nombreActual={nombreActual} onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
+      nombreActual={nombreActual} esAdmin={esAdmin}
+      onToggleAccesoRapido={() => toggleAccesoRapido(clienteSel)}
+      onEliminar={() => eliminarAlumno(clienteSel)}
+      onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
   }
   if (vista === "calendario") {
     return <CalendarioAlumnos citasAgenda={citasAgenda} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
