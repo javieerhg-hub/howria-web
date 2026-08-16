@@ -3941,7 +3941,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   }).sort((a, b) => b.total - a.total);
   const maxCarga = Math.max(1, ...cargaPorPaseador.map((p) => p.total));
 
-  const sinPaseador = clientes.filter((c) => !c.paseadorNombre);
+  const sinPaseador = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos")));
 
   const clientesDelPaseador = clientes.filter((c) => c.paseadorNombre === paseadorSel);
   const qBusqueda = busqueda.trim().toLowerCase();
@@ -4186,7 +4186,7 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
     });
   }, [clientes, paseadoresDisponibles]);
 
-  const sinAsignar = clientes.filter((c) => !c.paseadorNombre).length;
+  const sinAsignar = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos"))).length;
 
   return (
     <div style={{ display: "grid", gap: 20 }}>

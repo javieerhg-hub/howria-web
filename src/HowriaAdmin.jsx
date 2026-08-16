@@ -2039,7 +2039,12 @@ function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquip
     avisos.push({ tipo: "tarea", icono: "📋", texto: `${tareasHoy.length} tarea(s) del equipo pendiente(s) para hoy`, clave: `tarea-${hoyStr0}-${tareasHoy.length}`, tab: "equipo" });
   }
 
-  const sinPaseador = clientes.filter((c) => !c.paseadorNombre);
+  // clientes sin tipoServicio guardado (o vacío) se tratan como "paseos"
+  // por compatibilidad hacia atrás — antes de que existiera el campo,
+  // todo cliente era de paseos. Los que son solo de adiestramiento/clases
+  // /evaluación (ej. alumnos del profesor Javier Arniaz) no necesitan
+  // paseador, así que no deben generar este aviso.
+  const sinPaseador = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos")));
   if (sinPaseador.length > 0) {
     avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
   }
