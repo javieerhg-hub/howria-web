@@ -1615,6 +1615,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // quede automáticamente acotado, sin duplicar lógica.
   const esPaseador = user?.rol === "paseador";
   const esEntrenador = user?.rol === "entrenador";
+  // La cuenta administrador (Howria) es la cuenta general de la empresa
+  // — nunca debe quedar acotada, ni siquiera si figura como responsable
+  // de algún cliente (ver más abajo). Debe ver siempre el negocio
+  // completo, sin excepción.
+  const esAdmin = user?.rol === "administrador";
   // "Responsable de la cuenta" es un rol de negocio (dueño del caso,
   // ej. Javier Arniaz) que no está atado a un rol fijo de la app —
   // Arniaz, por ejemplo, es "entrenador" en el sistema pero también es
@@ -1623,7 +1628,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // acota a esos clientes (viendo paseo Y adiestramiento juntos, es
   // dueño del caso completo) — esto manda por encima de cualquier
   // acotamiento más angosto que ya tuviera por su rol de app.
-  const misClientesComoResponsable = clientesProp.filter((c) => c.responsableNombre === user?.nombre);
+  const misClientesComoResponsable = esAdmin ? [] : clientesProp.filter((c) => c.responsableNombre === user?.nombre);
   const esResponsable = misClientesComoResponsable.length > 0;
   const vistaPersonal = esResponsable || esPaseador || esEntrenador;
   const clientes = esResponsable

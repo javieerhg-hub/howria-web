@@ -98,6 +98,7 @@ no un runner de migraciones.
 | 070 | `usuario_howria.sql` | 2026-08-16 | Renombra la cuenta "Javier Herrera" a "Howria" (mismo email/contraseña/rol) — pasa a ser la cuenta que se queda con la ganancia de la empresa en paseos y adiestramiento. Javier Herrera (la persona) recibe una cuenta nueva de paseador, creada aparte desde Usuarios → Agregar usuario. |
 | 071 | `howria_javier_h.sql` | 2026-08-16 | Arregla el login de Howria (el email interno seguía siendo javier.herrera@howria.local tras el renombre de 070, así que escribir "Howria" al entrar no funcionaba) y transfiere los clientes que decían "Javier Herrera" en paseador/responsable/adiestrador a la cuenta nueva "Javier H". |
 | 072 | `clientes_bitacora.sql` | 2026-08-16 | Agrega `bitacora` a `clientes` (mismo patrón que `prospectos.bitacora`) — permite dejar notas libres en la ficha de un cliente, como parte del historial unificado por contacto. |
+| 073 | `howria_admin_acceso_total.sql` | 2026-08-16 | Fuerza el rol `administrador` en la cuenta "Howria" y le asegura todas las pestañas en `permisos_roles` — pasa a ser la cuenta general de la empresa, con acceso a todo. |
 
 ## Nota sobre el orden 001–023
 
