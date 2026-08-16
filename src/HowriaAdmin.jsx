@@ -155,7 +155,11 @@ function dbToCliente(row) {
 
 export function boletaToDb(b) {
   return {
-    numero: b.numero,
+    // "numero" es "generated always as identity" en la base — Postgres la
+    // asigna sola y rechaza cualquier update que la incluya (aunque sea
+    // con el mismo valor que ya tiene). Nunca se manda, ni al crear ni al
+    // editar; el valor real vuelve leyendo la fila de vuelta (ver
+    // dbToBoleta / sincronizar en useSyncedTable).
     cliente_id: b.clienteId || null,
     cliente_nombre: b.cliente,
     perro: b.perro,
@@ -299,7 +303,8 @@ export function esBoletaDeCliente(b, c) {
 
 export function boletaAdiestramientoToDb(b) {
   return {
-    numero: b.numero,
+    // "numero" es "generated always as identity" — ver comentario en
+    // boletaToDb, mismo motivo, misma tabla del mismo tipo de columna.
     cliente_id: b.clienteId || null,
     cliente_nombre: b.cliente,
     perro: b.perro || null,
