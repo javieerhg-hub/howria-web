@@ -7,7 +7,7 @@
 // importa de HowriaAdmin.jsx, que lo exporta para este archivo.
 import { useState, useRef, useMemo, useEffect, Fragment } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Search, ArrowUpDown, Dog, Users, Banknote, GripVertical, Receipt, GraduationCap } from "lucide-react";
+import { Search, ArrowUpDown, Dog, Users, Banknote, GripVertical, Receipt, GraduationCap, Link2, Check } from "lucide-react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { supabase, crearCuentaAcceso } from "./lib/supabaseClient.js";
 import {
@@ -4812,6 +4812,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const [diasPatron, setDiasPatron] = useState([]);
   const [bloquesPatron, setBloquesPatron] = useState([]);
   const [aplicandoPatron, setAplicandoPatron] = useState(false);
+  const [mostrarFormAgendar, setMostrarFormAgendar] = useState(false);
 
   function copiarLinkGenerico() {
     const link = `${window.location.origin}/agendaadiestrador`;
@@ -4845,7 +4846,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
       tipo, adiestrador, fechaISO: new Date(fechaHora).toISOString(), estado: "agendada", notas: notasNuevas.trim(), origen: "staff",
     }]);
-    setFechaHora(""); setNotasNuevas("");
+    setFechaHora(""); setNotasNuevas(""); setMostrarFormAgendar(false);
   }
 
   function cancelar(id) {
@@ -4906,16 +4907,23 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   return (
     <div style={{ display: "grid", gap: 20 }}>
       {citaDetalle && <ModalDetalleCita cita={citaDetalle} onCerrar={() => setCitaDetalleId(null)} />}
-      <div className="howria-card" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Link público de agenda</h2>
-          <p style={{ ...hint, margin: 0 }}>Compártelo donde quieras (Instagram, WhatsApp) — cualquier persona puede pedir hora y quedar como prospecto.</p>
+      <div className="howria-agenda-link">
+        <div className="howria-card howria-agenda-link-tarjeta" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Link público de agenda</h2>
+            <p style={{ ...hint, margin: 0 }}>Compártelo donde quieras (Instagram, WhatsApp) — cualquier persona puede pedir hora y quedar como prospecto.</p>
+          </div>
+          <button onClick={copiarLinkGenerico} style={botonSecundario}>{linkGenericoCopiado ? "¡Copiado!" : "Copiar link genérico"}</button>
         </div>
-        <button onClick={copiarLinkGenerico} style={botonSecundario}>{linkGenericoCopiado ? "¡Copiado!" : "Copiar link genérico"}</button>
+        <button onClick={copiarLinkGenerico} title="Copiar link público de agenda" aria-label="Copiar link público de agenda"
+          className="howria-agenda-link-boton"
+          style={{ width: 44, height: 44, borderRadius: 12, border: "none", background: linkGenericoCopiado ? "#2F6A46" : NAVY, color: CREAM, cursor: "pointer", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(20,33,61,0.15)" }}>
+          {linkGenericoCopiado ? <Check size={18} /> : <Link2 size={18} />}
+        </button>
       </div>
 
       {pendientes.length > 0 && (
-        <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
+        <div className="howria-card howria-agenda-pendientes" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
           <h2 style={sectionTitle}>Pendientes de confirmar ({pendientes.length})</h2>
           <p style={hint}>Solicitudes que dejaron los tutores desde su portal. Al confirmar, el cliente recibe un correo con la fecha y hora.</p>
           <div style={{ marginTop: 12 }}>
@@ -4946,43 +4954,54 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
         </div>
       )}
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Agendar evaluación o clase</h2>
-        <p style={hint}>Se guarda en el calendario del adiestrador elegido y queda con seguimiento hasta marcarla como realizada.</p>
-
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+      <div className="howria-card howria-agenda-form" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
-            <label style={label} htmlFor="agenda-cliente">Cliente</label>
-            <select id="agenda-cliente" value={clienteId} onChange={(e) => setClienteId(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
-            </select>
+            <h2 style={sectionTitle}>Agendar evaluación o clase</h2>
+            {!mostrarFormAgendar && <p style={{ ...hint, margin: "4px 0 0" }}>Se guarda en el calendario del adiestrador elegido y queda con seguimiento hasta marcarla como realizada.</p>}
           </div>
-          <div>
-            <label style={label} htmlFor="agenda-tipo">Tipo</label>
-            <select id="agenda-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-              {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={label} htmlFor="agenda-adiestrador">Adiestrador</label>
-            <select id="agenda-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-              {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={label} htmlFor="agenda-fecha-hora">Fecha y hora</label>
-            <input id="agenda-fecha-hora" type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
-          </div>
+          <button onClick={() => setMostrarFormAgendar((v) => !v)} style={{ ...botonSecundario, width: "auto", flex: "none" }}>
+            {mostrarFormAgendar ? "Cancelar" : "+ Agendar evaluación o clase"}
+          </button>
         </div>
-        <label style={{ ...label, marginTop: 12 }} htmlFor="agenda-notas">Notas (opcional)</label>
-        <textarea id="agenda-notas" value={notasNuevas} onChange={(e) => setNotasNuevas(e.target.value)} placeholder="Ej. primera evaluación, revisar reactividad con otros perros..."
-          style={{ ...input, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} />
-        <button onClick={agendar} disabled={!clienteId || !fechaHora || !adiestrador} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", opacity: !clienteId || !fechaHora || !adiestrador ? 0.45 : 1 }}>
-          Agendar
-        </button>
+
+        {mostrarFormAgendar && (
+          <>
+            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+              <div>
+                <label style={label} htmlFor="agenda-cliente">Cliente</label>
+                <select id="agenda-cliente" value={clienteId} onChange={(e) => setClienteId(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={label} htmlFor="agenda-tipo">Tipo</label>
+                <select id="agenda-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                  {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={label} htmlFor="agenda-adiestrador">Adiestrador</label>
+                <select id="agenda-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                  {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={label} htmlFor="agenda-fecha-hora">Fecha y hora</label>
+                <input id="agenda-fecha-hora" type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              </div>
+            </div>
+            <label style={{ ...label, marginTop: 12 }} htmlFor="agenda-notas">Notas (opcional)</label>
+            <textarea id="agenda-notas" value={notasNuevas} onChange={(e) => setNotasNuevas(e.target.value)} placeholder="Ej. primera evaluación, revisar reactividad con otros perros..."
+              style={{ ...input, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} />
+            <button onClick={agendar} disabled={!clienteId || !fechaHora || !adiestrador} style={{ ...botonPrincipal, width: "auto", padding: "10px 24px", opacity: !clienteId || !fechaHora || !adiestrador ? 0.45 : 1 }}>
+              Agendar
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="howria-card" style={tarjeta}>
+      <div className="howria-card howria-agenda-proximas" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <h2 style={sectionTitle}>Próximas citas</h2>
           <select value={filtroAdiestrador} onChange={(e) => setFiltroAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0, width: 200 }}>
@@ -5029,20 +5048,28 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
         </div>
       </div>
 
-      <div className="howria-card" style={tarjeta}>
+      <div className="howria-card howria-agenda-historial" style={tarjeta}>
         <h2 style={sectionTitle}>Historial y seguimiento</h2>
         {historial.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Todavía no hay citas realizadas o canceladas.</p>
         ) : (
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
             {historial.map((c) => (
-              <div key={c.id} style={{ padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                  <span><b style={{ color: NAVY }}>{c.clienteNombre}</b> · 🐾 {c.perro} · {TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre} · {c.adiestrador}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: c.estado === "realizada" ? "#2F6A46" : RUST }}>{NOMBRES_ESTADO_CITA[c.estado] || c.estado}</span>
+              <div key={c.id} style={{ padding: "12px 14px", background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                  <b style={{ color: NAVY, fontSize: 15 }}>{c.clienteNombre}</b>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: c.estado === "realizada" ? "#D8ECDE" : "#F1DCD2", color: c.estado === "realizada" ? "#2F6A46" : RUST }}>
+                    {NOMBRES_ESTADO_CITA[c.estado] || c.estado}
+                  </span>
                 </div>
-                <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 12.5 }}>{new Date(c.fechaISO).toLocaleDateString("es-CL")}</p>
-                {c.notas && <p style={{ margin: "4px 0 0", color: "#5C5442" }}>{c.notas}</p>}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                  <span style={{ fontSize: 12, color: "#8A7E5C" }}>🐾 {c.perro}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 20, background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46" }}>
+                    {TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre}
+                  </span>
+                </div>
+                <p style={{ margin: "8px 0 0", color: "#8A7E5C", fontSize: 12.5 }}>{c.adiestrador} · {new Date(c.fechaISO).toLocaleDateString("es-CL")}</p>
+                {c.notas && <p style={{ margin: "6px 0 0", color: "#5C5442", fontSize: 13 }}>{c.notas}</p>}
               </div>
             ))}
           </div>
@@ -5050,7 +5077,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       </div>
 
       {(esEntrenador || adiestradores.length > 0) && (
-        <div className="howria-card" style={tarjeta}>
+        <div className="howria-card howria-agenda-disponibilidad" style={tarjeta}>
           <h2 style={sectionTitle}>Disponibilidad</h2>
           <p style={hint}>Clic en un día para ver y elegir qué bloques de hora quedan disponibles ese día — solo esos bloques van a aparecer para que los tutores agenden evaluaciones y clases.</p>
           {!esEntrenador && (
@@ -5163,7 +5190,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       )}
 
       {(esEntrenador || adiestradores.length > 0) && (
-        <div className="howria-card" style={tarjeta}>
+        <div className="howria-card howria-agenda-precios" style={tarjeta}>
           <h2 style={sectionTitle}>Precios</h2>
           <p style={hint}>Lo que ve el tutor al reservar en el link público — se guarda en cada solicitud, así que si lo cambias no afecta las citas ya agendadas.</p>
           {!esEntrenador && (

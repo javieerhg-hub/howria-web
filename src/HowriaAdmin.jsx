@@ -2585,8 +2585,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
 
     return (
       <div style={{ display: "grid", gap: 20 }}>
-        {encabezado}
-        <LauncherMobile tabs={tabs} setTab={setTab} />
+        <div className="howria-inicio-entrenador-encabezado">{encabezado}</div>
         {alumnosDestacados.length > 0 && (
           <div className="howria-card" style={tarjeta}>
             <h2 style={sectionTitle}>Accesos directos</h2>
@@ -2602,6 +2601,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
             </div>
           </div>
         )}
+        <LauncherMobile tabs={tabs} setTab={setTab} destacar={["alumnos", "agenda"]} />
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Clientes por atender</h2>
           <p style={{ ...hint, marginTop: 8 }}>Citas que ya aceptaste en Agenda — cada una queda acá hasta que la marques como realizada.</p>
@@ -2725,7 +2725,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
 // mobile — mismo para administrador/coordinador y para el entrenador,
 // cada uno con sus propias pestañas permitidas (tabs ya viene filtrado
 // por rol desde App()).
-function LauncherMobile({ tabs, setTab }) {
+function LauncherMobile({ tabs, setTab, destacar = [] }) {
   if (!tabs) return null;
   return (
     <div className="howria-launcher-mobile" style={{ display: "none" }}>
@@ -2739,17 +2739,18 @@ function LauncherMobile({ tabs, setTab }) {
               {tabsDelGrupo.map((t, i) => {
                 const Icono = ICONOS_TAB[t.id] || Home;
                 const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
+                const esDestacado = destacar.includes(t.id);
                 return (
                   <button key={t.id} onClick={() => setTab(t.id)}
                     style={{
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                      padding: "16px 6px", border: "none", borderRadius: 16, background: "#FFFFFF",
-                      boxShadow: "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
+                      padding: "16px 6px", border: "none", borderRadius: 16, background: esDestacado ? GOLD : "#FFFFFF",
+                      boxShadow: esDestacado ? "0 4px 14px rgba(201,150,47,0.35)" : "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
                     }}>
-                    <span style={{ width: 46, height: 46, borderRadius: 14, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flex: "none" }}>
+                    <span style={{ width: 46, height: 46, borderRadius: 14, background: esDestacado ? NAVY : bg, display: "flex", alignItems: "center", justifyContent: "center", color: esDestacado ? CREAM : color, flex: "none" }}>
                       <Icono size={21} />
                     </span>
-                    <span style={{ fontSize: 11.5, color: INK, textAlign: "center", lineHeight: 1.25, fontWeight: 500 }}>{t.label}</span>
+                    <span style={{ fontSize: 11.5, color: esDestacado ? NAVY : INK, textAlign: "center", lineHeight: 1.25, fontWeight: esDestacado ? 700 : 500 }}>{t.label}</span>
                   </button>
                 );
               })}
@@ -3237,7 +3238,7 @@ export function PullToRefresh() {
 
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
-const PRIORIDAD_BARRA_NAV = ["agenda", "mail", "clientes", "mis-paseos", "boletas", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "facturas", "usuarios"];
+const PRIORIDAD_BARRA_NAV = ["boletas", "facturas", "clientes", "agenda", "mail", "mis-paseos", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "usuarios"];
 
 function ItemBarraNav({ activo, Icono, label, onClick }) {
   if (activo) {
@@ -3487,6 +3488,7 @@ export default function HowriaAdmin() {
         .howria-header { display: flex; }
         .howria-facturas-tabla { display: block; }
         .howria-facturas-tarjetas { display: none; }
+        .howria-agenda-link-boton { display: none; }
         @media (min-width: 681px) {
           .howria-sidebar { display: flex; }
           .howria-header { display: none; }
@@ -3519,6 +3521,16 @@ export default function HowriaAdmin() {
           .howria-dia-col-oculta-movil { display: none !important; }
           .howria-facturas-tabla { display: none !important; }
           .howria-facturas-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
+          .howria-inicio-entrenador-encabezado { display: none !important; }
+          .howria-agenda-link-tarjeta { display: none !important; }
+          .howria-agenda-link-boton { display: flex !important; }
+          .howria-agenda-link { order: 1; }
+          .howria-agenda-pendientes { order: 2; }
+          .howria-agenda-form { order: 3; }
+          .howria-agenda-proximas { order: 4; }
+          .howria-agenda-disponibilidad { order: 5; }
+          .howria-agenda-precios { order: 6; }
+          .howria-agenda-historial { order: 7; }
         }
       `}</style>
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
