@@ -1595,7 +1595,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], user, onVerPagos }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, user, onVerPagos }) {
   const [periodo, setPeriodo] = useState("semana");
   const hoy = new Date();
 
@@ -1738,6 +1738,106 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
   function imprimirInforme() {
     window.print();
+  }
+
+  // Rama exclusiva para paseador: nada de facturación/ingresos de sus
+  // clientes (eso es plata del cliente, no suya) — solo lo que se le va
+  // a pagar A ÉL. Manda siempre para este rol, aunque también figure
+  // como responsable de algún cliente (ese concepto queda para
+  // entrenador/coordinador/administrador). Mismo criterio que "Tu pago"
+  // en Mis Paseos (resumenMensual, HowriaAdmin.jsx) — realizados menos
+  // cancelados × tarifaPaseador — pero generalizado al selector de
+  // período semana/mes/año en vez de quedar fijo al mes en curso.
+  if (esPaseador) {
+    const misClientesPaseador = clientesProp.filter((c) => c.paseadorNombre === user.nombre);
+    const hoyLocal = new Date();
+    hoyLocal.setHours(0, 0, 0, 0);
+
+    function diasEnRango(desde, hasta, diasSemana) {
+      const claves = [];
+      const cursor = new Date(desde);
+      cursor.setHours(0, 0, 0, 0);
+      const fin = new Date(hasta);
+      fin.setHours(0, 0, 0, 0);
+      while (cursor <= fin) {
+        const dow = (cursor.getDay() + 6) % 7;
+        if (diasSemana.includes(dow)) claves.push(fechaKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return claves;
+    }
+
+    const resumenPaseador = misClientesPaseador.map((c) => {
+      const claves = diasEnRango(actualDesde, hoyLocal, c.diasHabituales || []);
+      const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
+      const realizados = validas.filter((k) => registroPaseos[`${c.id}_${k}`]?.realizado).length;
+      return { cliente: c, programados: validas.length, realizados, monto: realizados * Number(c.tarifaPaseador || 0) };
+    });
+    const totalRealizadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.realizados, 0);
+    const totalProgramadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.programados, 0);
+    const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0);
+
+    return (
+      <div className="howria-card" style={tarjeta} id="reporte-finanzas">
+        <style>{`
+          @media print {
+            body * { visibility: hidden; }
+            #reporte-finanzas, #reporte-finanzas * { visibility: visible; }
+            #reporte-finanzas { position: absolute; top: 0; left: 0; width: 100%; border: none; }
+            #reporte-finanzas .no-imprimir { display: none; }
+          }
+        `}</style>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={sectionTitle}>Tu pago</h2>
+            <p style={hint}>Solo tus paseos y lo que se te paga por ellos — no lo que se les factura a los clientes.</p>
+          </div>
+          <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+        </div>
+
+        <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 24px" }}>
+          {[["semana", "Esta semana"], ["mes", "Este mes"], ["año", "Este año"]].map(([id, nombre]) => (
+            <button key={id} onClick={() => setPeriodo(id)}
+              style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
+                border: periodo === id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                background: periodo === id ? NAVY : "#FFFFFF", color: periodo === id ? CREAM : INK,
+                fontWeight: periodo === id ? 600 : 400 }}>
+              {nombre}
+            </button>
+          ))}
+        </div>
+
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 22 }}>
+          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosPaseador} / {totalProgramadosPaseador}</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Avance</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{totalProgramadosPaseador ? Math.round((totalRealizadosPaseador / totalProgramadosPaseador) * 100) : 0}%</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Monto a recibir {etiquetaPeriodo}</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(totalMontoPaseador)}</p>
+          </div>
+        </div>
+
+        <p style={label}>Detalle por cliente</p>
+        {resumenPaseador.length === 0 ? (
+          <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados.</p>
+        ) : (
+          <div>
+            {resumenPaseador.map((r) => (
+              <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                <span style={{ color: INK }}>{r.cliente.nombre} · {r.cliente.perro}</span>
+                <span style={{ color: "#8A7E5C" }}>{r.realizados} / {r.programados} paseos</span>
+                <b style={{ color: NAVY }}>{fmtCLP(r.monto)}</b>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
