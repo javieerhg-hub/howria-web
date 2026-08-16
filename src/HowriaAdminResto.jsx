@@ -4967,7 +4967,7 @@ function FilaDetalleCita({ label, valor }) {
 
 // Mismo criterio visual que ModalConfirmacion (HowriaAdmin.jsx) — fondo
 // oscuro + tarjeta centrada — pero de solo lectura, sin botones de acción.
-function ModalDetalleCita({ cita, onCerrar }) {
+function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
   useEffect(() => {
     function alEscape(e) { if (e.key === "Escape") onCerrar(); }
     window.addEventListener("keydown", alEscape);
@@ -4976,6 +4976,7 @@ function ModalDetalleCita({ cita, onCerrar }) {
 
   const tipoTexto = TIPOS_CITA.find((t) => t.id === cita.tipo)?.nombre || cita.tipo;
   const estadoTexto = NOMBRES_ESTADO_CITA[cita.estado] || cita.estado;
+  const puedeEliminar = onEliminar && cita._dbId && ["cancelada", "rechazada", "realizada"].includes(cita.estado);
 
   return (
     <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
@@ -4998,6 +4999,12 @@ function ModalDetalleCita({ cita, onCerrar }) {
           <FilaDetalleCita label="Origen" valor={cita.origen === "cliente" ? "Pedida por el cliente (agenda pública)" : "Agendada por el equipo"} />
           {cita.confirmadaEn && <FilaDetalleCita label="Confirmada el" valor={new Date(cita.confirmadaEn).toLocaleString("es-CL")} />}
         </div>
+
+        {puedeEliminar && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EDE4CE", display: "flex", justifyContent: "flex-end" }}>
+            <BotonEliminar onConfirm={() => { onEliminar(cita._dbId); onCerrar(); }} label="Eliminar cita" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5109,7 +5116,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
-      {citaDetalle && <ModalDetalleCita cita={citaDetalle} onCerrar={() => setCitaDetalleId(null)} />}
+      {citaDetalle && <ModalDetalleCita cita={citaDetalle} onCerrar={() => setCitaDetalleId(null)} onEliminar={(dbId) => eliminarCita(setCitas, dbId)} />}
       <div className="howria-agenda-link">
         <div className="howria-card howria-agenda-link-tarjeta" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -5273,6 +5280,11 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
                 <p style={{ margin: "8px 0 0", color: "#8A7E5C", fontSize: 12.5 }}>{c.adiestrador} · {new Date(c.fechaISO).toLocaleDateString("es-CL")}</p>
                 {c.notas && <p style={{ margin: "6px 0 0", color: "#5C5442", fontSize: 13 }}>{c.notas}</p>}
+                {c._dbId && (
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                    <BotonEliminar onConfirm={() => eliminarCita(setCitas, c._dbId)} label="Eliminar" style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "5px 10px", fontSize: 11.5, cursor: "pointer" }} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -6131,7 +6143,7 @@ function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, 
 // adiestrador — se usa tanto como sub-vista de Alumnos (con "onVolver")
 // como pestaña propia "Calendario" en el menú (sin "onVolver", vista
 // completa y celdas más grandes para que se divise bien).
-export function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolver }) {
+export function CalendarioAlumnos({ citasAgenda, setCitas, rolActual, nombreActual, onVolver }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesIdx, setMesIdx] = useState(hoy.getMonth());
@@ -6230,7 +6242,7 @@ export function CalendarioAlumnos({ citasAgenda, rolActual, nombreActual, onVolv
           </div>
         )}
       </div>
-      {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} />}
+      {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} onEliminar={setCitas ? (dbId) => eliminarCita(setCitas, dbId) : undefined} />}
     </div>
   );
 }
@@ -6264,7 +6276,7 @@ function renderFilaAlumno(a, onAbrir) {
   );
 }
 
-export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
+export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, setCitas, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
   const [vista, setVista] = useState("lista"); // "lista" | "ingreso" | "caso" | "calendario"
   const [clienteSelId, setClienteSelId] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -6334,7 +6346,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
       onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
   }
   if (vista === "calendario") {
-    return <CalendarioAlumnos citasAgenda={citasAgenda} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
+    return <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitas} rolActual={rolActual} nombreActual={nombreActual} onVolver={() => setVista("lista")} />;
   }
 
   const alumnosConProgreso = misAlumnos.map((c) => {
@@ -6644,6 +6656,11 @@ function aceptarBoleta(setBoletas, dbId) {
 function eliminarBoleta(setBoletas, dbId) {
   if (!dbId) return;
   setBoletas((prev) => prev.filter((b) => b._dbId !== dbId));
+}
+
+function eliminarCita(setCitas, dbId) {
+  if (!dbId) return;
+  setCitas((prev) => prev.filter((c) => c._dbId !== dbId));
 }
 
 function editarBoleta(setBoletas, dbId, cambios) {
