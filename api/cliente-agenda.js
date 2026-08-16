@@ -343,7 +343,38 @@ export default async function handler(req, res) {
     }
 
     const nombreSolicitante = cliente ? cliente.nombre : nombre.trim();
+    const emailSolicitante = cliente ? cliente.email : email.trim();
+    const telefonoSolicitante = cliente ? cliente.telefono : telefono.trim();
+    const perroSolicitante = cliente ? cliente.perro : perro.trim();
     const tipoTexto = tipo === "evaluacion" ? "una evaluación" : "una clase";
+
+    // Deja lo que la persona llenó en el formulario público como un
+    // correo "entrante" más, para que se vea en la pestaña Mail junto al
+    // correo "saliente" que ya se registra ahí cuando el equipo confirma
+    // la cita (confirmar-cita.js) — mismo remitente/destinatario en
+    // ambos, así quedan en el mismo hilo y se puede ver de un vistazo si
+    // la solicitud llegó y si ya se le mandó la confirmación. No es un
+    // correo real (no pasa por Resend), solo un registro para Mail — si
+    // falla no debe frenar la reserva, que ya quedó guardada arriba.
+    const fechaLegible = new Intl.DateTimeFormat("es-CL", {
+      timeZone: ZONA_CHILE, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+    }).format(new Date(fechaISO));
+    await admin.from("correos").insert({
+      direccion: "entrante",
+      remitente: emailSolicitante,
+      destinatario: "citas@howria.cl",
+      asunto: `Nueva solicitud de cita — ${nombreSolicitante}`,
+      cuerpo_texto: [
+        `${nombreSolicitante} pidió ${tipoTexto} con ${adiestrador}.`,
+        `Perro: ${perroSolicitante}`,
+        `Teléfono: ${telefonoSolicitante}`,
+        `Dirección: ${direccion.trim()}`,
+        `Fecha y hora solicitada: ${fechaLegible}`,
+      ].join("\n"),
+      cliente_id: cliente ? cliente.id : clienteNuevoId,
+      prospecto_id: prospectoId,
+    });
+
     await enviarNotificacionPush(admin, {
       titulo: "Nueva solicitud de cita",
       cuerpo: `${nombreSolicitante} pidió ${tipoTexto} con ${adiestrador}`,
