@@ -988,8 +988,7 @@ export const PASOS_CAPACITACION = [
 // los "objetivos" que se eligen en la ficha de ingreso de un alumno
 // (clientes.temasObjetivo) y los temas que se anotan clase a clase, una
 // vez que la clase ya pasó (clases_realizadas.temas). Contenido
-// provisional a confirmar con Javier/el entrenador — es una primera
-// lectura de sus apuntes, no texto definitivo.
+// confirmado con Javier.
 export const TEMARIO_ADIESTRAMIENTO = [
   {
     grupo: "Formación de cachorros",
