@@ -2586,7 +2586,7 @@ function LauncherMobile({ tabs, setTab }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
@@ -2628,9 +2628,13 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   const hoyStr = fechaKey(hoy);
   const prospectosVencidos = prospectos.filter((p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido");
   const proximasCitas = citasAgenda.filter((c) => c.estado === "agendada" && new Date(c.fechaISO) >= hoy).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)).slice(0, 4);
+  const equipoActivo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
-  const iconoStat = { width: 34, height: 34, borderRadius: 10, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, color: NAVY };
+  function iconoStat(i) {
+    const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
+    return { width: 38, height: 38, borderRadius: 11, background: bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, color };
+  }
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -2667,36 +2671,65 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
 
       <div className="howria-inicio-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <button onClick={() => setTab("mis-paseos")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
-          <div style={iconoStat}><Footprints size={17} /></div>
+          <div style={iconoStat(0)}><Footprints size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Paseos de hoy</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{realizadosHoy} / {clientesHoy.length}</p>
         </button>
         <button onClick={() => setTab("facturas")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
-          <div style={iconoStat}><Receipt size={17} /></div>
+          <div style={iconoStat(1)}><Receipt size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Boletas por cobrar</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(montoPendiente)}</p>
         </button>
         <button onClick={() => setTab("agenda")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
-          <div style={iconoStat}><Calendar size={17} /></div>
+          <div style={iconoStat(2)}><Calendar size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Evaluaciones agendadas</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{citasAgenda.filter((c) => c.estado === "agendada").length}</p>
         </button>
         <button onClick={() => setTab("seguimiento")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
-          <div style={iconoStat}><Target size={17} /></div>
+          <div style={iconoStat(3)}><Target size={17} /></div>
           <p style={{ ...label, marginBottom: 8 }}>Prospectos por seguir</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{prospectosVencidos.length}</p>
         </button>
       </div>
 
-      <div className="howria-card" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <h2 style={sectionTitle}>Ingresos de esta semana</h2>
-          <b style={{ color: NAVY, fontSize: 16 }}>{fmtCLP(totalIngresosSemana)}</b>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+        <div className="howria-card" style={tarjeta}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={sectionTitle}>Ingresos de esta semana</h2>
+            <b style={{ color: NAVY, fontSize: 16 }}>{fmtCLP(totalIngresosSemana)}</b>
+          </div>
+          <div style={{ width: "100%", height: 160, marginTop: 10 }}>
+            <Suspense fallback={<div style={{ width: "100%", height: "100%" }} />}>
+              <GraficoIngresosSemana data={dataGraficoSemana} />
+            </Suspense>
+          </div>
         </div>
-        <div style={{ width: "100%", height: 160, marginTop: 10 }}>
-          <Suspense fallback={<div style={{ width: "100%", height: "100%" }} />}>
-            <GraficoIngresosSemana data={dataGraficoSemana} />
-          </Suspense>
+
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Estado del equipo</h2>
+          <p style={{ ...hint, marginTop: -2 }}>Fase del día de cada paseador/entrenador.</p>
+          <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+            {equipoActivo.length === 0 ? (
+              <p style={hint}>No hay paseadores ni entrenadores cargados.</p>
+            ) : (
+              equipoActivo.map((u) => {
+                const motivoAusencia = ausenciasPaseador[u.nombre];
+                const faseId = faseDiaPaseador[u.nombre] || "pendiente";
+                const fase = FASES_PASEADOR.find((f) => f.id === faseId) || FASES_PASEADOR[0];
+                return (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: "50%", background: u.fotoUrl ? `url(${u.fotoUrl}) center/cover` : CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700, color: NAVY, flex: "none" }}>
+                      {!u.fotoUrl && u.nombre.charAt(0).toUpperCase()}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.nombre}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: motivoAusencia ? "#F1DCD2" : fase.bg, color: motivoAusencia ? RUST : fase.color, flex: "none" }}>
+                      {motivoAusencia ? "Ausente" : fase.nombre}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
@@ -2732,19 +2765,39 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
       </div>
 
       <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Clientes de hoy</h2>
+        <h2 style={sectionTitle}>Paseos de hoy</h2>
         {clientesHoy.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>No hay paseos programados para hoy.</p>
         ) : (
-          <div style={{ marginTop: 6 }}>
-            {clientesHoy.map((c) => {
-              const hecho = !!registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado;
-              return (
-                <FilaLista key={c.id} Icono={Dog} titulo={c.nombre} subtitulo={`🐾 ${c.perro} · ${c.paseadorNombre || "sin paseador"}`}
-                  valor={hecho ? "✓ Realizado" : "Pendiente"} valorColor={hecho ? "#2F6A46" : "#B0A587"}
-                  onClick={() => setTab("mis-paseos")} />
-              );
-            })}
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                  <th style={{ padding: "8px 10px" }}>Cliente</th>
+                  <th style={{ padding: "8px 10px" }}>Paseador</th>
+                  <th style={{ padding: "8px 10px" }}>Horario</th>
+                  <th style={{ padding: "8px 10px" }}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientesHoy.map((c) => {
+                  const registro = registroPaseos[`${c.id}_${fechaKey(hoy)}`];
+                  const estado = registro?.realizado ? "Realizado" : registro?.cancelado ? "Cancelado" : "Pendiente";
+                  const colorEstado = registro?.realizado ? "#2F6A46" : registro?.cancelado ? RUST : "#8A6A1E";
+                  const bgEstado = registro?.realizado ? "#D8ECDE" : registro?.cancelado ? "#F1DCD2" : "#F3E3B4";
+                  return (
+                    <tr key={c.id} onClick={() => setTab("mis-paseos")} style={{ borderTop: "1px solid #EDE4CE", cursor: "pointer" }}>
+                      <td style={{ padding: "10px" }}>{c.nombre} <span style={{ color: "#8A7E5C" }}>· 🐾 {c.perro}</span></td>
+                      <td style={{ padding: "10px", color: "#6B6248" }}>{c.paseadorNombre || "Sin asignar"}</td>
+                      <td style={{ padding: "10px", color: "#6B6248" }}>{c.horaHabitual || "—"}</td>
+                      <td style={{ padding: "10px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: bgEstado, color: colorEstado }}>{estado}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -3095,7 +3148,6 @@ export default function HowriaAdmin() {
   const [sessionVersion, setSessionVersion] = useState(0);
   const [tab, setTab] = useState("inicio");
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
-  const [grupoAbierto, setGrupoAbierto] = useState(null);
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
@@ -3242,6 +3294,14 @@ export default function HowriaAdmin() {
         @media (prefers-reduced-motion: reduce) {
           .howria-card, button:not(:disabled) { transition: none !important; }
         }
+        .howria-shell { display: flex; }
+        .howria-sidebar { display: none; }
+        .howria-header-desktop { display: none; }
+        @media (min-width: 681px) {
+          .howria-sidebar { display: flex; }
+          .howria-header-desktop { display: flex; }
+          .howria-header-mobile { display: none; }
+        }
         @media (max-width: 680px) {
           .howria-g2, .howria-g3, .howria-g4, .howria-split, .howria-photo-row {
             grid-template-columns: 1fr !important;
@@ -3257,7 +3317,6 @@ export default function HowriaAdmin() {
           .howria-header h1, .howria-header-logo { height: 30px !important; }
           .howria-main { padding: 16px 16px 100px !important; }
           table { font-size: 12.5px !important; }
-          .howria-tabs-desktop { display: none !important; }
           .howria-horario-fila { flex-wrap: wrap; row-gap: 8px; }
           .howria-horario-fila > label { width: 100% !important; }
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
@@ -3270,7 +3329,7 @@ export default function HowriaAdmin() {
           .howria-dia-col-oculta-movil { display: none !important; }
         }
       `}</style>
-      <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
+      <div className="howria-header-mobile" style={{ background: NAVY, padding: "14px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={44} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
@@ -3285,67 +3344,74 @@ export default function HowriaAdmin() {
         </div>
       </div>
 
-      {grupoAbierto && (
-        <div onClick={() => setGrupoAbierto(null)} style={{ position: "fixed", inset: 0, zIndex: 15 }} />
-      )}
-
-      <div className="howria-tabs-desktop" style={{ position: "relative", display: "flex", gap: 4, padding: "0 32px", background: "#FFFFFF", borderBottom: "1px solid #EDE4CE", flexWrap: "wrap" }}>
-        {tabs.some((t) => t.id === "inicio") && (
-          <button onClick={() => { setTab("inicio"); setGrupoAbierto(null); }}
-            style={{
-              padding: "16px 20px", border: "none", background: "none", cursor: "pointer",
-              fontSize: 14, color: tab === "inicio" ? NAVY : "#B0A587", flex: "none",
-              borderBottom: tab === "inicio" ? `2.5px solid ${GOLD}` : "2.5px solid transparent",
-              fontWeight: tab === "inicio" ? 700 : 500
-            }}>
-            Inicio
-          </button>
-        )}
-        {ORDEN_GRUPOS.map((grupo) => {
-          const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
-          if (tabsDelGrupo.length === 0) return null;
-          const grupoActivo = tabsDelGrupo.some((t) => t.id === tab);
-          return (
-            <div key={grupo} style={{ position: "relative" }}>
-              <button onClick={() => setGrupoAbierto(grupoAbierto === grupo ? null : grupo)}
+      <div className="howria-shell">
+        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "sticky", top: 0, alignSelf: "flex-start", height: "100vh", overflowY: "auto" }}>
+          <div style={{ padding: "4px 10px 20px" }}>
+            <LogoHowria height={34} />
+          </div>
+          <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {tabs.some((t) => t.id === "inicio") && (
+              <button onClick={() => setTab("inicio")}
                 style={{
-                  padding: "16px 20px", border: "none", background: "none", cursor: "pointer",
-                  fontSize: 14, color: grupoActivo || grupoAbierto === grupo ? NAVY : "#B0A587", flex: "none",
-                  borderBottom: grupoActivo ? `2.5px solid ${GOLD}` : "2.5px solid transparent",
-                  fontWeight: grupoActivo ? 700 : 500, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap"
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "none", borderRadius: 8,
+                  background: tab === "inicio" ? "rgba(201,150,47,0.16)" : "none", cursor: "pointer", textAlign: "left",
+                  color: tab === "inicio" ? GOLD : "#C9CEDA", fontWeight: tab === "inicio" ? 700 : 500, fontSize: 13.5,
                 }}>
-                {grupo}
-                {tabsDelGrupo.some((t) => t.id === "mail") && correosNoLeidos > 0 && (
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: RUST, display: "inline-block" }} />
-                )}
-                <span style={{ fontSize: 10, transform: grupoAbierto === grupo ? "rotate(180deg)" : "none", display: "inline-block" }}>▾</span>
+                <Home size={16} /> Inicio
               </button>
-              {grupoAbierto === grupo && (
-                <div style={{ position: "absolute", top: "100%", left: 0, background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 8, boxShadow: "0 8px 20px rgba(20,33,61,0.12)", minWidth: 200, zIndex: 20, overflow: "hidden" }}>
-                  {tabsDelGrupo.map((t) => (
-                    <button key={t.id} onClick={() => { setTab(t.id); setGrupoAbierto(null); }}
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "11px 16px", border: "none",
-                        background: tab === t.id ? CREAM_SOFT : "none", cursor: "pointer",
-                        fontSize: 13.5, color: tab === t.id ? NAVY : INK, fontWeight: tab === t.id ? 700 : 500
-                      }}>
-                      {t.label}
-                      {t.id === "mail" && correosNoLeidos > 0 && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{correosNoLeidos}</span>
-                      )}
-                    </button>
-                  ))}
+            )}
+            {ORDEN_GRUPOS.map((grupo) => {
+              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+              if (tabsDelGrupo.length === 0) return null;
+              return (
+                <div key={grupo} style={{ marginTop: 14 }}>
+                  <p style={{ margin: "0 0 4px 12px", fontSize: 10.5, color: "#7C8797", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700 }}>{grupo}</p>
+                  {tabsDelGrupo.map((t) => {
+                    const Icono = ICONOS_TAB[t.id] || Home;
+                    const activo = tab === t.id;
+                    return (
+                      <button key={t.id} onClick={() => setTab(t.id)}
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 10,
+                          padding: "10px 12px", border: "none", borderRadius: 8, background: activo ? "rgba(201,150,47,0.16)" : "none",
+                          cursor: "pointer", textAlign: "left", color: activo ? GOLD : "#C9CEDA", fontWeight: activo ? 700 : 500, fontSize: 13.5,
+                        }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 10 }}><Icono size={16} /> {t.label}</span>
+                        {t.id === "mail" && correosNoLeidos > 0 && (
+                          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{correosNoLeidos}</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </nav>
+        </aside>
 
-      <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
+        <div className="howria-shell-contenido" style={{ flex: "1 1 auto", minWidth: 0 }}>
+          <div className="howria-header-desktop" style={{ padding: "20px 32px 0", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h1 style={{ margin: 0, fontFamily: "'Fraunces', Georgia, serif", fontSize: 20, color: NAVY }}>{TODOS_LOS_TABS.find((t) => t.id === tab)?.label || "Inicio"}</h1>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#9A9179", textTransform: "capitalize" }}>{new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} />}
+              <BotonNotificacionesPush usuarioEmail={user.email} />
+              <div style={{ fontSize: 13, textAlign: "right", color: NAVY }}>
+                <div>{user.nombre}</div>
+                <div style={{ fontSize: 11, color: "#9A9179", textTransform: "capitalize" }}>{user.rol}</div>
+              </div>
+              <button onClick={cerrarSesion} style={{ background: "none", border: "1px solid #E4DBC3", color: "#6B6248", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+
+          <div className="howria-main" style={{ padding: "20px 32px 28px", maxWidth: 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
@@ -3368,8 +3434,10 @@ export default function HowriaAdmin() {
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}
       </LimiteDeError>
       </Suspense>
+          </div>
+        </div>
       </div>
-      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={(t) => { setTab(t); setGrupoAbierto(null); }} />
+      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} />
     </div>
   );
 }
