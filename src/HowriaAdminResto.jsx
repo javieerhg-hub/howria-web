@@ -2823,12 +2823,21 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const ventasConfirmadas = useMemo(() => calcularTotales(todasLasBoletas.filter(esVenta)).ingresos, [todasLasBoletas]);
   const porCobrarMonto = useMemo(() => calcularTotales(todasLasBoletas.filter(esPorCobrar)).ingresos, [todasLasBoletas]);
 
+  // Busca por cliente, perro o número de boleta (con o sin ceros a la
+  // izquierda) — antes solo encontraba por cliente/perro.
+  function coincideBusqueda(b, q) {
+    if (!q) return true;
+    return b.cliente.toLowerCase().includes(q) || (b.perro || "").toLowerCase().includes(q) || String(b.numero).padStart(3, "0").includes(q) || String(b.numero) === q;
+  }
+
   // "Por revisar" = todavía sin aceptar, la cola de trabajo activa.
   // "Ya ingresadas" = todo lo que ya pasó por Aceptar (o se canceló) —
-  // vive colapsado aparte para no ocupar la vista principal.
+  // vive colapsado aparte para no ocupar la vista principal. La búsqueda
+  // es una sola barra para las dos, antes solo filtraba "Ya ingresadas".
+  const busquedaLimpia = busqueda.trim().toLowerCase();
   const porRevisar = useMemo(() =>
-    todasLasBoletas.filter((b) => b.estado === "no_enviada").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO)),
-    [todasLasBoletas]);
+    todasLasBoletas.filter((b) => b.estado === "no_enviada" && coincideBusqueda(b, busquedaLimpia)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO)),
+    [todasLasBoletas, busquedaLimpia]);
   const todasIngresadas = useMemo(() => todasLasBoletas.filter((b) => b.estado !== "no_enviada"), [todasLasBoletas]);
 
   const lista = useMemo(() => {
@@ -2837,12 +2846,39 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
       .filter((b) => filtroCliente === "todos" || b.cliente === filtroCliente)
       .filter((b) => !desde || fechaKey(new Date(b.fechaISO)) >= desde)
       .filter((b) => !hasta || fechaKey(new Date(b.fechaISO)) <= hasta)
-      .filter((b) => !busqueda.trim() || b.cliente.toLowerCase().includes(busqueda.trim().toLowerCase()) || (b.perro || "").toLowerCase().includes(busqueda.trim().toLowerCase()))
+      .filter((b) => coincideBusqueda(b, busquedaLimpia))
       .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
-  }, [todasIngresadas, filtroEstado, filtroCliente, desde, hasta, busqueda]);
+  }, [todasIngresadas, filtroEstado, filtroCliente, desde, hasta, busquedaLimpia]);
 
   const totalListado = calcularTotales(lista).ingresos;
   const nombresClientes = [...new Set(todasIngresadas.map((b) => b.cliente))];
+
+  // Exporta la tabla "Facturas ya ingresadas" tal como está filtrada en
+  // pantalla — antes la única forma de sacar los datos era PDF boleta por
+  // boleta, sin manera de llevarse el listado completo a una planilla.
+  function exportarCsv() {
+    const encabezado = ["Numero", "Tipo", "Cliente", "Responsable", "Perro", "Fecha", "Total", "Estado", "Forma de pago", "Fecha de pago"];
+    const filas = lista.map((b) => [
+      String(b.numero).padStart(3, "0"),
+      b._tipo === "paseo" ? "Paseo" : "Adiestramiento",
+      b.cliente,
+      responsableDe(b) || "",
+      b.perro || "",
+      b.fecha,
+      b.total,
+      (ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0]).nombre,
+      b.estado === "pagada" ? b.formaPago || "" : "",
+      b.estado === "pagada" ? b.fechaPago || "" : "",
+    ]);
+    const csv = [encabezado, ...filas].map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `facturas-${fechaKey(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   // Formulario de "marcar pagada" y editor de boleta — el mismo contenido
   // se usa tanto en la fila expandida de la tabla (desktop) como dentro
@@ -2888,9 +2924,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
           <td style={{ padding: "10px", fontSize: 12 }}>
             <SelectorResponsable b={b} claveFila={claveFila} />
-            {b._tipo === "adiestramiento" && b.montoResponsable != null && (
+            {b._tipo === "adiestramiento" && (
               <div style={{ fontSize: 10.5, color: "#8A7E5C", marginTop: 4 }}>
-                Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
+                {b.montoResponsable != null
+                  ? `Se lleva ${fmtCLP(montoParaResponsable(b))} · Howria ${fmtCLP(b.total - montoParaResponsable(b))}`
+                  : "100% para el responsable (sin repartir)"}
               </div>
             )}
           </td>
@@ -3000,9 +3038,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             Responsable del dinero
           </label>
           <SelectorResponsable b={b} claveFila={claveFila} />
-          {b._tipo === "adiestramiento" && b.montoResponsable != null && (
+          {b._tipo === "adiestramiento" && (
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8A7E5C" }}>
-              Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
+              {b.montoResponsable != null
+                ? `Se lleva ${fmtCLP(montoParaResponsable(b))} · Howria ${fmtCLP(b.total - montoParaResponsable(b))}`
+                : "100% para el responsable (sin repartir)"}
             </p>
           )}
         </div>
@@ -3026,22 +3066,22 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
               </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12.5 }}>
               {hayAccionPrincipal && (
                 <BotonConfirmable onConfirm={() => cancelarBoleta(b)} label="Cancelar" colorConfirmar={RUST}
-                  style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+                  style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5, padding: "10px 8px", minHeight: 44 }} />
               )}
               {b.estado === "pagada" && (
                 <BotonConfirmable onConfirm={() => revertirAPendiente(b)} label="Revertir a pendiente" colorConfirmar={NAVY}
-                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5 }} />
+                  style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, padding: "10px 8px", minHeight: 44 }} />
               )}
               {b.estado === "cancelada" && (
                 <BotonConfirmable onConfirm={() => reactivarBoleta(b)} label="Reactivar" colorConfirmar={"#2F6A46"}
-                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12.5, fontWeight: 600 }} />
+                  style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12.5, fontWeight: 600, padding: "10px 8px", minHeight: 44 }} />
               )}
               <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)}
-                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
-              <button onClick={() => setEliminandoBoleta(b)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }}>Eliminar</button>
+                style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600, padding: "10px 8px", minHeight: 44 }}>Editar</button>
+              <button onClick={() => setEliminandoBoleta(b)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5, padding: "10px 8px", minHeight: 44 }}>Eliminar</button>
             </div>
           </>
         )}
@@ -3087,10 +3127,16 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
         </p>
       ) : (
         <>
+          <div style={{ position: "relative", marginTop: 18 }}>
+            <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+            <input placeholder="Buscar por cliente, perro o N° de boleta..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+              style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
+          </div>
+
           <div style={{ marginTop: 22 }}>
             <h3 style={{ ...sectionTitle, fontSize: 15, marginBottom: 4 }}>Por revisar {porRevisar.length > 0 ? `(${porRevisar.length})` : ""}</h3>
             {porRevisar.length === 0 ? (
-              <p style={{ ...hint, marginTop: 6 }}>No hay facturas por revisar — todo lo generado ya fue aceptado.</p>
+              <p style={{ ...hint, marginTop: 6 }}>{busquedaLimpia ? "Ninguna factura por revisar coincide con la búsqueda." : "No hay facturas por revisar — todo lo generado ya fue aceptado."}</p>
             ) : (
               <>
                 <p style={{ ...hint, marginTop: 2, marginBottom: 10 }}>Boletas recién generadas, todavía sin revisar — al aceptarlas pasan a "Facturas ya ingresadas" y empiezan a contar como venta.</p>
@@ -3134,12 +3180,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
               ))}
             </div>
 
-            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-              <div style={{ position: "relative" }}>
-                <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                  style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
-              </div>
+            <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
               <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 <option value="todos">Todos los clientes</option>
                 {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -3151,10 +3192,14 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             </div>
           </div>
 
-          <button onClick={() => setYaIngresadasAbiertas((v) => !v)}
-            style={{ ...botonSecundario, width: "auto", marginTop: 6 }}>
-            {yaIngresadasAbiertas ? "▾" : "▸"} Facturas ya ingresadas ({todasIngresadas.length})
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+            <button onClick={() => setYaIngresadasAbiertas((v) => !v)} style={{ ...botonSecundario, width: "auto" }}>
+              {yaIngresadasAbiertas ? "▾" : "▸"} Facturas ya ingresadas ({todasIngresadas.length})
+            </button>
+            {yaIngresadasAbiertas && lista.length > 0 && (
+              <button onClick={exportarCsv} style={{ ...botonSecundario, width: "auto" }}>Exportar CSV</button>
+            )}
+          </div>
 
           {yaIngresadasAbiertas && (
             <div style={{ marginTop: 16 }}>
