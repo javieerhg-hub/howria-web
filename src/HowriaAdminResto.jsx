@@ -1548,6 +1548,12 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
     limpiarSaltoCliente();
   }, [saltarClienteDbId, clientes]);
 
+  // Entrar a la ficha de un cliente (o volver a la lista) es un cambio de
+  // pantalla completo, igual que cambiar de pestaña — mismo criterio que
+  // el scrollTo(0,0) de App() al cambiar `tab`, para que no quede a mitad
+  // de la lista larga de la que se venía.
+  useEffect(() => { window.scrollTo(0, 0); }, [perfilId]);
+
   function guardar(datos) {
     const limpio = { ...datos, valorPaseoRef: Number(datos.valorPaseoRef) || 0, pesoKg: Number(datos.pesoKg) || 0, tarifaPaseador: Number(datos.tarifaPaseador) || 0 };
     if (editandoId) {
@@ -6983,6 +6989,12 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
     if (c) { setClienteSelId(c.id); setVista("caso"); }
     limpiarSaltoAlumno?.();
   }, [saltarAlumnoDbId, clientes]);
+
+  // Mismo criterio que Clientes/App(): lista, ficha de ingreso, caso y
+  // calendario son pantallas completas distintas — sin esto, entrar a un
+  // alumno (o volver a la lista) dejaba la página a mitad de scroll de
+  // donde se venía.
+  useEffect(() => { window.scrollTo(0, 0); }, [vista]);
 
   function guardarAlumno(datos) {
     const id = datos.id || Date.now();
