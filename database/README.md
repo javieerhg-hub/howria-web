@@ -106,6 +106,8 @@ no un runner de migraciones.
 | 078 | `pagos_trabajadores_periodo_desde.sql` | 2026-08-17 | Agrega `periodo_desde` a `pagos_trabajadores` — la fecha de inicio del período de TRABAJO que cubre el pago (no el día en que se registró). "Ganancia de Howria" en Finanzas pasa a filtrar los costos por esta fecha, la misma dimensión que ya usan los ingresos, en vez de por `fecha_pago`. |
 | 079 | `logins_pendientes_borrar_rol.sql` | 2026-08-17 | Agrega `rol` a `logins_pendientes_borrar` — "Restaurar" un login eliminado pasa a recrear a la persona con su rol anterior en vez de asignarle siempre "paseador". |
 | 080 | `boletas_ultima_accion.sql` | 2026-08-17 | Agrega `ultima_accion_por`/`ultima_accion_en` a `boletas` y `boletas_adiestramiento` — antes solo "Editar" registraba quién había tocado una boleta; ahora aceptar/marcar pagada/cancelar/revertir/reactivar también dejan rastro. |
+| 081 | `pagos_trabajadores_auditoria.sql` | 2026-08-17 | Agrega `marcado_por`/`deshecho_por`/`deshecho_en` a `pagos_trabajadores` — "Marcar como pagado" ahora registra quién lo confirmó, y "Deshacer" pasa de borrar la fila a marcarla como revertida (sigue en el historial). |
+| 082 | `boletas_adiestramiento_pago_responsable.sql` | 2026-08-17 | Agrega `pagado_a_responsable`/`_por`/`_en` a `boletas_adiestramiento` — Pago trabajadores gana una sección para marcar pagado a cada responsable de adiestramiento, que antes no existía (Finanzas calculaba el costo pero no había dónde saldarlo). |
 
 ## Nota sobre el orden 001–023
 

@@ -345,6 +345,9 @@ export function boletaAdiestramientoToDb(b) {
     editada_en: b.editadaEn || null,
     ultima_accion_por: b.ultimaAccionPor || null,
     ultima_accion_en: b.ultimaAccionEn || null,
+    pagado_a_responsable: b.pagadoAResponsable || false,
+    pagado_a_responsable_por: b.pagadoAResponsablePor || null,
+    pagado_a_responsable_en: b.pagadoAResponsableEn || null,
   };
 }
 
@@ -372,6 +375,9 @@ export function dbToBoletaAdiestramiento(row) {
     editadaEn: row.editada_en || undefined,
     ultimaAccionPor: row.ultima_accion_por || undefined,
     ultimaAccionEn: row.ultima_accion_en || undefined,
+    pagadoAResponsable: row.pagado_a_responsable || false,
+    pagadoAResponsablePor: row.pagado_a_responsable_por || undefined,
+    pagadoAResponsableEn: row.pagado_a_responsable_en || undefined,
     fecha: new Date(row.fecha_hora).toLocaleDateString("es-CL"),
     fechaISO: row.fecha_hora,
   };
@@ -388,6 +394,9 @@ function pagoToDb(p) {
     ajuste: p.ajuste || 0,
     fecha_pago: p.fechaPagoISO || fechaKey(new Date()),
     periodo_desde: p.periodoDesdeISO || null,
+    marcado_por: p.marcadoPor || null,
+    deshecho_por: p.deshechoPor || null,
+    deshecho_en: p.deshechoEn || null,
   };
 }
 
@@ -406,6 +415,9 @@ function dbToPago(row) {
     // día en que se registró) — filas viejas no la tienen, por eso el
     // fallback a fecha_pago en Finanzas (costosPeriodo).
     periodoDesdeISO: row.periodo_desde || null,
+    marcadoPor: row.marcado_por || undefined,
+    deshechoPor: row.deshecho_por || undefined,
+    deshechoEn: row.deshecho_en || undefined,
   };
 }
 
@@ -3684,6 +3696,8 @@ export default function HowriaAdmin() {
         .howria-header { display: flex; }
         .howria-facturas-tabla { display: block; }
         .howria-facturas-tarjetas { display: none; }
+        .howria-pagos-tabla { display: block; }
+        .howria-pagos-tarjetas { display: none; }
         .howria-mispaseos-tabla { display: block; }
         .howria-mispaseos-tarjetas { display: none; }
         .howria-agenda-link-boton { display: none; }
@@ -3723,6 +3737,8 @@ export default function HowriaAdmin() {
           .howria-dia-col-oculta-movil { display: none !important; }
           .howria-facturas-tabla { display: none !important; }
           .howria-facturas-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
+          .howria-pagos-tabla { display: none !important; }
+          .howria-pagos-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
           .howria-inicio-entrenador-encabezado { display: none !important; }
           .howria-agenda-link-tarjeta { display: none !important; }
           .howria-agenda-link-boton { display: flex !important; }
@@ -3839,7 +3855,7 @@ export default function HowriaAdmin() {
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
-        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} />}
+        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} nombreUsuario={user.nombre} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} />}

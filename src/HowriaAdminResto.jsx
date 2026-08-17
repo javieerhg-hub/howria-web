@@ -1841,6 +1841,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const costosPeriodo = useMemo(() =>
     pagosRegistrados
       .filter((p) => {
+        if (p.deshechoEn) return false; // revertido: no es un costo real
         const f = p.periodoDesdeISO || p.fechaPagoISO;
         return f && new Date(f) >= actualDesde;
       })
@@ -3841,7 +3842,7 @@ function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEspe
   return n;
 }
 
-export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos }) {
+export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
   // El bono/descuento se guarda en localStorage apenas se escribe (no solo
   // al marcar el pago) para que no se pierda si alguien lo tipea y se
@@ -3853,6 +3854,14 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
   const hoy = new Date();
   const { desde, hasta, etiqueta } = rangoPeriodo(periodo, hoy);
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
+  // "Cumplimiento" solo tiene sentido contra los días que YA pasaron —
+  // contar toda la semana/mes completo (incluidos días futuros, todavía
+  // sin marcar) hacía que a mitad de período se viera un % bajo sin
+  // ninguna razón real, aunque el paseador llevara un cumplimiento
+  // perfecto hasta ese momento.
+  const hoyMedianoche = new Date(); hoyMedianoche.setHours(0, 0, 0, 0);
+  const mananaMedianoche = new Date(hoyMedianoche); mananaMedianoche.setDate(mananaMedianoche.getDate() + 1);
+  const hastaEfectivo = hasta < mananaMedianoche ? hasta : mananaMedianoche;
 
   function claveAjuste(paseador) {
     return `${paseador}|${periodo}|${etiqueta}`;
@@ -3893,8 +3902,8 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
 
     clientes.filter((c) => c.paseadorNombre).forEach((c) => {
       const nombre = c.paseadorNombre;
-      const programados = programadosEnRango(c, desde, hasta, registroPaseos);
-      const realizadosRaw = realizadosEnRango(registroPaseos, c.id, desde, hasta, nombre);
+      const programados = programadosEnRango(c, desde, hastaEfectivo, registroPaseos);
+      const realizadosRaw = realizadosEnRango(registroPaseos, c.id, desde, hastaEfectivo, nombre);
       const realizados = Math.min(realizadosRaw, programados || realizadosRaw);
       const tarifa = Number(c.tarifaPaseador || 0);
       const montoCliente = realizados * tarifa;
@@ -3917,13 +3926,50 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
         return { ...r, ajuste, monto: r.montoAsegurado + r.montoProyectado + ajuste, cumplimiento: r.programados ? Math.round((r.realizados / r.programados) * 100) : 0 };
       })
       .sort((a, b) => b.monto - a.monto);
-  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hasta, mesActual, anioActual, ajustes, periodo, etiqueta]);
+  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesActual, anioActual, ajustes, periodo, etiqueta]);
 
   const totalAsegurado = resumenPorPaseador.reduce((acc, r) => acc + r.montoAsegurado, 0);
   const totalProyectado = resumenPorPaseador.reduce((acc, r) => acc + r.montoProyectado, 0);
 
+  // Mismo hueco que "Pago trabajadores" venía a cerrar para paseadores,
+  // pero para adiestramiento: Finanzas ya calculaba "Pago a responsables
+  // (adiestramiento)" como costo, pero no había ningún lugar para ver el
+  // desglose por persona ni marcarlo pagado. El reparto vive en la
+  // boleta misma (montoResponsable, ver 069), así que el flag de "ya se
+  // le pagó" también — no hace falta un mecanismo de período aparte
+  // como con pagosRegistrados, cada boleta ya tiene su propia fecha.
+  const resumenPorResponsable = useMemo(() => {
+    const mapa = {};
+    boletasAdiestramiento
+      .filter((b) => b.estado === "pagada" && b._dbId) // recién cuando el cliente pagó hay plata real que repartir
+      .filter((b) => { const f = new Date(b.fechaISO); return f >= desde && f < hasta; })
+      .forEach((b) => {
+        const cliente = clientes.find((c) => esBoletaDeCliente(b, c));
+        const responsable = cliente?.responsableNombre;
+        if (!responsable) return;
+        const monto = montoParaResponsable(b);
+        if (!mapa[responsable]) mapa[responsable] = { responsable, boletasPendientes: [], montoPendiente: 0, montoPagado: 0 };
+        if (b.pagadoAResponsable) mapa[responsable].montoPagado += monto;
+        else { mapa[responsable].montoPendiente += monto; mapa[responsable].boletasPendientes.push(b); }
+      });
+    return Object.values(mapa).sort((a, b) => b.montoPendiente - a.montoPendiente);
+  }, [boletasAdiestramiento, clientes, desde, hasta]);
+
+  function marcarPagadosResponsable(fila) {
+    const ids = new Set(fila.boletasPendientes.map((b) => b._dbId));
+    setBoletasAdiestramiento((prev) => prev.map((b) => (ids.has(b._dbId) ? { ...b, pagadoAResponsable: true, pagadoAResponsablePor: nombreUsuario, pagadoAResponsableEn: new Date().toISOString() } : b)));
+  }
+
+  function desmarcarPagadoResponsable(dbId) {
+    setBoletasAdiestramiento((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, pagadoAResponsable: false, pagadoAResponsablePor: null, pagadoAResponsableEn: null } : b)));
+  }
+
+  const historialResponsables = boletasAdiestramiento
+    .filter((b) => b.pagadoAResponsable)
+    .sort((a, b) => new Date(b.pagadoAResponsableEn || 0) - new Date(a.pagadoAResponsableEn || 0));
+
   function yaPagado(paseador) {
-    return pagosRegistrados.find((p) => p.paseador === paseador && p.periodo === periodo && p.etiqueta === etiqueta);
+    return pagosRegistrados.find((p) => p.paseador === paseador && p.periodo === periodo && p.etiqueta === etiqueta && !p.deshechoEn);
   }
 
   function marcarPagado(fila) {
@@ -3937,11 +3983,17 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
       // que se registra) — así Finanzas puede comparar costos e ingresos
       // usando la misma fecha (la del trabajo), no la de registro.
       periodoDesdeISO: fechaKey(desde),
+      marcadoPor: nombreUsuario,
     }]);
   }
 
+  // Antes esto borraba la fila entera — no quedaba ningún rastro de que
+  // el pago había existido ni de quién lo deshizo. Ahora se marca como
+  // revertida (sigue en el historial, con quién y cuándo) en vez de
+  // desaparecer; yaPagado() y Finanzas (costosPeriodo) ya no la cuentan
+  // como pago vigente porque filtran por deshechoEn.
   function desmarcarPagado(id) {
-    setPagosRegistrados((prev) => prev.filter((p) => p.id !== id));
+    setPagosRegistrados((prev) => prev.map((p) => (p.id === id ? { ...p, deshechoPor: nombreUsuario, deshechoEn: new Date().toISOString() } : p)));
   }
 
   const historial = [...pagosRegistrados].sort((a, b) => b.id - a.id);
@@ -3968,13 +4020,13 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
         <p style={{ ...hint, margin: 0 }}>🕓 Proyectado (falta cobrar/confirmar): <b style={{ color: "#8A6A1E" }}>{fmtCLP(totalProyectado)}</b></p>
       </div>
 
-      <div style={{ overflowX: "auto", marginBottom: 30 }}>
+      <div className="howria-pagos-tabla" style={{ overflowX: "auto", marginBottom: 30 }}>
         <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse", fontSize: 13.5 }}>
           <thead>
             <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
               <th style={{ padding: "8px 10px" }}>Paseador</th>
               <th style={{ padding: "8px 10px" }}>Clientes</th>
-              <th style={{ padding: "8px 10px" }}>Cumplimiento</th>
+              <th style={{ padding: "8px 10px" }} title="Solo cuenta los días del período que ya pasaron — un día programado de mañana no cuenta todavía como pendiente.">Cumplimiento</th>
               <th style={{ padding: "8px 10px", textAlign: "right" }}>Asegurado</th>
               <th style={{ padding: "8px 10px", textAlign: "right" }}>Proyectado</th>
               <th style={{ padding: "8px 10px" }}>Bono/descuento</th>
@@ -4025,6 +4077,57 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
         </table>
       </div>
 
+      <div className="howria-pagos-tarjetas" style={{ marginBottom: 30 }}>
+        {resumenPorPaseador.map((r) => {
+          const pagado = yaPagado(r.paseador);
+          return (
+            <div key={r.paseador} className="howria-card" style={{ background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 12, padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: NAVY }}>{r.paseador}</p>
+                <span style={{ fontSize: 12, color: "#8A7E5C" }}>{r.clientes} cliente(s)</span>
+              </div>
+              <p style={{ margin: "0 0 10px", fontSize: 13 }}>
+                Cumplimiento: <span style={{ fontWeight: 600, color: r.cumplimiento >= 90 ? "#2F6A46" : r.cumplimiento >= 60 ? "#8A6A1E" : RUST }}>{r.realizados}/{r.programados}</span>
+                <span style={{ color: "#8A7E5C", marginLeft: 6, fontSize: 12 }}>({r.cumplimiento}%)</span>
+              </p>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                <span style={{ color: "#8A7E5C" }}>Asegurado</span>
+                <b style={{ color: "#2F6A46" }}>{fmtCLP(r.montoAsegurado)}</b>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}>
+                <span style={{ color: "#8A7E5C" }}>Proyectado</span>
+                <b style={{ color: "#8A6A1E" }}>{fmtCLP(r.montoProyectado)}</b>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>Bono/descuento</label>
+                <input type="number" value={r.ajuste || ""} placeholder="0" onChange={(e) => actualizarAjuste(r.paseador, e.target.value)}
+                  style={{ ...input, marginBottom: 0, width: "100%" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 13, color: "#8A7E5C" }}>Total</span>
+                <span style={{ fontSize: 19, fontWeight: 700, color: NAVY }}>{fmtCLP(r.monto)}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5 }}>Descargar</button>
+                {pagado ? (
+                  <>
+                    <span style={{ fontSize: 12, color: "#2F6A46", background: "#D8ECDE", padding: "8px 12px", borderRadius: 20, fontWeight: 600 }}>Pagado el {pagado.fechaPago}</span>
+                    <BotonEliminar onConfirm={() => desmarcarPagado(pagado.id)} label="Deshacer"
+                      style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12, borderColor: RUST, color: RUST }} />
+                  </>
+                ) : (
+                  <BotonEliminar onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado"
+                    style={{ ...botonPrincipal, width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {resumenPorPaseador.length === 0 && (
+          <p style={{ ...hint, textAlign: "center" }}>No hay paseadores asignados todavía.</p>
+        )}
+      </div>
+
       <p style={label}>Historial de pagos realizados</p>
       {cargandoPagos ? (
         <p style={{ ...hint, marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando historial de pagos…</p>
@@ -4034,9 +4137,61 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
         <div>
           {historial.map((p) => (
             <FilaLista key={p.id} Icono={Banknote} titulo={p.paseador}
-              subtitulo={`${p.periodo === "semana" ? "Semana" : "Mes"} ${p.etiqueta} · pagado el ${p.fechaPago}`}
-              valor={fmtCLP(p.monto)} valorColor={NAVY} />
+              subtitulo={
+                `${p.periodo === "semana" ? "Semana" : "Mes"} ${p.etiqueta} · pagado el ${p.fechaPago}${p.marcadoPor ? ` por ${p.marcadoPor}` : ""}` +
+                (p.deshechoEn ? ` · revertido por ${p.deshechoPor || "alguien"} el ${new Date(p.deshechoEn).toLocaleDateString("es-CL")}` : "")
+              }
+              valor={fmtCLP(p.monto)} valorColor={p.deshechoEn ? "#B0A587" : NAVY} />
           ))}
+        </div>
+      )}
+
+      <p style={{ ...label, marginTop: 30 }}>Pago a responsables (adiestramiento)</p>
+      <p style={{ ...hint, marginBottom: 12 }}>
+        Lo que le corresponde a cada responsable en las boletas de adiestramiento que el cliente ya pagó, en este mismo período — aparte del pago a paseadores de arriba.
+      </p>
+      {resumenPorResponsable.length === 0 ? (
+        <p style={{ ...hint, marginBottom: 24 }}>Nadie tiene boletas de adiestramiento pagadas por el cliente, todavía sin pagarte, en este período.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+          {resumenPorResponsable.map((r) => (
+            <div key={r.responsable} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, background: CREAM_SOFT, borderRadius: 8, padding: "10px 14px" }}>
+              <div>
+                <b style={{ color: NAVY }}>{r.responsable}</b>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>{r.boletasPendientes.length} boleta(s) pendiente(s) de pagarle</p>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <b style={{ color: "#8A6A1E" }}>{fmtCLP(r.montoPendiente)}</b>
+                <BotonEliminar onConfirm={() => marcarPagadosResponsable(r)} label="Marcar pagado" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p style={label}>Historial de pagos a responsables</p>
+      {historialResponsables.length === 0 ? (
+        <p style={{ ...hint, marginTop: 8 }}>Todavía no se ha marcado ningún pago a un responsable.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {historialResponsables.map((b) => {
+            const responsable = clientes.find((c) => esBoletaDeCliente(b, c))?.responsableNombre || "—";
+            return (
+              <div key={b._dbId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "8px 0", borderBottom: "1px solid #F1EAD9" }}>
+                <div>
+                  <b style={{ color: NAVY, fontSize: 13.5 }}>{responsable}</b>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>
+                    Boleta N°{String(b.numero).padStart(3, "0")} de {b.cliente} · pagado el {b.pagadoAResponsableEn ? new Date(b.pagadoAResponsableEn).toLocaleDateString("es-CL") : "—"}{b.pagadoAResponsablePor ? ` por ${b.pagadoAResponsablePor}` : ""}
+                  </p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <b style={{ color: NAVY, fontSize: 13 }}>{fmtCLP(montoParaResponsable(b))}</b>
+                  <BotonEliminar onConfirm={() => desmarcarPagadoResponsable(b._dbId)} label="Deshacer"
+                    style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, borderColor: RUST, color: RUST }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
