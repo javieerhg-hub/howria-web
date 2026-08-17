@@ -3808,7 +3808,10 @@ export default function HowriaAdmin() {
           .howria-week-celda { padding: 5px 2px !important; }
           .howria-week-celda p:first-child { font-size: 9px !important; }
           .howria-week-celda p:last-child { font-size: 12.5px !important; }
-          .howria-dia-pills { flex-wrap: nowrap !important; overflow-x: auto !important; padding-bottom: 4px; }
+          .howria-dia-pills { flex-wrap: nowrap !important; }
+          .howria-dia-pills > button { min-width: 0 !important; flex: 1 1 0 !important; padding: 8px 2px !important; }
+          .howria-dia-pills > button > div:first-child { font-size: 9px !important; }
+          .howria-dia-pills > button > div:nth-child(2) { font-size: 13px !important; }
           .howria-mispaseos-tabla { display: none !important; }
           .howria-mispaseos-tarjetas { display: flex !important; flex-direction: column; gap: 8px; }
           .howria-photo-row > div:first-child {
