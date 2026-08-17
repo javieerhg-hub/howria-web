@@ -7833,7 +7833,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
 // ---------- Seguimiento de prospectos (ventas) ----------
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", direccion: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
-export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque, rolActual }) {
+export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque, rolActual, nombreActual }) {
   // Crear/eliminar prospectos es trabajo de coordinador/administrador
   // únicamente — así lo exige la política de Postgres desde el principio
   // (mi_rol() in ('coordinador','administrador'), ver
@@ -7850,6 +7850,7 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState(PROSPECTO_VACIO);
   const [filtroEstado, setFiltroEstado] = useState("activos");
+  const [soloMios, setSoloMios] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [intentoCrear, setIntentoCrear] = useState(false);
 
@@ -7898,6 +7899,7 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
   const busquedaLimpia = busqueda.trim().toLowerCase();
 
   const listaFiltrada = prospectos
+    .filter((p) => !soloMios || p.asignadoA === nombreActual)
     .filter((p) => {
       if (busquedaLimpia) {
         return p.nombre.toLowerCase().includes(busquedaLimpia)
@@ -7968,10 +7970,20 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
           </div>
         )}
 
-        <div style={{ position: "relative", marginTop: 16, maxWidth: 340 }}>
-          <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-          <input placeholder="Buscar por nombre, teléfono o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-            style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 16 }}>
+          <div style={{ position: "relative", maxWidth: 340, flex: "1 1 260px" }}>
+            <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+            <input placeholder="Buscar por nombre, teléfono o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+              style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
+          </div>
+          {nombreActual && (
+            <button onClick={() => setSoloMios((v) => !v)}
+              style={{ padding: "9px 16px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", flex: "none",
+                border: soloMios ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                background: soloMios ? NAVY : "#FFFFFF", color: soloMios ? CREAM : INK, fontWeight: soloMios ? 600 : 400 }}>
+              Asignados a mí
+            </button>
+          )}
         </div>
         <p style={{ ...hint, marginTop: 6 }}>La búsqueda revisa todos los prospectos guardados, sin importar su estado — útil para encontrar un contacto o cliente pasado.</p>
 
@@ -8014,7 +8026,6 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <div>
                   <b style={{ color: NAVY, fontSize: 15 }}>{p.nombre}</b>
-                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
                   <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
                     {p.telefono || "sin teléfono"} {p.email && `· ${p.email}`} {p.perro && `· 🐾 ${p.perro}`} · {p.origen}
                     {p.tipoServicio?.length > 0 && ` · interés: ${p.tipoServicio.map((t) => TIPOS_SERVICIO.find((x) => x.id === t)?.nombre).join(", ")}`}
