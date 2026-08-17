@@ -5843,6 +5843,11 @@ function construirHilos(correos) {
       noLeidos: mensajes.filter((m) => m.direccion === "entrante" && !m.leido).length,
       clienteId: conFicha?.clienteId || null,
       prospectoId: conFicha?.prospectoId || null,
+      // Un hilo cuenta como archivado si TODOS sus mensajes lo están —
+      // así, si llega una respuesta nueva después de archivar, el hilo
+      // reaparece solo en la bandeja activa (ese mensaje nuevo nace sin
+      // archivar), sin que haga falta desarchivar a mano.
+      archivado: mensajes.every((m) => m.archivado),
     });
   }
   hilos.sort((a, b) => new Date(b.ultimo.creadoEn) - new Date(a.ultimo.creadoEn));
@@ -5945,8 +5950,64 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   const [respuesta, setRespuesta] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState("");
+  const [verArchivados, setVerArchivados] = useState(false);
+  // Redactar un correo nuevo (no atado a ningún hilo existente) — antes
+  // solo se podía responder dentro de un hilo que ya existía porque
+  // alguien había escrito primero. El servidor (api/responder-correo.js)
+  // ya soportaba esto de sobra, no exigía un hilo previo — solo faltaba
+  // el formulario acá.
+  const [componiendo, setComponiendo] = useState(false);
+  const [nuevoDestinatario, setNuevoDestinatario] = useState("");
+  const [nuevoAsunto, setNuevoAsunto] = useState("");
+  const [nuevoCuerpo, setNuevoCuerpo] = useState("");
+  const [enviandoNuevo, setEnviandoNuevo] = useState(false);
+  const [errorNuevo, setErrorNuevo] = useState("");
 
   const hilos = useMemo(() => construirHilos(correos), [correos]);
+
+  function archivarHilo(hilo, archivar) {
+    const ids = hilo.mensajes.map((m) => m.id);
+    supabase.from("correos").update({ archivado: archivar }).in("id", ids).then(({ error }) => {
+      if (error) { showToast("No se pudo archivar el hilo."); return; }
+      setCorreos((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, archivado: archivar } : c)));
+      if (hiloAbierto === hilo.contraparte) setHiloAbierto(null);
+    });
+  }
+
+  async function enviarNuevo() {
+    if (!nuevoDestinatario.trim() || !nuevoCuerpo.trim() || enviandoNuevo) return;
+    setEnviandoNuevo(true);
+    setErrorNuevo("");
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const clienteCoincide = clientes.find((c) => c.email?.toLowerCase() === nuevoDestinatario.trim().toLowerCase());
+      const prospectoCoincide = prospectos.find((p) => p.email?.toLowerCase() === nuevoDestinatario.trim().toLowerCase());
+      const resp = await fetch("/api/responder-correo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({
+          destinatario: nuevoDestinatario.trim(),
+          asunto: nuevoAsunto.trim() || undefined,
+          cuerpo: nuevoCuerpo,
+          clienteId: clienteCoincide?._dbId,
+          prospectoId: prospectoCoincide?._dbId,
+        }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setErrorNuevo(resultado.error || "No se pudo enviar el correo.");
+        return;
+      }
+      if (resultado.correo) setCorreos((prev) => [dbToCorreo(resultado.correo), ...prev]);
+      setNuevoDestinatario(""); setNuevoAsunto(""); setNuevoCuerpo("");
+      setComponiendo(false);
+      showToast("Correo enviado.");
+    } catch {
+      setErrorNuevo("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setEnviandoNuevo(false);
+    }
+  }
 
   function nombreDe(hilo) {
     if (hilo.clienteId) {
@@ -5961,12 +6022,14 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   }
 
   const busquedaLimpia = busqueda.trim().toLowerCase();
-  const hilosFiltrados = hilos.filter((h) => {
+  function coincide(h) {
     if (!busquedaLimpia) return true;
     return h.contraparte.includes(busquedaLimpia)
       || nombreDe(h).toLowerCase().includes(busquedaLimpia)
       || (h.ultimo.asunto || "").toLowerCase().includes(busquedaLimpia);
-  });
+  }
+  const hilosFiltrados = hilos.filter((h) => !h.archivado && coincide(h));
+  const hilosArchivados = hilos.filter((h) => h.archivado && coincide(h));
 
   function abrirHilo(hilo) {
     const yaAbierto = hiloAbierto === hilo.contraparte;
@@ -6026,8 +6089,27 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Mail — contacto@howria.cl</h2>
-        <p style={hint}>Correos recibidos en contacto@howria.cl y confirmaciones enviadas a clientes, agrupados por conversación.</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={sectionTitle}>Mail — contacto@howria.cl</h2>
+            <p style={hint}>Correos recibidos en contacto@howria.cl y confirmaciones enviadas a clientes, agrupados por conversación.</p>
+          </div>
+          <button onClick={() => { setComponiendo((v) => !v); setErrorNuevo(""); }} style={{ ...botonSecundario, flex: "none" }}>
+            {componiendo ? "Cancelar" : "+ Redactar nuevo"}
+          </button>
+        </div>
+        {componiendo && (
+          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14, marginTop: 14, display: "grid", gap: 10 }}>
+            <input placeholder="Para (correo)" type="email" value={nuevoDestinatario} onChange={(e) => setNuevoDestinatario(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            <input placeholder="Asunto" value={nuevoAsunto} onChange={(e) => setNuevoAsunto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            <textarea placeholder="Mensaje..." value={nuevoCuerpo} onChange={(e) => setNuevoCuerpo(e.target.value)} rows={5} style={{ ...input, marginBottom: 0, resize: "vertical" }} />
+            {errorNuevo && <p style={{ color: RUST, fontSize: 12.5, margin: 0 }}>{errorNuevo}</p>}
+            <button onClick={enviarNuevo} disabled={!nuevoDestinatario.trim() || !nuevoCuerpo.trim() || enviandoNuevo}
+              style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: !nuevoDestinatario.trim() || !nuevoCuerpo.trim() || enviandoNuevo ? 0.6 : 1 }}>
+              {enviandoNuevo ? "Enviando..." : "Enviar"}
+            </button>
+          </div>
+        )}
         <input placeholder="Buscar por nombre, correo o asunto…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginTop: 14, marginBottom: 0 }} />
       </div>
 
@@ -6056,12 +6138,16 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
 
                 {abierto && (
                   <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3", display: "grid", gap: 14 }}>
-                    {(hilo.clienteId || hilo.prospectoId) && (
-                      <button onClick={() => (hilo.clienteId ? onVerCliente(hilo.clienteId) : onVerProspecto(hilo.contraparte))}
-                        style={{ ...botonSecundario, width: "auto", padding: "6px 14px", fontSize: 12.5, flex: "none", alignSelf: "flex-start" }}>
-                        Ver ficha de {hilo.clienteId ? "cliente" : "prospecto"}
-                      </button>
-                    )}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {(hilo.clienteId || hilo.prospectoId) && (
+                        <button onClick={() => (hilo.clienteId ? onVerCliente(hilo.clienteId) : onVerProspecto(hilo.contraparte))}
+                          style={{ ...botonSecundario, width: "auto", padding: "6px 14px", fontSize: 12.5, flex: "none" }}>
+                          Ver ficha de {hilo.clienteId ? "cliente" : "prospecto"}
+                        </button>
+                      )}
+                      <BotonConfirmable onConfirm={() => archivarHilo(hilo, true)} label="Archivar hilo" colorConfirmar={NAVY}
+                        style={{ border: "1px solid #DCD2B4", background: "none", color: "#6B6248", borderRadius: 8, padding: "6px 14px", fontSize: 12.5, cursor: "pointer" }} />
+                    </div>
                     {hilo.mensajes.map((m) => (
                       <div key={m.id}>
                         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
@@ -6088,6 +6174,29 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
               </div>
             );
           })}
+        </div>
+      )}
+
+      {hilosArchivados.length > 0 && (
+        <div className="howria-card" style={tarjeta}>
+          <button onClick={() => setVerArchivados((v) => !v)}
+            style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", textAlign: "left", font: "inherit" }}>
+            <h2 style={sectionTitle}>Archivados ({hilosArchivados.length})</h2>
+            <span style={{ fontSize: 16, color: "#8A7E5C" }}>{verArchivados ? "▾" : "▸"}</span>
+          </button>
+          {verArchivados && (
+            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+              {hilosArchivados.map((hilo) => (
+                <div key={hilo.contraparte} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, background: CREAM_SOFT, borderRadius: 8, padding: "10px 14px" }}>
+                  <div style={{ fontSize: 13 }}>
+                    <b style={{ color: NAVY }}>{nombreDe(hilo)}</b>
+                    <span style={{ color: "#8A7E5C" }}> · {hilo.ultimo.asunto || "(sin asunto)"} · {fmtFechaCorreo(hilo.ultimo.creadoEn)}</span>
+                  </div>
+                  <button onClick={() => archivarHilo(hilo, false)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Desarchivar</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -7409,12 +7518,15 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
 const PROSPECTO_VACIO = { nombre: "", telefono: "", perro: "", direccion: "", origen: "Instagram", tipoServicio: ["paseos"], estado: "nuevo", proximoSeguimiento: "", asignadoA: "", bitacora: [] };
 
 export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, permisosRoles, cargando, correos = [], enfoqueEmail, limpiarEnfoque, rolActual }) {
-  // El entrenador ve y da seguimiento a los prospectos de sus propias
-  // citas (RLS scoped, ver database/055), pero no crea prospectos nuevos
-  // a mano ni los elimina — eso sigue siendo trabajo de coordinador/
-  // administrador. Sin esto, tocar esos botones fallaría en silencio
-  // contra la política de Postgres en vez de explicar por qué.
-  const puedeCrearYEliminar = rolActual !== "entrenador";
+  // Crear/eliminar prospectos es trabajo de coordinador/administrador
+  // únicamente — así lo exige la política de Postgres desde el principio
+  // (mi_rol() in ('coordinador','administrador'), ver
+  // 012_equipo_agenda_prospectos.sql), entrenador solo tiene una
+  // excepción angosta para SUS propios prospectos (database/055).
+  // "!== entrenador" dejaba pasar también a paseador, que nunca tuvo
+  // permiso — tocar esos botones fallaría en silencio contra la
+  // política de Postgres en vez de explicar por qué.
+  const puedeCrearYEliminar = rolActual === "coordinador" || rolActual === "administrador";
   // Solo tiene sentido ofrecer como "responsable" a alguien que de verdad
   // puede entrar a esta pestaña — si permisosRoles todavía no cargó, se
   // muestra la lista completa para no dejar el selector vacío mientras tanto.

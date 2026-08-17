@@ -1424,6 +1424,7 @@ export function dbToCorreo(row) {
     clienteId: row.cliente_id,
     prospectoId: row.prospecto_id,
     leido: row.leido,
+    archivado: row.archivado || false,
     creadoEn: row.creado_en,
   };
 }
