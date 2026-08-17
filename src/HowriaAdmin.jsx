@@ -439,6 +439,10 @@ function citaToDb(c) {
     // confirmada_en / email_enviado no se mandan desde acá — los escribe
     // únicamente api/confirmar-cita.js, para que un guardado normal del
     // cliente nunca los pise con estado local desactualizado.
+    plan_id: c.planId || null,
+    // 0 es un número de clase válido (convención para "Evaluación" en
+    // planes_clases) — con "||" se habría perdido y guardado null.
+    numero_clase: c.numeroClase ?? null,
   };
 }
 function dbToCita(row) {
@@ -458,6 +462,8 @@ function dbToCita(row) {
     duracionMin: row.duracion_min || 60,
     confirmadaEn: row.confirmada_en,
     emailEnviado: row.email_enviado || false,
+    planId: row.plan_id,
+    numeroClase: row.numero_clase,
   };
 }
 

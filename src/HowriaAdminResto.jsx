@@ -1038,21 +1038,25 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         ))}
       </div>
 
-      <p style={label} id="cliente-dias-label">Días de paseo habituales</p>
-      <div role="group" aria-labelledby="cliente-dias-label" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {DIAS_SEMANA.map((d, dow) => (
-          <button key={dow} type="button" onClick={() => toggleDiaHabitual(dow)} aria-pressed={form.diasHabituales.includes(dow)}
-            style={{ width: 34, height: 34, borderRadius: 8, cursor: "pointer",
-              border: form.diasHabituales.includes(dow) ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
-              background: form.diasHabituales.includes(dow) ? NAVY : "#FFFFFF",
-              color: form.diasHabituales.includes(dow) ? CREAM : INK, fontSize: 13 }}>
-            {d}
-          </button>
-        ))}
-      </div>
+      {form.tipoServicio.includes("paseos") && (
+        <>
+          <p style={label} id="cliente-dias-label">Días de paseo habituales</p>
+          <div role="group" aria-labelledby="cliente-dias-label" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+            {DIAS_SEMANA.map((d, dow) => (
+              <button key={dow} type="button" onClick={() => toggleDiaHabitual(dow)} aria-pressed={form.diasHabituales.includes(dow)}
+                style={{ width: 34, height: 34, borderRadius: 8, cursor: "pointer",
+                  border: form.diasHabituales.includes(dow) ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
+                  background: form.diasHabituales.includes(dow) ? NAVY : "#FFFFFF",
+                  color: form.diasHabituales.includes(dow) ? CREAM : INK, fontSize: 13 }}>
+                {d}
+              </button>
+            ))}
+          </div>
 
-      <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
-      <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />
+          <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
+          <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />
+        </>
+      )}
 
       <p style={label}>Estado del cliente y fecha de inicio</p>
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
@@ -1454,17 +1458,19 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
         <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
           <h3 style={sectionTitle}>Plan de trabajo</h3>
           <div style={{ display: "grid", gap: 18 }}>
-            <div>
-              <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
-              <div style={{ display: "flex", gap: 6 }}>
-                {DIAS_SEMANA.map((d, dow) => (
-                  <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
-                    background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
-                    {d}
-                  </span>
-                ))}
+            {cliente.tipoServicio?.includes("paseos") && (
+              <div>
+                <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {DIAS_SEMANA.map((d, dow) => (
+                    <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+                      background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
+                      {d}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <p style={label}>Objetivos a cumplir</p>
               <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
@@ -4984,6 +4990,15 @@ function hayChoqueHorario(citas, adiestrador, fechaISO, duracionMin = 60) {
   });
 }
 
+// Convierte un fechaISO guardado (siempre en UTC, via toISOString()) al
+// valor que espera un <input type="datetime-local"> para precargarlo con
+// la hora LOCAL correcta — slice(0,16) directo sobre el ISO se queda con
+// la hora en UTC, que se ve corrida si el horario local no coincide.
+function fechaISOaInputLocal(fechaISO) {
+  const d = new Date(fechaISO);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 const NOMBRES_ESTADO_CITA = { pendiente: "Pendiente", agendada: "Agendada", rechazada: "Rechazada", cancelada: "Cancelada", realizada: "Realizada" };
 
 // Bloques horarios de 1 hora que el adiestrador puede habilitar por día —
@@ -5911,7 +5926,7 @@ function BarraProgreso({ pct }) {
 // pedir confirmación, como cualquier casillero de una lista de tareas).
 // "+ Detalle" es aparte y opcional, para quien quiera anotar fecha
 // distinta, qué se trabajó o alguna nota — no es obligatorio completarlo.
-function FilaChecklist({ etiqueta, existente, onMarcarRapido, onDeshacer, onAbrirDetalle }) {
+function FilaChecklist({ etiqueta, existente, citaProgramada, onMarcarRapido, onDeshacer, onAbrirDetalle, onAbrirAgendar, onCancelarAgenda }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 2px" }}>
       <button onClick={() => (existente ? onDeshacer() : onMarcarRapido())} aria-pressed={!!existente}
@@ -5930,7 +5945,21 @@ function FilaChecklist({ etiqueta, existente, onMarcarRapido, onDeshacer, onAbri
           </div>
         )}
         {existente?.notas && <p style={{ margin: "3px 0 0", fontSize: 11, color: "#8A7E5C" }}>{existente.notas}</p>}
+        {!existente && citaProgramada && (
+          <p style={{ margin: "3px 0 0", fontSize: 11, color: "#1E5A7A" }}>
+            📅 Agendada {new Date(citaProgramada.fechaISO).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" })}{" "}
+            {new Date(citaProgramada.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+            {" · "}
+            <button onClick={onCancelarAgenda} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 11, padding: 0 }}>quitar</button>
+          </p>
+        )}
       </div>
+      {!existente && (
+        <button onClick={onAbrirAgendar} title="Fijar fecha y hora de esta clase, para que aparezca en el Calendario"
+          style={{ border: "none", background: "none", color: "#1E5A7A", cursor: "pointer", fontSize: 11, flex: "none" }}>
+          {citaProgramada ? "Reagendar" : "Agendar"}
+        </button>
+      )}
       <button onClick={onAbrirDetalle} title="Qué vio el entrenador, fecha, notas (opcional)"
         style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 11, flex: "none" }}>
         {existente ? "Editar" : "+ Detalle"}
@@ -5944,12 +5973,14 @@ function FilaChecklist({ etiqueta, existente, onMarcarRapido, onDeshacer, onAbri
 // número de clases y si incluye evaluación se editan en cualquier
 // momento (no dependen de una factura); vincular/desvincular una
 // factura ya enviada es aparte, solo para referencia contable.
-function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, deshacerClase, actualizarPlan, nombreActual }) {
+function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, deshacerClase, actualizarPlan, nombreActual, cliente, citasAgenda = [], setCitas }) {
   const [editando, setEditando] = useState(false);
   const [detalleAbierto, setDetalleAbierto] = useState(null);
   const [fechaForm, setFechaForm] = useState("");
   const [temasForm, setTemasForm] = useState([]);
   const [notasForm, setNotasForm] = useState("");
+  const [agendando, setAgendando] = useState(null);
+  const [fechaAgendaForm, setFechaAgendaForm] = useState("");
 
   const total = (plan.numClases || 0) + (plan.incluyeEvaluacion ? 1 : 0);
   const hechas = clasesDelPlan.length;
@@ -5959,8 +5990,22 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
   function itemDe(numero) {
     return clasesDelPlan.find((cr) => cr.numeroClase === numero);
   }
+  // Cita agendada (citas_agenda, tipo "clase") para esta clase puntual del
+  // plan — se busca por plan_id + numero_clase, no por cliente, porque un
+  // mismo cliente puede tener más de un plan a la vez.
+  function citaDe(numero) {
+    return citasAgenda.find((c) => c.planId === plan._dbId && c.numeroClase === numero && c.estado !== "cancelada");
+  }
+  // Al marcar la clase como hecha, la cita agendada (si había) ya cumplió
+  // su propósito de recordatorio — se borra para que no quede un pendiente
+  // fantasma en el Calendario de algo que ya está registrado acá.
+  function limpiarAgendaDe(numero) {
+    const cita = citaDe(numero);
+    if (cita?._dbId && setCitas) setCitas((prev) => prev.filter((c) => c._dbId !== cita._dbId));
+  }
   async function marcarRapido(numero) {
     await marcarClase(plan._dbId, numero, { fechaRealizada: new Date().toISOString().slice(0, 10), temas: [], notas: "", creadoPor: nombreActual });
+    limpiarAgendaDe(numero);
   }
   function abrirDetalle(numero) {
     const existente = itemDe(numero);
@@ -5974,7 +6019,40 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
   }
   async function guardarDetalle() {
     await marcarClase(plan._dbId, detalleAbierto, { fechaRealizada: fechaForm, temas: temasForm, notas: notasForm, creadoPor: nombreActual });
+    limpiarAgendaDe(detalleAbierto);
     setDetalleAbierto(null);
+  }
+  function abrirAgendar(numero) {
+    const cita = citaDe(numero);
+    setAgendando(numero);
+    setFechaAgendaForm(cita ? fechaISOaInputLocal(cita.fechaISO) : "");
+  }
+  function guardarAgenda() {
+    if (!fechaAgendaForm || !cliente?.adiestradorNombre || !setCitas) return;
+    if (new Date(fechaAgendaForm).getTime() <= Date.now()) {
+      showToast("La fecha y hora deben ser en el futuro.");
+      return;
+    }
+    if (hayChoqueHorario(citasAgenda, cliente.adiestradorNombre, fechaAgendaForm)) {
+      showToast(`${cliente.adiestradorNombre} ya tiene otra cita agendada en ese horario.`);
+      return;
+    }
+    const existenteCita = citaDe(agendando);
+    if (existenteCita?._dbId) {
+      setCitas((prev) => prev.map((c) => (c._dbId === existenteCita._dbId ? { ...c, fechaISO: new Date(fechaAgendaForm).toISOString() } : c)));
+    } else {
+      setCitas((prev) => [...prev, {
+        id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
+        email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
+        tipo: "clase", adiestrador: cliente.adiestradorNombre, fechaISO: new Date(fechaAgendaForm).toISOString(),
+        estado: "agendada", origen: "staff", notas: "", planId: plan._dbId, numeroClase: agendando,
+      }]);
+    }
+    setAgendando(null);
+  }
+  function cancelarAgenda(numero) {
+    const cita = citaDe(numero);
+    if (cita?._dbId && setCitas) setCitas((prev) => prev.filter((c) => c._dbId !== cita._dbId));
   }
 
   if (!plan._dbId) {
@@ -6025,10 +6103,14 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
 
       <div style={{ marginTop: 12, display: "flex", flexDirection: "column" }}>
         {plan.incluyeEvaluacion && (
-          <FilaChecklist etiqueta="Evaluación" existente={itemDe(0)} onMarcarRapido={() => marcarRapido(0)} onDeshacer={() => deshacerClase(plan._dbId, 0)} onAbrirDetalle={() => abrirDetalle(0)} />
+          <FilaChecklist etiqueta="Evaluación" existente={itemDe(0)} citaProgramada={citaDe(0)}
+            onMarcarRapido={() => marcarRapido(0)} onDeshacer={() => deshacerClase(plan._dbId, 0)}
+            onAbrirDetalle={() => abrirDetalle(0)} onAbrirAgendar={() => abrirAgendar(0)} onCancelarAgenda={() => cancelarAgenda(0)} />
         )}
         {Array.from({ length: plan.numClases || 0 }, (_, i) => i + 1).map((n) => (
-          <FilaChecklist key={n} etiqueta={`Clase ${n}`} existente={itemDe(n)} onMarcarRapido={() => marcarRapido(n)} onDeshacer={() => deshacerClase(plan._dbId, n)} onAbrirDetalle={() => abrirDetalle(n)} />
+          <FilaChecklist key={n} etiqueta={`Clase ${n}`} existente={itemDe(n)} citaProgramada={citaDe(n)}
+            onMarcarRapido={() => marcarRapido(n)} onDeshacer={() => deshacerClase(plan._dbId, n)}
+            onAbrirDetalle={() => abrirDetalle(n)} onAbrirAgendar={() => abrirAgendar(n)} onCancelarAgenda={() => cancelarAgenda(n)} />
         ))}
         {detalleAbierto !== null && (
           <div style={{ marginTop: 6, background: CREAM_SOFT, borderRadius: 6, padding: 10 }}>
@@ -6038,6 +6120,22 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={guardarDetalle} style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0 }}>Guardar</button>
               <button onClick={() => setDetalleAbierto(null)} style={botonSecundario}>Cancelar</button>
+            </div>
+          </div>
+        )}
+        {agendando !== null && (
+          <div style={{ marginTop: 6, background: "#EAF2F6", borderRadius: 6, padding: 10 }}>
+            <label style={{ fontSize: 12, color: "#6B6248", display: "block", marginBottom: 6 }}>
+              Fecha y hora de {agendando === 0 ? "la evaluación" : `la clase ${agendando}`}{cliente?.adiestradorNombre ? ` con ${cliente.adiestradorNombre}` : ""}
+            </label>
+            {cliente?.adiestradorNombre ? (
+              <input type="datetime-local" value={fechaAgendaForm} onChange={(e) => setFechaAgendaForm(e.target.value)} style={{ ...input, marginBottom: 8, maxWidth: 220 }} />
+            ) : (
+              <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>Este alumno no tiene entrenador asignado — asígnalo en "Editar ficha" antes de agendar.</p>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={guardarAgenda} disabled={!cliente?.adiestradorNombre} style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0, opacity: cliente?.adiestradorNombre ? 1 : 0.5, cursor: cliente?.adiestradorNombre ? "pointer" : "not-allowed" }}>Guardar</button>
+              <button onClick={() => setAgendando(null)} style={botonSecundario}>Cancelar</button>
             </div>
           </div>
         )}
@@ -6082,7 +6180,7 @@ function FormularioNuevoPlan({ boletasDisponibles, onCrear, onCancelar }) {
   );
 }
 
-function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, marcarClase, deshacerClase, actualizarPlan, crearPlan, nombreActual, esAdmin, onEditar, onEliminar, onToggleAccesoRapido, onVolver }) {
+function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, marcarClase, deshacerClase, actualizarPlan, crearPlan, nombreActual, esAdmin, citasAgenda = [], setCitas, onEditar, onEliminar, onToggleAccesoRapido, onVolver }) {
   const [creandoPlan, setCreandoPlan] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
@@ -6184,7 +6282,7 @@ function CasoAlumno({ cliente, planes, boletasAdiestramiento, clasesRealizadas, 
                     clasesDelPlan={clasesRealizadas.filter((cr) => cr.planId === plan._dbId)}
                     marcarClase={marcarClase} deshacerClase={deshacerClase}
                     actualizarPlan={(cambios) => actualizarPlan(plan._dbId, cambios)}
-                    nombreActual={nombreActual} />
+                    nombreActual={nombreActual} cliente={cliente} citasAgenda={citasAgenda} setCitas={setCitas} />
                 ))
               )}
             </>
@@ -6926,7 +7024,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
       boletasAdiestramiento={boletasAdiestramiento}
       clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase}
       actualizarPlan={actualizarPlan} crearPlan={(datos) => crearPlan(clienteSel, datos)}
-      nombreActual={nombreActual} esAdmin={esAdmin}
+      nombreActual={nombreActual} esAdmin={esAdmin} citasAgenda={citasAgenda} setCitas={setCitas}
       onToggleAccesoRapido={() => toggleAccesoRapido(clienteSel)}
       onEliminar={() => eliminarAlumno(clienteSel)}
       onEditar={() => setVista("ingreso")} onVolver={() => setVista("lista")} />;
