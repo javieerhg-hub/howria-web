@@ -1822,9 +1822,18 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
   const actual = calcularTotales(filtradas);
   const anterior = calcularTotales(anteriores);
+  // Se filtra por la fecha del PERÍODO DE TRABAJO que cubre el pago
+  // (periodoDesdeISO), la misma dimensión que usan los ingresos
+  // (fechaISO de la boleta) — no por fecha_pago (el día en que se tildó
+  // el pago), que puede caer en un período totalmente distinto al
+  // trabajo que paga. Pagos viejos, de antes de que existiera
+  // periodoDesdeISO, usan fechaPagoISO como respaldo.
   const costosPeriodo = useMemo(() =>
     pagosRegistrados
-      .filter((p) => p.fechaPagoISO && new Date(p.fechaPagoISO) >= actualDesde)
+      .filter((p) => {
+        const f = p.periodoDesdeISO || p.fechaPagoISO;
+        return f && new Date(f) >= actualDesde;
+      })
       .reduce((acc, p) => acc + Number(p.monto || 0), 0),
     [pagosRegistrados, actualDesde]);
   // Plata pagada a responsables de cuenta en boletas de adiestramiento —
@@ -3112,7 +3121,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 }
 
 // ---------- Panel admin (usuarios) ----------
-export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro }) {
+export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro, setTareasEquipo, setObjetivosSemanales, setObjetivosMensuales, setProspectos, setCitasAgenda }) {
   const [busqueda, setBusqueda] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
@@ -3129,6 +3138,12 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   const [clientesSeleccionadosNuevo, setClientesSeleccionadosNuevo] = useState([]);
   const [capacitacionAbiertaId, setCapacitacionAbiertaId] = useState(null);
   const [gestionandoSolicitudId, setGestionandoSolicitudId] = useState(null);
+  // Una solicitud de registro es gente nueva sin cuenta previa — no hay
+  // "rol anterior" que restaurar (a diferencia de un login eliminado),
+  // así que en vez de forzar "paseador" y confiar en que después alguien
+  // se acuerde de corregirlo, se elige el rol acá mismo, como parte del
+  // acto de aprobar.
+  const [rolesSolicitud, setRolesSolicitud] = useState({});
   const [reseteandoId, setReseteandoId] = useState(null);
   const [passwordReseteada, setPasswordReseteada] = useState(null);
 
@@ -3214,8 +3229,23 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     if (nombreNuevo) {
       const usuario = usuarios.find((u) => u.id === id);
       setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, nombre: nombreNuevo } : u)));
+      // El nombre se usa como referencia (no un id) en varias otras
+      // pestañas — si no se propaga acá, la persona "desaparece" de sus
+      // clientes/tareas/objetivos/prospectos/citas asignados apenas se
+      // le cambia el nombre, aunque siga siendo la misma cuenta.
       if (usuario && usuario.nombre !== nombreNuevo) {
-        setClientes((prev) => prev.map((c) => (c.paseadorNombre === usuario.nombre ? { ...c, paseadorNombre: nombreNuevo } : c)));
+        const nombreViejo = usuario.nombre;
+        setClientes((prev) => prev.map((c) => ({
+          ...c,
+          paseadorNombre: c.paseadorNombre === nombreViejo ? nombreNuevo : c.paseadorNombre,
+          adiestradorNombre: c.adiestradorNombre === nombreViejo ? nombreNuevo : c.adiestradorNombre,
+          responsableNombre: c.responsableNombre === nombreViejo ? nombreNuevo : c.responsableNombre,
+        })));
+        if (setTareasEquipo) setTareasEquipo((prev) => prev.map((t) => (t.asignadoA === nombreViejo ? { ...t, asignadoA: nombreNuevo } : t)));
+        if (setObjetivosSemanales) setObjetivosSemanales((prev) => prev.map((o) => (o.asignadoA === nombreViejo ? { ...o, asignadoA: nombreNuevo } : o)));
+        if (setObjetivosMensuales) setObjetivosMensuales((prev) => prev.map((o) => (o.asignadoA === nombreViejo ? { ...o, asignadoA: nombreNuevo } : o)));
+        if (setProspectos) setProspectos((prev) => prev.map((p) => (p.asignadoA === nombreViejo ? { ...p, asignadoA: nombreNuevo } : p)));
+        if (setCitasAgenda) setCitasAgenda((prev) => prev.map((c) => (c.adiestrador === nombreViejo ? { ...c, adiestrador: nombreNuevo } : c)));
       }
     }
     setEditandoId(null);
@@ -3224,7 +3254,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   function confirmarBorrar(u) {
     setUsuarios((prev) => prev.filter((x) => x.id !== u.id));
     if (u.email) {
-      setLoginsPendientes((prev) => [...prev, { id: Date.now(), nombre: u.nombre, email: u.email, eliminadoEn: new Date().toISOString() }]);
+      setLoginsPendientes((prev) => [...prev, { id: Date.now(), nombre: u.nombre, email: u.email, rol: u.rol, eliminadoEn: new Date().toISOString() }]);
     }
     setBorrarId(null);
   }
@@ -3239,9 +3269,12 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   // toca, ver nota más abajo), así que solo hace falta el perfil — no se
   // crea una cuenta nueva ni se le cambia la contraseña.
   function restaurarLogin(l) {
-    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: l.nombre, rol: "paseador", email: l.email }]);
+    const rol = l.rol || "paseador";
+    setUsuarios((prev) => [...prev, { id: Date.now(), nombre: l.nombre, rol, email: l.email }]);
     quitarLoginPendiente(l.id);
-    showToast(`${l.nombre} fue restaurado — ajusta su rol en la lista de arriba si "paseador" no es el que le corresponde.`);
+    showToast(l.rol
+      ? `${l.nombre} fue restaurado con su rol anterior, "${rol}".`
+      : `${l.nombre} fue restaurado — no se guardó su rol anterior (se borró antes de este cambio), quedó como "paseador". Ajústalo en la lista de arriba si corresponde otro.`);
   }
 
   async function agregar() {
@@ -3278,14 +3311,15 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   // usuarios, que es lo que realmente le da entrada a la app.
   async function aprobarSolicitud(s) {
     if (gestionandoSolicitudId) return;
+    const rol = rolesSolicitud[s.id] || "paseador";
     setGestionandoSolicitudId(s.id);
     try {
       const email = slugEmailUsuario(s.nombre);
-      setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol: "paseador", email }]);
+      setUsuarios((prev) => [...prev, { id: Date.now(), nombre: s.nombre, rol, email }]);
       const { error: errorUpdate } = await supabase.from("solicitudes_registro").update({ estado: "aprobada" }).eq("id", s.id);
       if (errorUpdate) showToast(`El perfil se creó, pero no se pudo marcar la solicitud como aprobada: ${errorUpdate.message}`);
       setSolicitudesRegistro((prev) => prev.filter((x) => x.id !== s.id));
-      showToast(`${s.nombre} fue aprobado con rol "paseador" — ya puede entrar con la contraseña que eligió. Ajusta el rol en la lista de arriba si corresponde otro.`);
+      showToast(`${s.nombre} fue aprobado con rol "${rol}" — ya puede entrar con la contraseña que eligió.`);
     } catch (err) {
       showToast(`No se pudo aprobar la solicitud: ${err.message || "error desconocido"}`);
     } finally {
@@ -3338,13 +3372,14 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                     <td style={{ padding: "7px 10px", color: INK, borderBottom: "1px solid #F1EAD9" }}>{t.label}</td>
                     {ROLES_APP.map((r) => {
                       const bloqueado = r === "administrador" && t.id === "usuarios";
+                      const soloLectura = bloqueado || !esAdmin;
                       const activo = permisosRoles[r]?.includes(t.id) || bloqueado;
                       return (
                         <td key={r} style={{ textAlign: "center", padding: "7px 10px", borderBottom: "1px solid #F1EAD9" }}>
-                          <input type="checkbox" checked={activo} disabled={bloqueado}
-                            title={bloqueado ? "El administrador siempre necesita ver Usuarios, para no perder acceso a esta pantalla" : ""}
+                          <input type="checkbox" checked={activo} disabled={soloLectura}
+                            title={bloqueado ? "El administrador siempre necesita ver Usuarios, para no perder acceso a esta pantalla" : !esAdmin ? "Solo un administrador puede cambiar los permisos" : ""}
                             onChange={(e) => actualizarPermisoRol(r, t.id, e.target.checked)}
-                            style={{ width: 16, height: 16, cursor: bloqueado ? "not-allowed" : "pointer" }} />
+                            style={{ width: 16, height: 16, cursor: soloLectura ? "not-allowed" : "pointer" }} />
                         </td>
                       );
                     })}
@@ -3382,9 +3417,10 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                       const activo = notificacionesRoles[r]?.includes(ev.id);
                       return (
                         <td key={r} style={{ textAlign: "center", padding: "7px 10px", borderBottom: "1px solid #F1EAD9" }}>
-                          <input type="checkbox" checked={activo}
+                          <input type="checkbox" checked={activo} disabled={!esAdmin}
+                            title={!esAdmin ? "Solo un administrador puede cambiar las notificaciones" : ""}
                             onChange={(e) => actualizarNotificacionRol(r, ev.id, e.target.checked)}
-                            style={{ width: 16, height: 16, cursor: "pointer" }} />
+                            style={{ width: 16, height: 16, cursor: esAdmin ? "pointer" : "not-allowed" }} />
                         </td>
                       );
                     })}
@@ -3512,6 +3548,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
         </p>
       </div>
 
+      {esAdmin && (
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Agregar usuario</h2>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
@@ -3618,12 +3655,13 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
           </div>
         )}
       </div>
+      )}
 
       {esAdmin && solicitudesRegistro.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
           <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Solicitudes de registro pendientes ({solicitudesRegistro.length})</h2>
           <p style={{ fontSize: 13, color: "#2E5C41", marginTop: -8, marginBottom: 14 }}>
-            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login (ya eligieron su propia contraseña). Aprobar activa su perfil (rol "paseador" por defecto, lo puedes cambiar después en la lista de arriba). Rechazar deja pendiente borrar su cuenta de acceso — se agrega abajo a "Logins pendientes de borrar".
+            Gente que pidió unirse al equipo desde "Registro de cuenta" en el login (ya eligieron su propia contraseña). Elige el rol que le corresponde antes de aprobar — activa su perfil con ese rol. Rechazar deja pendiente borrar su cuenta de acceso — se agrega abajo a "Logins pendientes de borrar".
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {solicitudesRegistro.map((s) => (
@@ -3635,7 +3673,11 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                       {s.email}{s.telefono ? ` · ${s.telefono}` : ""} · {new Date(s.creado_en).toLocaleDateString("es-CL")}
                     </p>
                   </div>
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <select value={rolesSolicitud[s.id] || "paseador"} onChange={(e) => setRolesSolicitud((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      style={{ ...input, margin: 0, padding: "6px 8px", fontSize: 12.5, width: 130 }}>
+                      {ROLES_APP.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
                     <button onClick={() => aprobarSolicitud(s)} disabled={gestionandoSolicitudId === s.id}
                       style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                       {gestionandoSolicitudId === s.id ? "Aprobando..." : "Aprobar"}
@@ -3815,6 +3857,10 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
       ajuste: fila.ajuste || 0,
       fechaPagoISO: fechaKey(new Date()),
       fechaPago: new Date().toLocaleDateString("es-CL"),
+      // Inicio del período de TRABAJO que cubre este pago (no el día en
+      // que se registra) — así Finanzas puede comparar costos e ingresos
+      // usando la misma fecha (la del trabajo), no la de registro.
+      periodoDesdeISO: fechaKey(desde),
     }]);
   }
 
@@ -4241,6 +4287,11 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             const clientesDia = clientesDelPaseador.filter((c) => c.diasHabituales?.includes(dow));
             const disponiblesParaAgregar = clientes
               .filter((c) => !c.diasHabituales?.includes(dow))
+              // Sin paseador asignado, o ya del paseador que se está
+              // editando — así "+ agregar" nunca le roba en silencio un
+              // cliente a otro paseador (eso ya tiene su propio flujo
+              // deliberado, con confirmación, en "Reasignar" más abajo).
+              .filter((c) => !c.paseadorNombre || c.paseadorNombre === paseadorSel)
               .filter((c) => !qBusqueda || c.nombre.toLowerCase().includes(qBusqueda) || c.perro.toLowerCase().includes(qBusqueda));
             const fechaDia = fechasSemana[dow];
             const sobrecargado = clientesDia.length > UMBRAL_SOBRECARGA;
@@ -7156,6 +7207,10 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
       id: Date.now(), nombre: p.nombre, perro: p.perro || "Sin nombre", telefono: p.telefono, email: p.email || null,
       valorPaseoRef: 0, raza: "", pesoKg: 0, fotoUrl: null, diasHabituales: [], planHabitual: "LV",
       objetivos: "", paseadorNombre: "", tarifaPaseador: 0, direccion: p.direccion || "", lat: null, lng: null, tipoServicio: p.tipoServicio,
+      // Se lleva la bitácora del prospecto al historial del cliente
+      // nuevo — al convertir se borra el prospecto, así que si no se
+      // copia acá se pierde para siempre todo lo conversado antes.
+      bitacora: p.bitacora || [],
     }]);
     setProspectos((prev) => prev.filter((x) => x.id !== p.id));
   }
@@ -7320,7 +7375,9 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
 
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 {p.estado === "ganado" && puedeCrearYEliminar && (
-                  <button onClick={() => convertirACliente(p)} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Convertir a cliente</button>
+                  <BotonConfirmable onConfirm={() => convertirACliente(p)} label="Convertir a cliente" confirmLabel="Sí, convertir" colorConfirmar="#2F6A46"
+                    title="Crea el cliente y elimina este prospecto (se lleva la bitácora al historial del cliente)"
+                    style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }} />
                 )}
                 {puedeCrearYEliminar && (
                   <BotonEliminar onConfirm={() => eliminarProspecto(p.id)} label="Eliminar prospecto" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />

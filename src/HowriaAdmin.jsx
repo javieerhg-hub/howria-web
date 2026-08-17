@@ -304,10 +304,10 @@ function dbToIncompatibilidad(row) {
 }
 
 function loginPendienteToDb(l) {
-  return { nombre: l.nombre, email: l.email, eliminado_en: l.eliminadoEn || new Date().toISOString() };
+  return { nombre: l.nombre, email: l.email, eliminado_en: l.eliminadoEn || new Date().toISOString(), rol: l.rol || null };
 }
 function dbToLoginPendiente(row) {
-  return { nombre: row.nombre, email: row.email, eliminadoEn: row.eliminado_en };
+  return { nombre: row.nombre, email: row.email, eliminadoEn: row.eliminado_en, rol: row.rol };
 }
 
 export function esBoletaDeCliente(b, c) {
@@ -379,6 +379,7 @@ function pagoToDb(p) {
     clientes: p.clientes,
     ajuste: p.ajuste || 0,
     fecha_pago: p.fechaPagoISO || fechaKey(new Date()),
+    periodo_desde: p.periodoDesdeISO || null,
   };
 }
 
@@ -393,6 +394,10 @@ function dbToPago(row) {
     ajuste: row.ajuste,
     fechaPagoISO: row.fecha_pago,
     fechaPago: new Date(row.fecha_pago + "T00:00:00").toLocaleDateString("es-CL"),
+    // Fecha de inicio del período de TRABAJO que cubre el pago (no el
+    // día en que se registró) — filas viejas no la tienen, por eso el
+    // fallback a fecha_pago en Finanzas (costosPeriodo).
+    periodoDesdeISO: row.periodo_desde || null,
   };
 }
 
@@ -3836,7 +3841,7 @@ export default function HowriaAdmin() {
         {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} setTareasEquipo={setTareasEquipo} setObjetivosSemanales={setObjetivosSemanales} setObjetivosMensuales={setObjetivosMensuales} setProspectos={setProspectos} setCitasAgenda={setCitasAgenda} />}
       </LimiteDeError>
       </Suspense>
           </div>
