@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
-  FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, Flag, CircleCheck, CircleX,
+  FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
   GraduationCap, KeyRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
@@ -37,10 +37,9 @@ const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) =>
 // desde ahí arrastraría todo Resto solo para abrir la ruta).
 const RutaGuiada = React.lazy(() => import("./RutaGuiada.jsx").then((m) => ({ default: m.RutaGuiada })));
 
-// Los gráficos de Inicio/Mis Paseos (recharts) también aparte — recharts es
-// pesada y este archivo se carga siempre, hasta para la pantalla de login,
-// que nunca llega a mostrar un gráfico.
-const AnilloHoy = React.lazy(() => import("./GraficosInicio.jsx").then((m) => ({ default: m.AnilloHoy })));
+// El gráfico de Inicio (recharts) también aparte — recharts es pesada y
+// este archivo se carga siempre, hasta para la pantalla de login, que
+// nunca llega a mostrar un gráfico.
 const GraficoIngresosSemana = React.lazy(() => import("./GraficosInicio.jsx").then((m) => ({ default: m.GraficoIngresosSemana })));
 
 // Sin esto, si algo revienta al renderizar una pestaña, React desmonta
@@ -2118,21 +2117,9 @@ export function forzarRecalculoZoomIOS() {
   setTimeout(() => meta.setAttribute("content", viewportOriginal), 300);
 }
 
-// Fila de la leyenda junto al anillo de "Hoy" en Mis paseos.
-function FilaAnilloLeyenda({ Icono, label, valor, color }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <Icono size={16} color={color || NAVY} />
-      <span style={{ fontSize: 12.5, color: "#8A7E5C", flex: 1 }}>{label}</span>
-      <b style={{ fontSize: 14, color: color || NAVY }}>{valor}</b>
-    </div>
-  );
-}
-
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const [semanaOffset, setSemanaOffset] = useState(0);
   const [notaAbiertaId, setNotaAbiertaId] = useState(null);
   const [notaTexto, setNotaTexto] = useState("");
   const [mostrarClientes, setMostrarClientes] = useState(false);
@@ -2143,31 +2130,6 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
-
-  const inicioSemanaVista = useMemo(() => {
-    const base = inicioSemana(hoy);
-    base.setDate(base.getDate() + semanaOffset * 7);
-    return base;
-  }, [semanaOffset]);
-
-  const diasSemanaVista = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(inicioSemanaVista);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  }, [inicioSemanaVista]);
-
-  const resumenPorDiaSemana = diasSemanaVista.map((d, i) => {
-    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(i));
-    const realizados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.realizado).length;
-    const cancelados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.cancelado).length;
-    return { fecha: d, total: clientesDia.length, realizados, cancelados };
-  });
-  const totalSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.total, 0);
-  const realizadosSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.realizados, 0);
-  const canceladosSemana = resumenPorDiaSemana.reduce((acc, d) => acc + d.cancelados, 0);
-  const pendientesSemana = totalSemana - realizadosSemana - canceladosSemana;
 
   function actualizarRegistro(clienteId, fecha, cambios) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
@@ -2204,33 +2166,27 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     setMotivoAusencia("");
   }
 
-  const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
-    const idxHoy = (hoy.getDay() + 6) % 7;
-    return idxHoy;
-  });
-  const diaActivo = diasSemanaVista[diaSeleccionado];
-  const dow = diaSeleccionado;
+  // Un solo día seleccionado como string (mismo patrón que Itinerario,
+  // en vez de semana+índice-dentro-de-semana) — más simple y ya probado
+  // en mobile.
+  const [diaSel, setDiaSel] = useState(() => fechaKey(hoy));
+  const diaActivo = new Date(diaSel + "T00:00:00");
+  const dow = (diaActivo.getDay() + 6) % 7;
   const clientesDelDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
+
+  function cambiarDia(delta) {
+    const d = new Date(diaSel + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    setDiaSel(fechaKey(d));
+  }
 
   // Mismo problema que el cambio de pestaña en App() (Safari/iOS deja el
   // zoom trabado, todo aplastado, tras un cambio de contenido abrupto):
-  // acá pasa al abrir/cerrar la ruta guiada a pantalla completa, al
-  // saltar de día/semana, o al usar el picker nativo de "Ir a una fecha".
+  // acá pasa al abrir/cerrar la ruta guiada a pantalla completa o al
+  // saltar de día.
   useEffect(() => {
     forzarRecalculoZoomIOS();
-  }, [rutaAbierta, diaSeleccionado, semanaOffset]);
-
-  // Saltar directo a una fecha lejana sin tener que apretar "semana
-  // anterior" muchas veces — mueve tanto la semana vista como el día
-  // seleccionado dentro de ella.
-  function irAFecha(fechaStr) {
-    if (!fechaStr) return;
-    const d = new Date(fechaStr + "T00:00:00");
-    if (isNaN(d) || d > hoy) return;
-    const nuevoOffset = Math.round((inicioSemana(d) - inicioSemana(hoy)) / (7 * 86400000));
-    setSemanaOffset(nuevoOffset);
-    setDiaSeleccionado((d.getDay() + 6) % 7);
-  }
+  }, [rutaAbierta, diaSel]);
 
   // resumen mensual (las cancelaciones del cliente no cuentan en contra del paseador)
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
@@ -2244,8 +2200,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const totalProgramadosMes = resumenMensual.reduce((acc, r) => acc + r.programados, 0);
   const totalMontoMes = resumenMensual.reduce((acc, r) => acc + r.monto, 0);
 
-  // Anillo de "Hoy" (siempre el día real, no el día que se esté mirando en
-  // el detalle de abajo — mismo criterio que el "Today" de un dashboard).
+  // Clientes de hoy (siempre el día real, no el día que se esté mirando en
+  // el detalle de abajo) — para el mensaje de "Mi ruta de hoy" y la ruta
+  // guiada.
   const dowHoy = (hoy.getDay() + 6) % 7;
   const clientesHoyAnillo = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
   let hechosHoy = 0, canceladosHoy = 0;
@@ -2254,14 +2211,6 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     if (r.realizado) hechosHoy++;
     else if (r.cancelado) canceladosHoy++;
   });
-  const pendientesHoy = clientesHoyAnillo.length - hechosHoy - canceladosHoy;
-  const datosAnillo = clientesHoyAnillo.length === 0
-    ? [{ value: 1, color: "#EDE4CE" }]
-    : [
-        { value: hechosHoy, color: "#2F6A46" },
-        { value: pendientesHoy, color: "#EDE4CE" },
-        { value: canceladosHoy, color: RUST },
-      ].filter((d) => d.value > 0);
 
   if (misClientes.length === 0) {
     return (
@@ -2356,93 +2305,16 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div>
-            <h2 style={sectionTitle}>Esta semana</h2>
-            <p style={hint}>{misClientes.length} cliente(s) asignado(s)</p>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => setSemanaOffset((s) => s - 1)} style={botonSecundario}>← Semana anterior</button>
-            <button onClick={() => setSemanaOffset(0)} disabled={semanaOffset === 0} style={{ ...botonSecundario, opacity: semanaOffset === 0 ? 0.5 : 1 }}>Esta semana</button>
-            <button onClick={() => setSemanaOffset((s) => Math.min(s + 1, 0))} disabled={semanaOffset >= 0} style={{ ...botonSecundario, opacity: semanaOffset >= 0 ? 0.5 : 1 }}>Semana siguiente →</button>
+          <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{diaActivo.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</h2>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={() => cambiarDia(-1)} style={botonSecundario}>← Día anterior</button>
+            <button onClick={() => setDiaSel(fechaKey(hoy))} style={botonSecundario}>Hoy</button>
+            <input type="date" value={diaSel} max={fechaKey(hoy)} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
+            <button onClick={() => cambiarDia(1)} disabled={diaSel >= fechaKey(hoy)} style={{ ...botonSecundario, opacity: diaSel >= fechaKey(hoy) ? 0.5 : 1 }}>Día siguiente →</button>
           </div>
         </div>
 
-        <p style={{ ...label, marginTop: 18 }}>Hoy</p>
-        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", marginTop: 10, marginBottom: 22 }}>
-          <div style={{ width: 150, height: 150, position: "relative", flex: "none" }}>
-            <Suspense fallback={<div style={{ width: "100%", height: "100%", borderRadius: "50%", background: CREAM_SOFT }} />}>
-              <AnilloHoy datosAnillo={datosAnillo} />
-            </Suspense>
-            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-              <span style={{ fontSize: 30, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{clientesHoyAnillo.length === 0 ? "—" : pendientesHoy}</span>
-              <span style={{ fontSize: 11, color: "#8A7E5C" }}>{clientesHoyAnillo.length === 0 ? "Sin paseos hoy" : "Pendientes"}</span>
-            </div>
-          </div>
-          <div style={{ flex: "1 1 160px", display: "flex", flexDirection: "column", gap: 12 }}>
-            <FilaAnilloLeyenda Icono={Flag} label="Programados" valor={clientesHoyAnillo.length} />
-            <FilaAnilloLeyenda Icono={CircleCheck} label="Realizados" valor={hechosHoy} color="#2F6A46" />
-            {canceladosHoy > 0 && <FilaAnilloLeyenda Icono={CircleX} label="Cancelados" valor={canceladosHoy} color={RUST} />}
-          </div>
-        </div>
-
-        <p style={label}>Mi semana</p>
-        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
-          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 14 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#9BAAB8" }}>Programados</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>{totalSemana}</p>
-          </div>
-          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 14 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#2E5C41" }}>Realizados</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: "#2E5C41" }}>{realizadosSemana}</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 14 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C" }}>Pendientes</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: RUST }}>{pendientesSemana}{canceladosSemana > 0 ? ` (${canceladosSemana} cancelado(s))` : ""}</p>
-          </div>
-        </div>
-        <div className="howria-week" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginBottom: 20 }}>
-          {resumenPorDiaSemana.map((d, i) => {
-            const esHoyCol = fechaKey(d.fecha) === fechaKey(hoy);
-            return (
-              <div key={i} className="howria-week-celda" style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
-                <p style={{ margin: 0, fontSize: 10.5, color: esHoyCol ? "#9BAAB8" : "#8A7E5C" }}>{DIAS_SEMANA[i]} {d.fecha.getDate()}</p>
-                <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 700, color: esHoyCol ? CREAM : NAVY }}>{d.realizados}/{d.total}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <h2 style={sectionTitle}>Detalle del día</h2>
-          <div>
-            <label style={{ ...label, display: "block", marginBottom: 4 }} htmlFor="mispaseos-ir-a-fecha">Ir a una fecha</label>
-            <input id="mispaseos-ir-a-fecha" type="date" max={fechaKey(hoy)} onChange={(e) => irAFecha(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
-          </div>
-        </div>
-        <div className="howria-dia-pills" style={{ display: "flex", gap: 6, marginTop: 14, marginBottom: 20, flexWrap: "wrap" }}>
-          {diasSemanaVista.map((d, i) => {
-            const esHoy = fechaKey(d) === fechaKey(hoy);
-            const esFuturo = d > hoy;
-            return (
-              <button key={i} onClick={() => setDiaSeleccionado(i)} disabled={esFuturo}
-                style={{
-                  padding: "10px 6px", minWidth: 66, flex: "none", borderRadius: 8, cursor: esFuturo ? "default" : "pointer", textAlign: "center",
-                  border: diaSeleccionado === i ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
-                  background: diaSeleccionado === i ? NAVY : "#FFFFFF",
-                  color: diaSeleccionado === i ? CREAM : (esFuturo ? "#C9C3A8" : INK),
-                  opacity: esFuturo ? 0.6 : 1,
-                }}>
-                <div style={{ fontSize: 11, textTransform: "uppercase" }}>{DIAS_SEMANA[i]}</div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{d.getDate()}</div>
-                {esHoy && <div style={{ fontSize: 9, color: diaSeleccionado === i ? GOLD : "#C9A24B", marginTop: 2 }}>HOY</div>}
-              </button>
-            );
-          })}
-        </div>
-
-        <p style={label}>Clientes programados este día</p>
+        <p style={{ ...label, marginTop: 18 }}>Clientes programados este día</p>
         {clientesDelDia.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados este día.</p>
         ) : (
@@ -3803,15 +3675,8 @@ export default function HowriaAdmin() {
             grid-template-columns: 1fr !important;
           }
           .howria-week {
-            grid-template-columns: repeat(7, 1fr) !important; gap: 4px !important;
+            grid-template-columns: 1fr !important;
           }
-          .howria-week-celda { padding: 5px 2px !important; }
-          .howria-week-celda p:first-child { font-size: 9px !important; }
-          .howria-week-celda p:last-child { font-size: 12.5px !important; }
-          .howria-dia-pills { flex-wrap: nowrap !important; }
-          .howria-dia-pills > button { min-width: 0 !important; flex: 1 1 0 !important; padding: 8px 2px !important; }
-          .howria-dia-pills > button > div:first-child { font-size: 9px !important; }
-          .howria-dia-pills > button > div:nth-child(2) { font-size: 13px !important; }
           .howria-mispaseos-tabla { display: none !important; }
           .howria-mispaseos-tarjetas { display: flex !important; flex-direction: column; gap: 8px; }
           .howria-photo-row > div:first-child {
