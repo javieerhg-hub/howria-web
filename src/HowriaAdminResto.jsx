@@ -3954,17 +3954,17 @@ function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEspe
   return n;
 }
 
-export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, nombreUsuario }) {
+export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
-  // El bono/descuento se guarda en localStorage apenas se escribe (no solo
-  // al marcar el pago) para que no se pierda si alguien lo tipea y se
-  // distrae antes de confirmar — no necesita ser compartido entre
-  // dispositivos, es solo un borrador hasta que el pago quede registrado.
-  const [ajustes, setAjustes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("howria_pago_ajustes") || "{}"); } catch { return {}; }
-  });
+  const [periodoOffset, setPeriodoOffset] = useState(0);
   const hoy = new Date();
-  const { desde, hasta, etiqueta } = rangoPeriodo(periodo, hoy);
+  const fechaRef = useMemo(() => {
+    const d = new Date(hoy);
+    if (periodo === "semana") d.setDate(d.getDate() + periodoOffset * 7);
+    else d.setMonth(d.getMonth() + periodoOffset);
+    return d;
+  }, [periodo, periodoOffset]);
+  const { desde, hasta, etiqueta } = rangoPeriodo(periodo, fechaRef);
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
   // "Cumplimiento" solo tiene sentido contra los días que YA pasaron —
   // contar toda la semana/mes completo (incluidos días futuros, todavía
@@ -3979,11 +3979,28 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     return `${paseador}|${periodo}|${etiqueta}`;
   }
 
+  // El bono/descuento vive en la tabla ajustes_pago_pendientes (ver
+  // database/085) — antes se guardaba solo en localStorage de quien lo
+  // escribía, invisible para otra persona/dispositivo hasta confirmar el
+  // pago, con riesgo real de pagar el monto equivocado.
+  const ajustesPorClave = useMemo(() => {
+    const mapa = {};
+    ajustesPago.forEach((a) => { mapa[`${a.paseador}|${a.periodo}|${a.etiqueta}`] = a.monto; });
+    return mapa;
+  }, [ajustesPago]);
+
   function actualizarAjuste(paseador, valor) {
-    setAjustes((prev) => {
-      const next = { ...prev, [claveAjuste(paseador)]: Number(valor) || 0 };
-      try { localStorage.setItem("howria_pago_ajustes", JSON.stringify(next)); } catch {}
-      return next;
+    const monto = Number(valor) || 0;
+    setAjustesPago((prev) => {
+      const idx = prev.findIndex((a) => a.paseador === paseador && a.periodo === periodo && a.etiqueta === etiqueta);
+      const ahora = new Date().toISOString();
+      if (idx === -1) {
+        if (monto === 0) return prev;
+        return [...prev, { id: Date.now() + Math.random(), paseador, periodo, etiqueta, monto, actualizadoPor: nombreUsuario, actualizadoEn: ahora }];
+      }
+      const copia = [...prev];
+      copia[idx] = { ...copia[idx], monto, actualizadoPor: nombreUsuario, actualizadoEn: ahora };
+      return copia;
     });
   }
 
@@ -4006,8 +4023,12 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
 
   const resumenPorPaseador = useMemo(() => {
     const mapa = {};
+    // Solo cuentas con rol paseador (más cualquier paseadorNombre suelto
+    // en un cliente, por si no calza exacto con un usuario actual) — antes
+    // entraba CUALQUIER usuario del sistema, mostrando filas en $0 para
+    // cuentas de coordinador/entrenador/admin que nunca cobran acá.
     const nombresConocidos = new Set([
-      ...usuarios.map((u) => u.nombre),
+      ...usuarios.filter((u) => u.rol === "paseador").map((u) => u.nombre),
       ...clientes.filter((c) => c.paseadorNombre).map((c) => c.paseadorNombre),
     ]);
     nombresConocidos.forEach((nombre) => { mapa[nombre] = { paseador: nombre, clientes: 0, programados: 0, realizados: 0, montoAsegurado: 0, montoProyectado: 0 }; });
@@ -4034,14 +4055,15 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
 
     return Object.values(mapa)
       .map((r) => {
-        const ajuste = ajustes[claveAjuste(r.paseador)] || 0;
+        const ajuste = ajustesPorClave[claveAjuste(r.paseador)] || 0;
         return { ...r, ajuste, monto: r.montoAsegurado + r.montoProyectado + ajuste, cumplimiento: r.programados ? Math.round((r.realizados / r.programados) * 100) : 0 };
       })
       .sort((a, b) => b.monto - a.monto);
-  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesActual, anioActual, ajustes, periodo, etiqueta]);
+  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesActual, anioActual, ajustesPorClave, periodo, etiqueta]);
 
   const totalAsegurado = resumenPorPaseador.reduce((acc, r) => acc + r.montoAsegurado, 0);
   const totalProyectado = resumenPorPaseador.reduce((acc, r) => acc + r.montoProyectado, 0);
+  const totalAPagar = resumenPorPaseador.reduce((acc, r) => acc + r.monto, 0);
 
   // Mismo hueco que "Pago trabajadores" venía a cerrar para paseadores,
   // pero para adiestramiento: Finanzas ya calculaba "Pago a responsables
@@ -4097,6 +4119,9 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       periodoDesdeISO: fechaKey(desde),
       marcadoPor: nombreUsuario,
     }]);
+    // El ajuste ya quedó guardado dentro del pago recién registrado — el
+    // borrador en ajustes_pago_pendientes deja de tener sentido.
+    setAjustesPago((prev) => prev.filter((a) => !(a.paseador === fila.paseador && a.periodo === periodo && a.etiqueta === etiqueta)));
   }
 
   // Antes esto borraba la fila entera — no quedaba ningún rastro de que
@@ -4115,9 +4140,9 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       <h2 style={sectionTitle}>Pago a trabajadores</h2>
       <p style={hint}>Calculado desde los paseos que cada paseador marcó como realizados en "Mis paseos" (no desde lo facturado), con su tarifa por paseo.</p>
 
-      <div style={{ display: "flex", gap: 8, margin: "16px 0 6px" }}>
+      <div style={{ display: "flex", gap: 8, margin: "16px 0 6px", flexWrap: "wrap" }}>
         {[["semana", "Semana"], ["mes", "Mes"]].map(([id, nombre]) => (
-          <button key={id} onClick={() => setPeriodo(id)}
+          <button key={id} onClick={() => { setPeriodo(id); setPeriodoOffset(0); }}
             style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
               border: periodo === id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
               background: periodo === id ? NAVY : "#FFFFFF", color: periodo === id ? CREAM : INK,
@@ -4125,11 +4150,19 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
             {nombre}
           </button>
         ))}
+        <span style={{ flex: "0 0 8px" }} />
+        <button onClick={() => setPeriodoOffset((o) => o - 1)} style={botonSecundario}>← Anterior</button>
+        <button onClick={() => setPeriodoOffset(0)} disabled={periodoOffset === 0} style={{ ...botonSecundario, opacity: periodoOffset === 0 ? 0.5 : 1 }}>Actual</button>
+        <button onClick={() => setPeriodoOffset((o) => Math.min(o + 1, 0))} disabled={periodoOffset >= 0} style={{ ...botonSecundario, opacity: periodoOffset >= 0 ? 0.5 : 1 }}>Siguiente →</button>
       </div>
       <p style={{ ...hint, marginBottom: 6 }}>Período: <b style={{ color: NAVY }}>{etiqueta}</b></p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 8 }}>
         <p style={{ ...hint, margin: 0 }}>💚 Asegurado (cliente ya pagó): <b style={{ color: "#2F6A46" }}>{fmtCLP(totalAsegurado)}</b></p>
         <p style={{ ...hint, margin: 0 }}>🕓 Proyectado (falta cobrar/confirmar): <b style={{ color: "#8A6A1E" }}>{fmtCLP(totalProyectado)}</b></p>
+      </div>
+      <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <span style={{ fontSize: 12.5, textTransform: "uppercase", letterSpacing: 0.5, color: "#9BAAB8" }}>Total a pagar este período (incluye ajustes)</span>
+        <span style={{ fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(totalAPagar)}</span>
       </div>
 
       <div className="howria-pagos-tabla" style={{ overflowX: "auto", marginBottom: 30 }}>
@@ -4174,8 +4207,8 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                             style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, borderColor: RUST, color: RUST }} />
                         </>
                       ) : (
-                        <BotonEliminar onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado"
-                          style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5 }} />
+                        <BotonConfirmable onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
+                          style={{ border: "none", background: "#2F6A46", color: "#fff", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, cursor: "pointer" }} />
                       )}
                     </div>
                   </td>
@@ -4228,8 +4261,8 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                       style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12, borderColor: RUST, color: RUST }} />
                   </>
                 ) : (
-                  <BotonEliminar onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado"
-                    style={{ ...botonPrincipal, width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
+                  <BotonConfirmable onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
+                    style={{ ...botonPrincipal, background: "#2F6A46", boxShadow: "none", width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
                 )}
               </div>
             </div>

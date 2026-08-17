@@ -110,6 +110,7 @@ no un runner de migraciones.
 | 082 | `boletas_adiestramiento_pago_responsable.sql` | 2026-08-17 | Agrega `pagado_a_responsable`/`_por`/`_en` a `boletas_adiestramiento` — Pago trabajadores gana una sección para marcar pagado a cada responsable de adiestramiento, que antes no existía (Finanzas calculaba el costo pero no había dónde saldarlo). |
 | 083 | `correos_archivado.sql` | 2026-08-17 | Agrega `archivado` a `correos` — Mail gana un botón para archivar un hilo entero (reversible), la única pestaña de la app que no tenía ninguna forma de "limpiar" lo ya resuelto. |
 | 084 | `avisos_descartados.sql` | 2026-08-17 | Crea `avisos_descartados` (por usuario, RLS acotado a cada quien) — descartar un aviso en el dashboard de Inicio antes solo se guardaba en localStorage, no sincronizaba entre el celular y la PC de la misma persona. |
+| 085 | `ajustes_pago_pendientes.sql` | 2026-08-17 | Crea `ajustes_pago_pendientes` (borrador de bono/descuento por paseador+período, mismo acceso que `pagos_trabajadores`) — antes el ajuste vivía solo en localStorage de quien lo escribía, invisible para otra persona/dispositivo hasta confirmar el pago, con riesgo real de pagar el monto equivocado. |
 
 ## Nota sobre el orden 001–023
 
