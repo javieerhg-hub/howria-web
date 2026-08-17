@@ -2093,6 +2093,22 @@ export function fechaKey(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// Truco para "despegar" Safari/iOS cuando la página queda con el zoom
+// trabado (todo se ve chico, aplastado) tras un cambio de contenido
+// abrupto — forzar `maximum-scale` un instante obliga a recalcular el
+// zoom real a 100%, y se revierte enseguida para no bloquear el zoom
+// normal del usuario. Extraído del efecto de cambio de pestaña de App()
+// para poder reusarlo en cambios abruptos dentro de una misma pestaña
+// (ej. abrir/cerrar la ruta guiada a pantalla completa, o el picker
+// nativo de un <input type="date">).
+export function forzarRecalculoZoomIOS() {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  const original = meta.getAttribute("content");
+  meta.setAttribute("content", `${original}, maximum-scale=1.0`);
+  setTimeout(() => meta.setAttribute("content", original), 300);
+}
+
 // Fila de la leyenda junto al anillo de "Hoy" en Mis paseos.
 function FilaAnilloLeyenda({ Icono, label, valor, color }) {
   return (
@@ -2186,6 +2202,14 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const diaActivo = diasSemanaVista[diaSeleccionado];
   const dow = diaSeleccionado;
   const clientesDelDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
+
+  // Mismo problema que el cambio de pestaña en App() (Safari/iOS deja el
+  // zoom trabado, todo aplastado, tras un cambio de contenido abrupto):
+  // acá pasa al abrir/cerrar la ruta guiada a pantalla completa, al
+  // saltar de día/semana, o al usar el picker nativo de "Ir a una fecha".
+  useEffect(() => {
+    forzarRecalculoZoomIOS();
+  }, [rutaAbierta, diaSeleccionado, semanaOffset]);
 
   // Saltar directo a una fecha lejana sin tener que apretar "semana
   // anterior" muchas veces — mueve tanto la semana vista como el día
@@ -3595,12 +3619,7 @@ export default function HowriaAdmin() {
     // enseguida para no bloquear que el usuario pueda hacer zoom normal.
     document.activeElement?.blur?.();
     window.scrollTo(0, 0);
-    const meta = document.querySelector('meta[name="viewport"]');
-    if (meta) {
-      const original = meta.getAttribute("content");
-      meta.setAttribute("content", `${original}, maximum-scale=1.0`);
-      setTimeout(() => meta.setAttribute("content", original), 300);
-    }
+    forzarRecalculoZoomIOS();
   }, [tab]);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
