@@ -5236,7 +5236,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
 
 
 // ---------- Equipo (organización de trabajo interno) ----------
-export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando }) {
+export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivosMensuales = [], setObjetivosMensuales, tareas = [], setTareas, cargando, esAdmin = false }) {
   const hoy = new Date();
   const [semanaOffset, setSemanaOffset] = useState(0);
   const fechaRef = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + semanaOffset * 7); return d; }, [semanaOffset]);
@@ -5253,8 +5253,72 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
   const [nuevaTarea, setNuevaTarea] = useState("");
   const [asignadoTarea, setAsignadoTarea] = useState("");
   const [enlaceTarea, setEnlaceTarea] = useState("");
+  // Antes solo se podía marcar completo o eliminar — un error de tipeo
+  // significaba borrar y recrear, perdiendo si ya se había completado.
+  const [editando, setEditando] = useState(null); // { tipo: "objetivo" | "objetivoMes" | "tarea", id }
+  const [textoEdit, setTextoEdit] = useState("");
+
+  function iniciarEdicion(tipo, id, textoActual) {
+    setEditando({ tipo, id });
+    setTextoEdit(textoActual);
+  }
+  function cancelarEdicion() {
+    setEditando(null);
+    setTextoEdit("");
+  }
+  function guardarEdicion() {
+    if (!textoEdit.trim() || !editando) return;
+    const setters = { objetivo: setObjetivos, objetivoMes: setObjetivosMensuales, tarea: setTareas };
+    const campo = editando.tipo === "tarea" ? "titulo" : "texto";
+    setters[editando.tipo]((prev) => prev.map((x) => (x.id === editando.id ? { ...x, [campo]: textoEdit.trim() } : x)));
+    cancelarEdicion();
+  }
 
   const diasSemanaVista = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(desde); d.setDate(d.getDate() + i); return d; }), [desde]);
+
+  // Fila compartida por las 3 listas (objetivos semana/mes, tareas) — antes
+  // solo se podía marcar completo o eliminar, así que un error de tipeo
+  // significaba borrar y recrear, perdiendo el historial de si ya se
+  // había completado.
+  function FilaEditable({ item, tipo, campo, marcado, onToggle, onEliminar, extra }) {
+    const enEdicion = editando?.tipo === tipo && editando.id === item.id;
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: marcado ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, marginBottom: 8, gap: 10 }}>
+        {enEdicion ? (
+          <>
+            <input value={textoEdit} onChange={(e) => setTextoEdit(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") guardarEdicion(); if (e.key === "Escape") cancelarEdicion(); }} autoFocus
+              style={{ ...input, marginBottom: 0, flex: 1 }} />
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button onClick={guardarEdicion} disabled={!textoEdit.trim()}
+                style={{ border: "none", background: NAVY, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", opacity: !textoEdit.trim() ? 0.5 : 1 }}>
+                Guardar
+              </button>
+              <button onClick={cancelarEdicion} style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+                Cancelar
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
+              <input type="checkbox" checked={marcado} onChange={onToggle} />
+              <span style={{ fontSize: 13.5, textDecoration: marcado ? "line-through" : "none", color: marcado ? "#5C5442" : INK }}>
+                {item[campo]} {item.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {item.asignadoA}</span>}
+                {extra}
+              </span>
+            </label>
+            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              <button onClick={() => iniciarEdicion(tipo, item.id, item[campo])} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                Editar
+              </button>
+              <BotonEliminar onConfirm={onEliminar} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   const objetivosSemana = objetivos.filter((o) => o.semanaKey === semanaKey);
   const tareasSemana = tareas.filter((t) => { const f = new Date(t.fechaISO); return f >= desde && f < hasta; });
@@ -5285,9 +5349,17 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
     setObjetivosMensuales((prev) => prev.filter((o) => o.id !== id));
   }
 
+  // Antes un enlace sin "http(s)://" (ej. pegar solo "docs.google.com/...")
+  // se guardaba tal cual y producía un link roto al tocarlo.
+  function normalizarEnlace(valor) {
+    const v = valor.trim();
+    if (!v) return "";
+    return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  }
+
   function agregarTarea() {
     if (!nuevaTarea.trim()) return;
-    setTareas((prev) => [...prev, { id: Date.now(), titulo: nuevaTarea.trim(), asignadoA: asignadoTarea, enlace: enlaceTarea.trim(), fechaISO: diasSemanaVista[diaSeleccionado].toISOString(), estado: "pendiente" }]);
+    setTareas((prev) => [...prev, { id: Date.now(), titulo: nuevaTarea.trim(), asignadoA: asignadoTarea, enlace: normalizarEnlace(enlaceTarea), fechaISO: diasSemanaVista[diaSeleccionado].toISOString(), estado: "pendiente" }]);
     setNuevaTarea(""); setAsignadoTarea(""); setEnlaceTarea("");
   }
   function toggleTarea(id) {
@@ -5332,7 +5404,7 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
             <span key={persona.id} style={{ padding: "6px 14px", borderRadius: 20, background: CREAM_SOFT, color: NAVY, fontSize: 13, fontWeight: 600 }}>{persona.nombre}</span>
           ))}
         </div>
-        <p style={hint}>Para agregar o sacar a alguien del equipo, hazlo desde la pestaña "Usuarios".</p>
+        <p style={hint}>{esAdmin ? 'Para agregar o sacar a alguien del equipo, hazlo desde la pestaña "Usuarios".' : "Para agregar o sacar a alguien del equipo, pídeselo a un administrador — esa pestaña es solo suya."}</p>
       </div>
 
       <div className="howria-card" style={tarjeta}>
@@ -5349,15 +5421,8 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
             <p style={hint}>{objetivosCumplidos} de {objetivosSemana.length} objetivos de la semana cumplidos.</p>
             <div style={{ marginTop: 14, marginBottom: 16 }}>
               {objetivosSemana.map((o) => (
-                <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: o.cumplido ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, marginBottom: 8 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
-                    <input type="checkbox" checked={o.cumplido} onChange={() => toggleObjetivo(o.id)} />
-                    <span style={{ fontSize: 13.5, textDecoration: o.cumplido ? "line-through" : "none", color: o.cumplido ? "#5C5442" : INK }}>
-                      {o.texto} {o.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {o.asignadoA}</span>}
-                    </span>
-                  </label>
-                  <BotonEliminar onConfirm={() => eliminarObjetivo(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-                </div>
+                <FilaEditable key={o.id} item={o} tipo="objetivo" campo="texto" marcado={o.cumplido}
+                  onToggle={() => toggleObjetivo(o.id)} onEliminar={() => eliminarObjetivo(o.id)} />
               ))}
               {objetivosSemana.length === 0 && <p style={{ ...hint, marginTop: 4 }}>Todavía no hay objetivos para esta semana.</p>}
             </div>
@@ -5374,17 +5439,11 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
         ) : (
           <>
             <p style={hint}>{objetivosDelMes.filter((o) => o.cumplido).length} de {objetivosDelMes.length} objetivos del mes cumplidos — para metas más largas, no solo semanales.</p>
+            <p style={{ ...hint, marginTop: -8, fontSize: 11.5 }}>Siempre es el mes calendario actual — el navegador de semana de arriba no le aplica.</p>
             <div style={{ marginTop: 14, marginBottom: 16 }}>
               {objetivosDelMes.map((o) => (
-                <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: o.cumplido ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, marginBottom: 8 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
-                    <input type="checkbox" checked={o.cumplido} onChange={() => toggleObjetivoMes(o.id)} />
-                    <span style={{ fontSize: 13.5, textDecoration: o.cumplido ? "line-through" : "none", color: o.cumplido ? "#5C5442" : INK }}>
-                      {o.texto} {o.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {o.asignadoA}</span>}
-                    </span>
-                  </label>
-                  <BotonEliminar onConfirm={() => eliminarObjetivoMes(o.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-                </div>
+                <FilaEditable key={o.id} item={o} tipo="objetivoMes" campo="texto" marcado={o.cumplido}
+                  onToggle={() => toggleObjetivoMes(o.id)} onEliminar={() => eliminarObjetivoMes(o.id)} />
               ))}
               {objetivosDelMes.length === 0 && <p style={{ ...hint, marginTop: 4 }}>Todavía no hay objetivos para este mes.</p>}
             </div>
@@ -5421,16 +5480,9 @@ export function EquipoTrabajo({ usuarios, objetivos = [], setObjetivos, objetivo
 
         <div style={{ marginBottom: 16 }}>
           {tareasDelDia.map((t) => (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: t.estado === "hecho" ? "#D8ECDE" : "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, marginBottom: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
-                <input type="checkbox" checked={t.estado === "hecho"} onChange={() => toggleTarea(t.id)} />
-                <span style={{ fontSize: 13.5, textDecoration: t.estado === "hecho" ? "line-through" : "none", color: t.estado === "hecho" ? "#5C5442" : INK }}>
-                  {t.titulo} {t.asignadoA && <span style={{ color: "#8A7E5C", fontSize: 12 }}>· {t.asignadoA}</span>}
-                  {t.enlace && <> · <a href={t.enlace} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#1F5C8A" }}>🔗 documento</a></>}
-                </span>
-              </label>
-              <BotonEliminar onConfirm={() => eliminarTarea(t.id)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
-            </div>
+            <FilaEditable key={t.id} item={t} tipo="tarea" campo="titulo" marcado={t.estado === "hecho"}
+              onToggle={() => toggleTarea(t.id)} onEliminar={() => eliminarTarea(t.id)}
+              extra={t.enlace && <> · <a href={t.enlace} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#1F5C8A" }}>🔗 documento</a></>} />
           ))}
           {tareasDelDia.length === 0 && <p style={hint}>No hay tareas para este día.</p>}
         </div>
