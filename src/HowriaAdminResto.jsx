@@ -408,7 +408,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 }
 
 // ---------- Generador de boletas: formulario de paseos ----------
-function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, actualizarRecargoPct }) {
+function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, recargoPct, actualizarRecargoPct, registroPaseos = {} }) {
   const hoy = new Date();
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? null);
   const [filtroPaseador, setFiltroPaseador] = useState("todos");
@@ -466,6 +466,37 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 
   const cliente = clientes.find((c) => c.id === clienteId);
 
+  // Antes la boleta se reconstruía a mano cada mes (plan + cuántos se
+  // cancelaron, escrito de memoria) aunque el sistema ya sabe, día por
+  // día, qué paseos se marcaron realizados/cancelados en Mis paseos —
+  // mismo dato que ya usa Pago trabajadores para calcular lo que se le
+  // paga al paseador. Esto arma la misma sugerencia acá, para el cliente.
+  const sugerenciaPaseos = useMemo(() => {
+    if (!cliente || !cliente.diasHabituales?.length) return null;
+    const diasDelPlan = diasSegunPlan(mesIdx, anio, cliente.diasHabituales);
+    if (diasDelPlan.length === 0) return null;
+    const realizados = [], cancelados = [], sinMarcar = [];
+    diasDelPlan.forEach((d) => {
+      const registro = registroPaseos[`${cliente.id}_${fechaKey(new Date(anio, mesIdx, d))}`];
+      if (registro?.realizado) realizados.push(d);
+      else if (registro?.cancelado) cancelados.push(d);
+      else sinMarcar.push(d);
+    });
+    const totalRealizados = calcularBoletaPaseos({ dias: realizados, mesIdx, anio, valorPaseo, recargoPct }).total;
+    return { realizados, cancelados, sinMarcar, totalRealizados };
+  }, [cliente, mesIdx, anio, registroPaseos, valorPaseo, recargoPct]);
+
+  const [sugerenciaAplicada, setSugerenciaAplicada] = useState(false);
+
+  function usarSugerencia() {
+    if (!sugerenciaPaseos) return;
+    setDias(sugerenciaPaseos.realizados);
+    setPlanId("PERSONALIZADO");
+    setPaseosCancelados(0);
+    setEmitida(null);
+    setSugerenciaAplicada(true);
+  }
+
   function ultimaBoletaDe(nombreCliente) {
     const previas = boletasEmitidas.filter((b) => b.cliente === nombreCliente).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
     return previas[0] || null;
@@ -493,6 +524,7 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
       if (c?.planHabitual) aplicarPlan(c.planHabitual);
     }
     setEmitida(null);
+    setSugerenciaAplicada(false);
   }
 
   function toggleDiaSemanaPersonalizado(dow) {
@@ -513,6 +545,7 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
     } else {
       aplicarPlan(planId, mIdx);
     }
+    setSugerenciaAplicada(false);
   }
 
   function toggleDia(d) {
@@ -769,6 +802,45 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
         </select>
         {clienteTieneHistorial && (
           <p style={{ ...hint, marginTop: -10 }}>Se reutilizó el valor y el patrón de días de la última boleta de este cliente — puedes ajustarlos si cambiaron.</p>
+        )}
+
+        {sugerenciaPaseos && (
+          <div style={{ background: "#D8ECDE", borderRadius: 10, padding: 16, marginTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 15 }}>🐾</span>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: "#2F6A46" }}>Calculado desde los paseos registrados</span>
+            </div>
+            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
+              <div style={{ background: "#FFFFFF", borderRadius: 8, padding: "8px 10px" }}>
+                <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C" }}>Realizados</p>
+                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: NAVY }}>{sugerenciaPaseos.realizados.length}</p>
+              </div>
+              <div style={{ background: "#FFFFFF", borderRadius: 8, padding: "8px 10px" }}>
+                <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C" }}>Cancelados</p>
+                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: NAVY }}>{sugerenciaPaseos.cancelados.length}</p>
+              </div>
+              <div style={{ background: "#FFFFFF", borderRadius: 8, padding: "8px 10px" }}>
+                <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C" }}>Sin marcar aún</p>
+                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: NAVY }}>{sugerenciaPaseos.sinMarcar.length}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+              <span style={{ fontSize: 12.5, color: "#5C5442" }}>{sugerenciaPaseos.realizados.length} paseo(s) × {fmtCLP(valorPaseo)}</span>
+              <span style={{ fontSize: 19, fontWeight: 700, color: "#2F6A46" }}>{fmtCLP(sugerenciaPaseos.totalRealizados)}</span>
+            </div>
+            {sugerenciaPaseos.realizados.length === 0 ? (
+              <p style={{ ...hint, margin: 0 }}>Ningún paseo marcado como realizado todavía este mes — usa el plan de abajo mientras tanto.</p>
+            ) : (
+              <button type="button" onClick={usarSugerencia} style={{ ...botonSecundario, width: "auto", padding: "8px 16px", borderColor: "#2F6A46", color: "#2F6A46" }}>
+                Usar este cálculo
+              </button>
+            )}
+            {sugerenciaAplicada && (
+              <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#2F6A46", display: "flex", alignItems: "center", gap: 6 }}>
+                ✓ Aplicado — el plan de abajo quedó con esos {sugerenciaPaseos.realizados.length} días, ajústalos si hace falta.
+              </p>
+            )}
+          </div>
         )}
 
         <h2 style={{ ...sectionTitle, marginTop: 26 }} id="boleta-plan-label">2. Plan de paseos</h2>
@@ -2707,7 +2779,7 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
 }
 
 // ---------- Boletas: selector de tipo (paseo/adiestramiento) ----------
-export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRegistrarBoleta, onRegistrarBoletaAdiestramiento, recargoPct, actualizarRecargoPct, rolActual }) {
+export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRegistrarBoleta, onRegistrarBoletaAdiestramiento, recargoPct, actualizarRecargoPct, rolActual, registroPaseos = {} }) {
   // El entrenador arranca en adiestramiento (su uso más frecuente) pero
   // ahora puede pasar a boletas de paseo igual que coordinador/administrador.
   const [tipo, setTipo] = useState(rolActual === "entrenador" ? "adiestramiento" : "paseo");
@@ -2725,7 +2797,7 @@ export function Boletas({ clientes, boletasEmitidas, boletasAdiestramiento, onRe
         </button>
       </div>
       {tipo === "paseo" ? (
-        <FormularioBoletaPaseo clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={onRegistrarBoleta} recargoPct={recargoPct} actualizarRecargoPct={actualizarRecargoPct} />
+        <FormularioBoletaPaseo clientes={clientes} boletasEmitidas={boletasEmitidas} onRegistrarBoleta={onRegistrarBoleta} recargoPct={recargoPct} actualizarRecargoPct={actualizarRecargoPct} registroPaseos={registroPaseos} />
       ) : (
         <FormularioBoletaAdiestramiento clientes={clientes} onRegistrarBoleta={onRegistrarBoletaAdiestramiento} />
       )}
