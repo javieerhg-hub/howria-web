@@ -2606,12 +2606,17 @@ function EvaluacionesPorConfirmar({ citas, setTab }) {
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
   const esEntrenador = user.rol === "entrenador";
+  // El dashboard de administrador/coordinador ya mostraba la fase de todo
+  // el equipo ("Estado del equipo") — pero la persona dueña de ese estado
+  // no tenía la misma confirmación en su propia pantalla.
+  const miAusencia = ausenciasPaseador[user.nombre];
+  const miFase = FASES_PASEADOR.find((f) => f.id === (faseDiaPaseador[user.nombre] || "pendiente")) || FASES_PASEADOR[0];
 
   let diasPaseando = null;
   if (miUsuario.fechaInicio) {
@@ -2622,19 +2627,24 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
   const encabezado = (
     <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: -30, right: -30, width: 140, height: 140, borderRadius: "50%", background: "rgba(201,150,47,0.12)" }} />
-      <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
-        <div style={{ width: 64, height: 64, borderRadius: "50%", flex: "none", background: miUsuario.fotoUrl ? `url(${miUsuario.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
-          {!miUsuario.fotoUrl && <span style={{ color: CREAM, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, position: "relative", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", flex: "none", background: miUsuario.fotoUrl ? `url(${miUsuario.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.25)" }}>
+            {!miUsuario.fotoUrl && <span style={{ color: CREAM, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif" }}>{user.nombre.charAt(0).toUpperCase()}</span>}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
+            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
+            {diasPaseando !== null && (
+              <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
+                {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
+              </p>
+            )}
+          </div>
         </div>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
-          <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
-          {diasPaseando !== null && (
-            <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
-              {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
-            </p>
-          )}
-        </div>
+        <span style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 12px", borderRadius: 20, flex: "none", background: miAusencia ? "#F1DCD2" : miFase.bg, color: miAusencia ? RUST : miFase.color }}>
+          {miAusencia ? "Ausente hoy" : `Tu estado: ${miFase.nombre}`}
+        </span>
       </div>
     </div>
   );
@@ -2799,6 +2809,18 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
           </div>
         </div>
       )}
+      {clientesHoy.length === 0 && (
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Paseo de hoy</h2>
+          <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados para hoy.</p>
+        </div>
+      )}
+      {clientesHoy.length > 0 && pendientesHoy.length === 0 && (
+        <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
+          <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Paseo de hoy</h2>
+          <p style={{ ...hint, marginTop: 8, color: "#2F6A46" }}>✓ Ya resolviste todos tus paseos de hoy.</p>
+        </div>
+      )}
 
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Calendario exprés</h2>
@@ -2866,10 +2888,15 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 
 // ---------- Inicio (dashboard) ----------
 function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados }) {
+  // A diferencia de Coordinación, esta pantalla (la más densa de la app:
+  // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
+  // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
+  // sección plegable.
+  const [detallesAbiertos, setDetallesAbiertos] = useState(true);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
 
@@ -2943,7 +2970,9 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
         </div>
       </div>
 
-      <LauncherMobile tabs={tabs} setTab={setTab} />
+      <div className="howria-inicio-launcher-order">
+        <LauncherMobile tabs={tabs} setTab={setTab} />
+      </div>
 
       {clientesEvaluacionTodos.length > 0 && (
         <div className="howria-card" style={tarjeta}>
@@ -3017,7 +3046,13 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
         </button>
       </div>
 
-      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+      <button onClick={() => setDetallesAbiertos((v) => !v)} style={{ ...botonSecundario, width: "auto" }}>
+        {detallesAbiertos ? "▾" : "▸"} Más detalles
+      </button>
+
+      {detallesAbiertos && (
+        <>
+      <div className="howria-g2 howria-inicio-ingresos-equipo" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
         <div className="howria-card" style={tarjeta}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
             <h2 style={sectionTitle}>Ingresos de esta semana</h2>
@@ -3058,7 +3093,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
         </div>
       </div>
 
-      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="howria-g2 howria-inicio-prospectos-citas" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Prospectos por seguir</h2>
           {prospectosVencidos.length === 0 ? (
@@ -3089,7 +3124,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
         </div>
       </div>
 
-      <div className="howria-card" style={tarjeta}>
+      <div className="howria-card howria-inicio-paseos-hoy" style={tarjeta}>
         <h2 style={sectionTitle}>Paseos de hoy</h2>
         {clientesHoy.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>No hay paseos programados para hoy.</p>
@@ -3126,6 +3161,8 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3311,7 +3348,7 @@ export function ToastHost() {
     // zIndex por encima de RutaGuiada (10020, ver estadoGlobalUI más abajo)
     // — un error de guardado tiene que seguir siendo visible aunque la
     // ruta guiada esté abierta a pantalla completa.
-    <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 10030, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="howria-toast-host" style={{ position: "fixed", bottom: 20, right: 20, zIndex: 10030, display: "flex", flexDirection: "column", gap: 8 }}>
       {toasts.map((t) => (
         <div key={t.id} style={{ background: t.tipo === "error" ? RUST : NAVY, color: "#fff", padding: "12px 18px", borderRadius: 8, fontSize: 13.5, boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: 320 }}>
           {t.mensaje}
@@ -3830,6 +3867,21 @@ export default function HowriaAdmin() {
           /* "Imprimir informe" es impresión de navegador — no tiene mucho
              sentido en un celular, donde ya está "Exportar CSV" al lado. */
           .howria-finanzas-imprimir { display: none !important; }
+          /* En el Inicio de coordinador/administrador, el launcher de
+             accesos rápidos aparecía primero en mobile, antes de avisos y
+             KPIs — justo en la pantalla que debe responder "qué necesita
+             mi atención ahora". Pasa a order 2 (después de header, avisos
+             y KPIs, que quedan en el order 0 por defecto); los bloques más
+             densos de abajo (ingresos+equipo, prospectos+citas, paseos de
+             hoy) quedan en order 3, después del launcher. */
+          .howria-inicio-launcher-order { order: 2; }
+          .howria-inicio-ingresos-equipo, .howria-inicio-prospectos-citas, .howria-inicio-paseos-hoy { order: 3; }
+          /* Los toasts se posicionaban pensando en escritorio (abajo a la
+             derecha) — ahí mismo vive la barra de navegación flotante en
+             mobile, así que un toast podía quedar tapado o apretado
+             contra ella. En mobile aparecen arriba, ancho completo. */
+          .howria-toast-host { top: max(12px, env(safe-area-inset-top)) !important; bottom: auto !important; left: 12px !important; right: 12px !important; }
+          .howria-toast-host > div { max-width: none !important; }
           /* Decisión a propósito, no un descuido: Javier pidió reordenar
              el Inicio del entrenador en mobile para dejar arriba el
              contenido de acción (accesos directos, citas por atender)
@@ -3937,7 +3989,11 @@ export default function HowriaAdmin() {
         {mostrarCambiarPassword && <ModalCambiarPassword onCerrar={() => setMostrarCambiarPassword(false)} />}
 
         <div className="howria-shell-contenido" style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
+          {/* Facturas/Finanzas/Pago trabajadores tienen tablas anchas que en
+              un monitor grande dejaban espacio vacío a los costados con el
+              ancho fijo de 1040px del resto de la app — mejor aprovechar el
+              espacio en vez de forzar scroll horizontal antes de tiempo. */}
+          <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} />}
