@@ -2101,12 +2101,21 @@ export function fechaKey(d) {
 // para poder reusarlo en cambios abruptos dentro de una misma pestaña
 // (ej. abrir/cerrar la ruta guiada a pantalla completa, o el picker
 // nativo de un <input type="date">).
+// El content "de verdad" del viewport se guarda una sola vez, la primera
+// vez que se llama a esta función — así, si dos llamadas se superponen
+// (ej. el efecto de cambio de pestaña de App() y el de MisPaseos al
+// entrar a la pestaña, casi al mismo tiempo), la segunda no lee el
+// content YA modificado por la primera como si fuera "el original" y lo
+// deja pegado para siempre con maximum-scale de más — cosa que pasaba
+// antes y hacía que Mis Paseos (la única pestaña con dos disparadores
+// superpuestos) quedara con un zoom distinto al resto de la app.
+let viewportOriginal = null;
 export function forzarRecalculoZoomIOS() {
   const meta = document.querySelector('meta[name="viewport"]');
   if (!meta) return;
-  const original = meta.getAttribute("content");
-  meta.setAttribute("content", `${original}, maximum-scale=1.0`);
-  setTimeout(() => meta.setAttribute("content", original), 300);
+  if (viewportOriginal === null) viewportOriginal = meta.getAttribute("content");
+  meta.setAttribute("content", `${viewportOriginal}, maximum-scale=1.0`);
+  setTimeout(() => meta.setAttribute("content", viewportOriginal), 300);
 }
 
 // Fila de la leyenda junto al anillo de "Hoy" en Mis paseos.
