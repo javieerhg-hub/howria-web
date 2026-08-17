@@ -2187,6 +2187,18 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const dow = diaSeleccionado;
   const clientesDelDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
 
+  // Saltar directo a una fecha lejana sin tener que apretar "semana
+  // anterior" muchas veces — mueve tanto la semana vista como el día
+  // seleccionado dentro de ella.
+  function irAFecha(fechaStr) {
+    if (!fechaStr) return;
+    const d = new Date(fechaStr + "T00:00:00");
+    if (isNaN(d) || d > hoy) return;
+    const nuevoOffset = Math.round((inicioSemana(d) - inicioSemana(hoy)) / (7 * 86400000));
+    setSemanaOffset(nuevoOffset);
+    setDiaSeleccionado((d.getDay() + 6) % 7);
+  }
+
   // resumen mensual (las cancelaciones del cliente no cuentan en contra del paseador)
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
   const resumenMensual = misClientes.map((c) => {
@@ -2341,7 +2353,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         </div>
 
         <p style={label}>Mi semana</p>
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
+        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 14 }}>
             <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#9BAAB8" }}>Programados</p>
             <p style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>{totalSemana}</p>
@@ -2359,23 +2371,31 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
           {resumenPorDiaSemana.map((d, i) => {
             const esHoyCol = fechaKey(d.fecha) === fechaKey(hoy);
             return (
-              <div key={i} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
+              <div key={i} className="howria-week-celda" style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
                 <p style={{ margin: 0, fontSize: 10.5, color: esHoyCol ? "#9BAAB8" : "#8A7E5C" }}>{DIAS_SEMANA[i]} {d.fecha.getDate()}</p>
                 <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 700, color: esHoyCol ? CREAM : NAVY }}>{d.realizados}/{d.total}</p>
               </div>
             );
           })}
         </div>
+      </div>
 
-        <p style={label}>Detalle del día</p>
-        <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 20, flexWrap: "wrap" }}>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <h2 style={sectionTitle}>Detalle del día</h2>
+          <div>
+            <label style={{ ...label, display: "block", marginBottom: 4 }} htmlFor="mispaseos-ir-a-fecha">Ir a una fecha</label>
+            <input id="mispaseos-ir-a-fecha" type="date" max={fechaKey(hoy)} onChange={(e) => irAFecha(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
+          </div>
+        </div>
+        <div className="howria-dia-pills" style={{ display: "flex", gap: 6, marginTop: 14, marginBottom: 20, flexWrap: "wrap" }}>
           {diasSemanaVista.map((d, i) => {
             const esHoy = fechaKey(d) === fechaKey(hoy);
             const esFuturo = d > hoy;
             return (
               <button key={i} onClick={() => setDiaSeleccionado(i)} disabled={esFuturo}
                 style={{
-                  padding: "10px 6px", minWidth: 66, borderRadius: 8, cursor: esFuturo ? "default" : "pointer", textAlign: "center",
+                  padding: "10px 6px", minWidth: 66, flex: "none", borderRadius: 8, cursor: esFuturo ? "default" : "pointer", textAlign: "center",
                   border: diaSeleccionado === i ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
                   background: diaSeleccionado === i ? NAVY : "#FFFFFF",
                   color: diaSeleccionado === i ? CREAM : (esFuturo ? "#C9C3A8" : INK),
@@ -2405,7 +2425,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                   border: cancelado ? `1.5px solid ${RUST}` : hecho ? `1.5px solid #2F6A46` : "1px solid #E4DBC3",
                   background: cancelado ? "#F1DCD2" : hecho ? "#D8ECDE" : "#FFFFFF",
                 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                       <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
                       <div>
@@ -2449,7 +2469,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Tu pago — {MESES[mesActual]} {anioActual}</h2>
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
+        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
             <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosMes} / {totalProgramadosMes}</p>
@@ -2468,10 +2488,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         <p style={label}>Detalle por cliente</p>
         <div>
           {resumenMensual.map((r) => (
-            <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-              <span style={{ color: INK }}>{r.cliente.nombre} · {r.cliente.perro}</span>
-              <span style={{ color: "#8A7E5C" }}>{r.realizados} / {r.programados} paseos</span>
-              <b style={{ color: NAVY }}>{fmtCLP(r.monto)}</b>
+            <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+              <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre} · {r.cliente.perro}</span>
+              <span style={{ color: "#8A7E5C", flex: "none" }}>{r.realizados} / {r.programados} paseos</span>
+              <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(r.monto)}</b>
             </div>
           ))}
         </div>
@@ -2489,7 +2509,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         {mostrarClientes && (
           <>
             <p style={hint}>Tu horario completo, para tenerlo siempre a mano.</p>
-            <div style={{ overflowX: "auto", marginTop: 12 }}>
+            <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
@@ -2512,6 +2532,22 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="howria-mispaseos-tarjetas" style={{ display: "none", marginTop: 12 }}>
+              {misClientes.map((c) => (
+                <div key={c.id} style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· 🐾 {c.perro}</span></p>
+                      <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.direccion || "sin dirección"}</p>
+                    </div>
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 12.5, color: INK }}>
+                    {(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "Sin días asignados"}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}
+                  </p>
+                </div>
+              ))}
             </div>
           </>
         )}
@@ -3724,6 +3760,8 @@ export default function HowriaAdmin() {
         .howria-header { display: flex; }
         .howria-facturas-tabla { display: block; }
         .howria-facturas-tarjetas { display: none; }
+        .howria-mispaseos-tabla { display: block; }
+        .howria-mispaseos-tarjetas { display: none; }
         .howria-agenda-link-boton { display: none; }
         .howria-cal-celda { min-height: 92px; }
         .howria-cal-punto { display: none; }
@@ -3737,8 +3775,14 @@ export default function HowriaAdmin() {
             grid-template-columns: 1fr !important;
           }
           .howria-week {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: repeat(7, 1fr) !important; gap: 4px !important;
           }
+          .howria-week-celda { padding: 5px 2px !important; }
+          .howria-week-celda p:first-child { font-size: 9px !important; }
+          .howria-week-celda p:last-child { font-size: 12.5px !important; }
+          .howria-dia-pills { flex-wrap: nowrap !important; overflow-x: auto !important; padding-bottom: 4px; }
+          .howria-mispaseos-tabla { display: none !important; }
+          .howria-mispaseos-tarjetas { display: flex !important; flex-direction: column; gap: 8px; }
           .howria-photo-row > div:first-child {
             display: flex !important; align-items: center; gap: 14px;
           }
