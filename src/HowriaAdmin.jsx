@@ -400,6 +400,13 @@ function pagoToDb(p) {
   };
 }
 
+function avisoDescartadoToDb(a) {
+  return { usuario_email: a.usuarioEmail, clave: a.clave };
+}
+function dbToAvisoDescartado(row) {
+  return { usuarioEmail: row.usuario_email, clave: row.clave, creadoEn: row.creado_en };
+}
+
 function dbToPago(row) {
   return {
     paseador: row.paseador_nombre,
@@ -2044,11 +2051,20 @@ export function inicioSemana(fecha) {
 
 
 // ---------- Pago a trabajadores ----------
-function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [] }) {
+function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   const hoyStr0 = fechaKey(hoy);
   const avisos = [];
+
+  // Antes esto solo se veía como una pastilla roja chica dentro de
+  // "Estado del equipo" — había que scrollear y leerla con atención
+  // para notar que alguien estaba ausente hoy. Ahora también genera un
+  // aviso arriba, igual que el resto de las cosas que necesitan mirarse.
+  const ausentesHoy = Object.keys(ausenciasPaseador);
+  if (ausentesHoy.length > 0) {
+    avisos.push({ tipo: "ausencia", icono: "🚫", texto: `${ausentesHoy.length} persona(s) del equipo ausente(s) hoy: ${ausentesHoy.join(", ")}`, clave: `ausencia-${hoyStr0}-${ausentesHoy.join(",")}`, tab: "coordinacion" });
+  }
 
   // "No enviada" necesita que el equipo la revise y la acepte primero —
   // es una acción distinta (y más urgente) a "pendiente_pago", que solo
@@ -2742,6 +2758,11 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     <div style={{ display: "grid", gap: 20 }}>
       {encabezado}
 
+      {/* De los cuatro roles, paseador era el único sin este launcher en
+          su Inicio mobile — justo el rol más "de terreno, en el
+          celular" de todos. No pinta nada en desktop (.howria-launcher-mobile). */}
+      <LauncherMobile tabs={tabs} setTab={setTab} destacar={["mis-paseos"]} />
+
       {clientesHoy.length > 0 && pendientesHoy.length > 0 && (
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Paseo de hoy</h2>
@@ -2835,25 +2856,18 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente }) {
+function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
     return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} />;
   }
-  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos });
+  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
 
-  const [descartados, setDescartados] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("howria_avisos_descartados") || "[]"); } catch { return []; }
-  });
   function descartarAviso(clave) {
-    setDescartados((prev) => {
-      const next = [...prev, clave];
-      localStorage.setItem("howria_avisos_descartados", JSON.stringify(next));
-      return next;
-    });
+    setAvisosDescartados((prev) => [...prev, { id: Date.now() + Math.random(), clave, usuarioEmail: user.email }]);
   }
-  const avisos = todosLosAvisos.filter((a) => !descartados.includes(a.clave));
+  const avisos = todosLosAvisos.filter((a) => !avisosDescartados.some((d) => d.clave === a.clave));
 
   const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dow));
   const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
@@ -2877,6 +2891,14 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
 
   const hoyStr = fechaKey(hoy);
   const prospectosVencidos = prospectos.filter((p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido");
+  // Antes nada en este dashboard estaba personalizado a quien lo mira —
+  // solo totales de la empresa completa. Un coordinador/administrador
+  // también puede tener tareas y prospectos asignados a SÍ MISMO (no
+  // solo repartidos al equipo), así que esto separa "lo mío" de "lo de
+  // la empresa" sin sacar los totales, que siguen siendo necesarios
+  // para su rol.
+  const misTareasHoy = tareasEquipo.filter((t) => t.asignadoA === user.nombre && fechaKey(new Date(t.fechaISO)) === hoyStr && t.estado !== "hecho");
+  const misProspectosVencidos = prospectosVencidos.filter((p) => p.asignadoA === user.nombre);
   const proximasCitas = citasAgenda.filter((c) => c.estado === "agendada" && new Date(c.fechaISO) >= hoy).sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)).slice(0, 4);
   // Todas las evaluaciones pedidas por el link público sin confirmar
   // todavía (cualquier entrenador) — coordinación/administrador ven el
@@ -2931,6 +2953,22 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
       )}
 
       <EvaluacionesPorConfirmar citas={evaluacionesPendientesTodas} setTab={setTab} />
+
+      {(misTareasHoy.length > 0 || misProspectosVencidos.length > 0) && (
+        <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#2F6A46", textTransform: "uppercase", letterSpacing: 0.5 }}>Lo tuyo hoy</p>
+          {misTareasHoy.length > 0 && (
+            <button onClick={() => setTab("equipo")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "4px 0", font: "inherit" }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#2E5C41" }}>📋 {misTareasHoy.length} tarea(s) tuya(s) pendiente(s) para hoy</p>
+            </button>
+          )}
+          {misProspectosVencidos.length > 0 && (
+            <button onClick={() => setTab("seguimiento")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "4px 0", font: "inherit" }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#2E5C41" }}>📞 {misProspectosVencidos.length} prospecto(s) tuyo(s) con seguimiento vencido</p>
+            </button>
+          )}
+        </div>
+      )}
 
       {avisos.length > 0 && (
         <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
@@ -3413,20 +3451,24 @@ export function PullToRefresh() {
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
 const PRIORIDAD_BARRA_NAV = ["boletas", "facturas", "clientes", "agenda", "mail", "mis-paseos", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "usuarios"];
 
-function ItemBarraNav({ activo, Icono, label, onClick }) {
+function ItemBarraNav({ activo, Icono, label, onClick, badge }) {
   if (activo) {
     return (
       <button onClick={onClick}
-        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 10px", borderRadius: 999, background: NAVY, border: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0 }}>
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 10px", borderRadius: 999, background: NAVY, border: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0, position: "relative" }}>
         <Icono size={17} color={CREAM} style={{ flex: "none" }} />
         <span style={{ fontSize: 12, color: CREAM, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        {badge > 0 && <span style={{ position: "absolute", top: 2, right: 6, width: 8, height: 8, borderRadius: "50%", background: RUST, border: `1.5px solid ${NAVY}` }} />}
       </button>
     );
   }
   return (
     <button onClick={onClick}
-      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "7px 4px", border: "none", background: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0 }}>
-      <Icono size={18} color="#8A7E5C" />
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "7px 4px", border: "none", background: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0, position: "relative" }}>
+      <span style={{ position: "relative" }}>
+        <Icono size={18} color="#8A7E5C" />
+        {badge > 0 && <span style={{ position: "absolute", top: -2, right: -6, width: 8, height: 8, borderRadius: "50%", background: RUST, border: "1.5px solid #FFFDF7" }} />}
+      </span>
       <span style={{ fontSize: 9.5, color: "#8A7E5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
     </button>
   );
@@ -3435,7 +3477,7 @@ function ItemBarraNav({ activo, Icono, label, onClick }) {
 // Barra de navegación flotante en mobile, tipo apps nativas: Inicio + las
 // secciones más usadas (PRIORIDAD_BARRA_NAV), y "Más" agrupa el resto por
 // categoría en un panel arriba de la barra.
-function BarraNavegacionMobile({ tabs, tab, setTab }) {
+function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0 }) {
   const [masAbierto, setMasAbierto] = useState(false);
   if (!tabs) return null;
 
@@ -3469,6 +3511,9 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
                         style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: activo ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
                         <Icono size={17} color={NAVY} />
                         <span style={{ fontSize: 13.5, color: INK, fontWeight: activo ? 700 : 400 }}>{t.label}</span>
+                        {t.id === "mail" && correosNoLeidos > 0 && (
+                          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{correosNoLeidos}</span>
+                        )}
                       </button>
                     );
                   })}
@@ -3482,10 +3527,14 @@ function BarraNavegacionMobile({ tabs, tab, setTab }) {
         {tieneInicio && <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />}
         {destacadas.map((t) => {
           const Icono = ICONOS_TAB[t.id] || Home;
-          return <ItemBarraNav key={t.id} activo={tab === t.id} Icono={Icono} label={t.label} onClick={() => ir(t.id)} />;
+          return <ItemBarraNav key={t.id} activo={tab === t.id} Icono={Icono} label={t.label} onClick={() => ir(t.id)} badge={t.id === "mail" ? correosNoLeidos : 0} />;
         })}
         {resto.length > 0 && (
-          <ItemBarraNav activo={masAbierto} Icono={LayoutGrid} label="Más" onClick={() => setMasAbierto((v) => !v)} />
+          // Mail puede estar en "destacadas" (arriba) o adentro de "Más" —
+          // según el rol, según cuáles pestañas se prioricen — así que el
+          // aviso de correo sin leer también tiene que poder aparecer acá.
+          <ItemBarraNav activo={masAbierto} Icono={LayoutGrid} label="Más" onClick={() => setMasAbierto((v) => !v)}
+            badge={resto.some((t) => t.id === "mail") ? correosNoLeidos : 0} />
         )}
       </div>
     </div>
@@ -3553,6 +3602,11 @@ export default function HowriaAdmin() {
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", sessionVersion);
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
+  // Antes vivía solo en localStorage — descartar un aviso en la PC no
+  // hacía nada en el celular de la misma persona, volvía a aparecer ahí
+  // sin marcar. RLS acota cada fila a su propio usuario_email, así que
+  // esta lista ya viene filtrada a "lo mío" sin filtrar nada acá.
+  const [avisosDescartados, setAvisosDescartados] = useSyncedTable("avisos_descartados", avisoDescartadoToDb, dbToAvisoDescartado, "creado_en", sessionVersion);
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
   const [mascotas, setMascotas, cargandoMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
   const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
@@ -3748,6 +3802,13 @@ export default function HowriaAdmin() {
           .howria-facturas-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
           .howria-pagos-tabla { display: none !important; }
           .howria-pagos-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
+          /* Decisión a propósito, no un descuido: Javier pidió reordenar
+             el Inicio del entrenador en mobile para dejar arriba el
+             contenido de acción (accesos directos, citas por atender)
+             en vez de la tarjeta de encabezado (foto+rol+fecha). El
+             Inicio del paseador no recibió el mismo recorte porque no
+             fue parte de ese pedido — no hay una razón estructural por
+             la que no pudiera aplicarse ahí también si se pide después. */
           .howria-inicio-entrenador-encabezado { display: none !important; }
           .howria-agenda-link-tarjeta { display: none !important; }
           .howria-agenda-link-boton { display: flex !important; }
@@ -3767,7 +3828,7 @@ export default function HowriaAdmin() {
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={56} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} setTab={setTab} />}
+          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
             <div>{user.nombre}</div>
@@ -3829,7 +3890,7 @@ export default function HowriaAdmin() {
 
           <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" }}>
-              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos })} setTab={setTab} />}
+              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
               <BotonNotificacionesPush usuarioEmail={user.email} />
             </div>
             <div style={{ padding: "0 8px", fontSize: 13, color: CREAM }}>
@@ -3851,7 +3912,7 @@ export default function HowriaAdmin() {
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
@@ -3880,7 +3941,7 @@ export default function HowriaAdmin() {
           </div>
         </div>
       </div>
-      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} />
+      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} correosNoLeidos={correosNoLeidos} />
     </div>
   );
 }
