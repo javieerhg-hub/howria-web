@@ -467,6 +467,7 @@ function citaToDb(c) {
     notas: c.notas || null,
     origen: c.origen || "staff",
     duracion_min: c.duracionMin || 60,
+    precio: c.precio ?? null,
     // confirmada_en / email_enviado no se mandan desde acá — los escribe
     // únicamente api/confirmar-cita.js, para que un guardado normal del
     // cliente nunca los pise con estado local desactualizado.
@@ -491,6 +492,7 @@ function dbToCita(row) {
     notas: row.notas,
     origen: row.origen || "staff",
     duracionMin: row.duracion_min || 60,
+    precio: row.precio,
     confirmadaEn: row.confirmada_en,
     emailEnviado: row.email_enviado || false,
     planId: row.plan_id,

@@ -5429,10 +5429,16 @@ function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
 export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidadFecha, toggleBloqueDisponibilidad, aplicarPatronSemanal, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");
+  const [busquedaCita, setBusquedaCita] = useState("");
+  const [historialDesde, setHistorialDesde] = useState("");
+  const [historialHasta, setHistorialHasta] = useState("");
+  const [limiteHistorial, setLimiteHistorial] = useState(20);
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
   const [tipo, setTipo] = useState("evaluacion");
   const [adiestrador, setAdiestrador] = useState(adiestradores[0]?.nombre ?? "");
   const [fechaHora, setFechaHora] = useState("");
+  const [duracionCita, setDuracionCita] = useState(60);
+  const [precioCita, setPrecioCita] = useState("");
   const [notasNuevas, setNotasNuevas] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [notasEdit, setNotasEdit] = useState("");
@@ -5464,15 +5470,17 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       showToast("La fecha y hora de la cita debe ser futura.");
       return;
     }
-    if (hayChoqueHorario(citas, adiestrador, fechaHora)) {
+    const duracion = Number(duracionCita) || 60;
+    if (hayChoqueHorario(citas, adiestrador, fechaHora, duracion)) {
       showToast(`${adiestrador} ya tiene otra cita agendada en ese horario.`);
       return;
     }
     setCitas((prev) => [...prev, {
       id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
       tipo, adiestrador, fechaISO: new Date(fechaHora).toISOString(), estado: "agendada", notas: notasNuevas.trim(), origen: "staff",
+      duracionMin: duracion, precio: precioCita === "" ? null : Number(precioCita),
     }]);
-    setFechaHora(""); setNotasNuevas(""); setMostrarFormAgendar(false);
+    setFechaHora(""); setNotasNuevas(""); setDuracionCita(60); setPrecioCita(""); setMostrarFormAgendar(false);
   }
 
   function cancelar(id) {
@@ -5520,9 +5528,16 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   }
 
   const citasFiltradas = filtroAdiestrador === "todos" ? citas : citas.filter((c) => c.adiestrador === filtroAdiestrador);
-  const pendientes = citasFiltradas.filter((c) => c.estado === "pendiente").sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
-  const proximas = citasFiltradas.filter((c) => c.estado === "agendada").sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
-  const historial = citasFiltradas.filter((c) => !["agendada", "pendiente"].includes(c.estado)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  const busquedaCitaLimpia = busquedaCita.trim().toLowerCase();
+  const citasBuscadas = busquedaCitaLimpia
+    ? citasFiltradas.filter((c) => c.clienteNombre?.toLowerCase().includes(busquedaCitaLimpia) || c.perro?.toLowerCase().includes(busquedaCitaLimpia))
+    : citasFiltradas;
+  const pendientes = citasBuscadas.filter((c) => c.estado === "pendiente").sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+  const proximas = citasBuscadas.filter((c) => c.estado === "agendada").sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
+  let historialCompleto = citasBuscadas.filter((c) => !["agendada", "pendiente"].includes(c.estado)).sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  if (historialDesde) historialCompleto = historialCompleto.filter((c) => fechaKey(new Date(c.fechaISO)) >= historialDesde);
+  if (historialHasta) historialCompleto = historialCompleto.filter((c) => fechaKey(new Date(c.fechaISO)) <= historialHasta);
+  const historial = historialCompleto.slice(0, limiteHistorial);
 
   if (cargando) {
     return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando agenda…</p></div>;
@@ -5546,6 +5561,23 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
           style={{ width: 44, height: 44, borderRadius: 12, border: "none", background: linkGenericoCopiado ? "#2F6A46" : NAVY, color: CREAM, cursor: "pointer", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(20,33,61,0.15)" }}>
           {linkGenericoCopiado ? <Check size={18} /> : <Link2 size={18} />}
         </button>
+      </div>
+
+      <div className="howria-card howria-agenda-filtro" style={{ ...tarjeta, display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ flex: "1 1 220px" }}>
+          <label style={label} htmlFor="agenda-buscar">Buscar cliente o perro</label>
+          <input id="agenda-buscar" type="text" value={busquedaCita} onChange={(e) => setBusquedaCita(e.target.value)} placeholder="Nombre..." style={{ ...input, marginBottom: 0 }} />
+        </div>
+        <div>
+          <label style={label} htmlFor="agenda-filtro-adiestrador">Filtrar por entrenador</label>
+          <select id="agenda-filtro-adiestrador" value={filtroAdiestrador} onChange={(e) => setFiltroAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0, width: 200 }}>
+            <option value="todos">Todos los entrenadores</option>
+            {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+          </select>
+        </div>
+        {(busquedaCita || filtroAdiestrador !== "todos") && (
+          <p style={{ ...hint, margin: 0, flexBasis: "100%" }}>Se aplica a las tres listas de abajo: pendientes, próximas e historial.</p>
+        )}
       </div>
 
       {pendientes.length > 0 && (
@@ -5622,6 +5654,14 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 <label style={label} htmlFor="agenda-fecha-hora">Fecha y hora</label>
                 <input id="agenda-fecha-hora" type="datetime-local" value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               </div>
+              <div>
+                <label style={label} htmlFor="agenda-duracion">Duración (minutos)</label>
+                <input id="agenda-duracion" type="number" min="15" step="15" value={duracionCita} onChange={(e) => setDuracionCita(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              </div>
+              <div>
+                <label style={label} htmlFor="agenda-precio">Precio (opcional)</label>
+                <input id="agenda-precio" type="number" min="0" placeholder="$" value={precioCita} onChange={(e) => setPrecioCita(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              </div>
             </div>
             <label style={{ ...label, marginTop: 12 }} htmlFor="agenda-notas">Notas (opcional)</label>
             <textarea id="agenda-notas" value={notasNuevas} onChange={(e) => setNotasNuevas(e.target.value)} placeholder="Ej. primera evaluación, revisar reactividad con otros perros..."
@@ -5634,23 +5674,22 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       </div>
 
       <div className="howria-card howria-agenda-proximas" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <h2 style={sectionTitle}>Próximas citas</h2>
-          <select value={filtroAdiestrador} onChange={(e) => setFiltroAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0, width: 200 }}>
-            <option value="todos">Todos los entrenadores</option>
-            {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-          </select>
-        </div>
+        <h2 style={sectionTitle}>Próximas citas</h2>
 
         <div style={{ marginTop: 14 }}>
-          {proximas.map((c) => (
-            <div key={c.id} style={{ padding: "12px 14px", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, marginBottom: 10 }}>
+          {proximas.map((c) => {
+            const atrasada = new Date(c.fechaISO).getTime() < Date.now();
+            return (
+            <div key={c.id} style={{ padding: "12px 14px", background: "#FFFFFF", border: atrasada ? `1px solid ${RUST}` : "1px solid #E4DBC3", borderRadius: 8, marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ fontSize: 13.5 }}>
                   <b style={{ color: NAVY }}>{c.clienteNombre}</b> · 🐾 {c.perro}
                   <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: c.tipo === "evaluacion" ? "#F3E3B4" : "#D8ECDE", color: c.tipo === "evaluacion" ? "#8A6A1E" : "#2F6A46" }}>
                     {TIPOS_CITA.find((t) => t.id === c.tipo)?.nombre}
                   </span>
+                  {atrasada && (
+                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Atrasada</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>
                   {new Date(c.fechaISO).toLocaleString("es-CL", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · {c.adiestrador}
@@ -5675,15 +5714,26 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
           {proximas.length === 0 && <p style={hint}>No hay citas agendadas.</p>}
         </div>
       </div>
 
       <div className="howria-card howria-agenda-historial" style={tarjeta}>
         <h2 style={sectionTitle}>Historial y seguimiento</h2>
+        <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
+          <div>
+            <label style={label} htmlFor="agenda-historial-desde">Desde</label>
+            <input id="agenda-historial-desde" type="date" value={historialDesde} onChange={(e) => { setHistorialDesde(e.target.value); setLimiteHistorial(20); }} style={{ ...input, marginBottom: 0 }} />
+          </div>
+          <div>
+            <label style={label} htmlFor="agenda-historial-hasta">Hasta</label>
+            <input id="agenda-historial-hasta" type="date" value={historialHasta} onChange={(e) => { setHistorialHasta(e.target.value); setLimiteHistorial(20); }} style={{ ...input, marginBottom: 0 }} />
+          </div>
+        </div>
         {historial.length === 0 ? (
-          <p style={{ ...hint, marginTop: 8 }}>Todavía no hay citas realizadas o canceladas.</p>
+          <p style={{ ...hint, marginTop: 8 }}>{historialCompleto.length === 0 ? "Todavía no hay citas realizadas o canceladas." : "Ninguna cita en ese rango de fechas."}</p>
         ) : (
           <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
             {historial.map((c) => (
@@ -5709,6 +5759,11 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 )}
               </div>
             ))}
+            {historialCompleto.length > limiteHistorial && (
+              <button onClick={() => setLimiteHistorial((n) => n + 20)} style={{ ...botonSecundario, justifySelf: "center" }}>
+                Ver más ({historialCompleto.length - limiteHistorial} restantes)
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -5762,7 +5817,8 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
             return (
               <div style={{ marginTop: 14 }}>
                 <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                  <p style={{ ...label, marginBottom: 8 }}>Aplicar horario habitual a este mes</p>
+                  <p style={{ ...label, marginBottom: 4 }}>Aplicar horario habitual a este mes</p>
+                  <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>Los días y bloques que elijas se SUMAN a lo que ya esté disponible este mes — no lo reemplazan. Para sacar un bloque puntual, haz clic en el día en el calendario de abajo y desmárcalo ahí.</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                     {DIAS_SEMANA_LARGO.map((nombreDia, dow) => (
                       <button key={dow} type="button" onClick={() => toggleDiaPatron(dow)}
