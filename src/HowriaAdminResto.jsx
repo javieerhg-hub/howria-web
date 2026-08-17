@@ -3312,6 +3312,8 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 // ---------- Panel admin (usuarios) ----------
 export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro, setTareasEquipo, setObjetivosSemanales, setObjetivosMensuales, setProspectos, setCitasAgenda }) {
   const [busqueda, setBusqueda] = useState("");
+  const [filtroRol, setFiltroRol] = useState("todos");
+  const [filtroLogin, setFiltroLogin] = useState("todos");
   const [editandoId, setEditandoId] = useState(null);
   const [nombreEditado, setNombreEditado] = useState("");
   const [borrarId, setBorrarId] = useState(null);
@@ -3379,7 +3381,10 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     setPasswordReseteada({ nombre: u.nombre, email: u.email, password: data.password });
   }
 
-  const filtrados = usuarios.filter((u) => u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()));
+  const filtrados = usuarios
+    .filter((u) => u.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    .filter((u) => filtroRol === "todos" || u.rol === filtroRol)
+    .filter((u) => filtroLogin === "todos" || (filtroLogin === "con" ? !!u.email : !u.email));
 
   function clientesDe(nombre) {
     return clientes.filter((c) => c.paseadorNombre === nombre).length;
@@ -3546,7 +3551,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
           <p style={{ fontSize: 13, color: "#8A7E5C", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando permisos...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 520, fontSize: 12.5 }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", padding: "6px 10px", color: "#8A7E5C", fontWeight: 600, borderBottom: "1px solid #E4DBC3" }}>Pestaña</th>
@@ -3589,7 +3594,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
           <p style={{ fontSize: 13, color: "#8A7E5C", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando notificaciones...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 520, fontSize: 12.5 }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", padding: "6px 10px", color: "#8A7E5C", fontWeight: 600, borderBottom: "1px solid #E4DBC3" }}>Aviso</th>
@@ -3623,7 +3628,18 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
 
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Usuarios del sistema ({usuarios.length})</h2>
-        <input placeholder="Buscar por nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginBottom: 16, maxWidth: 320 }} />
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <input placeholder="Buscar por nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+          <select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <option value="todos">Todos los roles</option>
+            {ROLES_APP.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select value={filtroLogin} onChange={(e) => setFiltroLogin(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <option value="todos">Con o sin login</option>
+            <option value="con">Con login</option>
+            <option value="sin">Sin login</option>
+          </select>
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {cargandoUsuarios && <p style={{ color: "#8A7E5C", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando usuarios…</p>}
