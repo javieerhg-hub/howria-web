@@ -4818,6 +4818,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
   const [geocodificando, setGeocodificando] = useState(null);
   const [errorGeo, setErrorGeo] = useState("");
+  const [busquedaCliente, setBusquedaCliente] = useState("");
   const mapaDivRef = useRef(null);
   const mapaRef = useRef(null);
   const marcadoresRef = useRef(null);
@@ -4885,8 +4886,21 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
   }
 
   function calcularRuta() {
-    const seleccionados = clientesDelPaseador.filter((c) => incluidos[c.id] && c.lat && c.lng);
-    if (seleccionados.length < 2) { setRuta(null); return; }
+    const incluidosLista = clientesDelPaseador.filter((c) => incluidos[c.id]);
+    const seleccionados = incluidosLista.filter((c) => c.lat && c.lng);
+    if (seleccionados.length < 2) {
+      setRuta(null);
+      // Antes esto fallaba en silencio — sin mensaje, no pasaba nada al
+      // tocar el botón, sin explicar por qué.
+      if (incluidosLista.length < 2) {
+        setErrorGeo(`Agrega al menos 2 clientes a "En la ruta de hoy" para calcular — hay ${incluidosLista.length}.`);
+      } else {
+        const sinUbicar = incluidosLista.length - seleccionados.length;
+        setErrorGeo(`${sinUbicar} cliente(s) en la ruta todavía no están ubicados en el mapa — usa "Ubicar" en su tarjeta antes de calcular.`);
+      }
+      return;
+    }
+    setErrorGeo("");
     const orden = ordenarRutaCercanoMasProximo(seleccionados);
     let distanciaTotal = 0;
     for (let i = 0; i < orden.length - 1; i++) distanciaTotal += distanciaKm(orden[i], orden[i + 1]);
@@ -4896,7 +4910,22 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
     setRuta({ orden, distanciaTotal, minutosViaje, minutosParadas, dinero });
   }
 
+  // Antes la única forma de pasarle la ruta al paseador era leerla en
+  // pantalla — esto arma un texto plano listo para copiar y enviar por
+  // WhatsApp/lo que sea.
+  function compartirRuta() {
+    if (!ruta) return;
+    const texto =
+      `Ruta de ${paseadorId} — ${new Date().toLocaleDateString("es-CL")}\n\n` +
+      ruta.orden.map((c, i) => `${i + 1}. ${c.nombre} · ${c.direccion}`).join("\n") +
+      `\n\nDistancia: ${ruta.distanciaTotal.toFixed(1)} km · Tiempo: ${Math.round(ruta.minutosViaje + ruta.minutosParadas)} min · Genera: ${fmtCLP(ruta.dinero)}`;
+    navigator.clipboard.writeText(texto).then(() => showToast("Ruta copiada — pégala donde quieras enviarla."));
+  }
+
   const clientesConMapa = clientes.filter((c) => c.lat && c.lng);
+  const clientesFiltrados = busquedaCliente.trim()
+    ? clientesDelPaseador.filter((c) => c.nombre.toLowerCase().includes(busquedaCliente.trim().toLowerCase()))
+    : clientesDelPaseador;
 
   // Inicializa el mapa una sola vez.
   useEffect(() => {
@@ -4945,7 +4974,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
-      <div className="howria-card" style={tarjeta}>
+      <div className="howria-card howria-mapa-controles" style={tarjeta}>
         <h2 style={sectionTitle}>Mapa de rutas — Santiago</h2>
         <p style={hint}>Elige un paseador, agrega o quita clientes de su ruta, ubícalos en el mapa y calcula cuánto tiempo y dinero genera la ruta.</p>
 
@@ -4985,24 +5014,32 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
         {clientesDelPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Este paseador no tiene clientes asignados (ve a "Asignaciones").</p>
         ) : (
-          <DndContext sensors={sensoresManada} onDragEnd={onDragEndManada}>
-            <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-              <ColumnaManada
-                id="disponibles" titulo="Disponibles"
-                clientes={clientesDelPaseador.filter((c) => !incluidos[c.id])}
-                vacio="No quedan clientes sin incluir."
-                idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
-                onUbicar={ubicarCliente} geocodificando={geocodificando}
-              />
-              <ColumnaManada
-                id="en-ruta" titulo="En la ruta de hoy"
-                clientes={clientesDelPaseador.filter((c) => incluidos[c.id])}
-                vacio="Arrastra o toca un cliente de la izquierda para agregarlo."
-                idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
-                onUbicar={ubicarCliente} geocodificando={geocodificando}
-              />
-            </div>
-          </DndContext>
+          <>
+            <input
+              type="text" value={busquedaCliente} onChange={(e) => setBusquedaCliente(e.target.value)}
+              placeholder="Buscar cliente por nombre..."
+              style={{ ...input, marginTop: 8, marginBottom: 4 }}
+            />
+            <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>Toca una tarjeta para moverla de columna — o arrástrala si prefieres.</p>
+            <DndContext sensors={sensoresManada} onDragEnd={onDragEndManada}>
+              <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <ColumnaManada
+                  id="disponibles" titulo="Disponibles"
+                  clientes={clientesFiltrados.filter((c) => !incluidos[c.id])}
+                  vacio={busquedaCliente.trim() ? "Ningún cliente sin incluir coincide con la búsqueda." : "No quedan clientes sin incluir."}
+                  idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
+                  onUbicar={ubicarCliente} geocodificando={geocodificando}
+                />
+                <ColumnaManada
+                  id="en-ruta" titulo="En la ruta de hoy"
+                  clientes={clientesFiltrados.filter((c) => incluidos[c.id])}
+                  vacio={busquedaCliente.trim() ? "Ningún cliente en la ruta coincide con la búsqueda." : "Arrastra o toca un cliente de la izquierda para agregarlo."}
+                  idsClientesEnConflicto={idsClientesEnConflicto} onToggle={toggleIncluido}
+                  onUbicar={ubicarCliente} geocodificando={geocodificando}
+                />
+              </div>
+            </DndContext>
+          </>
         )}
         {errorGeo && <p style={{ color: RUST, fontSize: 12.5, marginBottom: 12 }}>{errorGeo}</p>}
 
@@ -5024,7 +5061,10 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
                 <p style={{ margin: 0, fontWeight: 700, color: NAVY, fontSize: 18 }}>{fmtCLP(ruta.dinero)}</p>
               </div>
             </div>
-            <p style={label}>Orden sugerido de la ruta</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+              <p style={{ ...label, margin: 0 }}>Orden sugerido de la ruta</p>
+              <button onClick={compartirRuta} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Compartir ruta</button>
+            </div>
             {ruta.orden.map((c, i) => (
               <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < ruta.orden.length - 1 ? "1px solid #E4DBC3" : "none", fontSize: 13.5 }}>
                 <span>{i + 1}. {c.nombre} · {c.direccion}</span>
@@ -5035,7 +5075,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
         )}
       </div>
 
-      <div className="howria-card" style={tarjeta}>
+      <div className="howria-card howria-mapa-visual" style={tarjeta}>
         <p style={label}>Mapa</p>
         <div ref={mapaDivRef} style={{ width: "100%", height: 420, borderRadius: 8, border: "1px solid #E4DBC3", background: "#EDE4CE" }} />
         {clientesConMapa.length === 0 ? (

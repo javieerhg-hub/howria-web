@@ -3802,6 +3802,10 @@ export default function HowriaAdmin() {
              hay ancho de sobra, así que estos controles (pensados para
              caber apretados junto a otros 6 en desktop) pueden agrandarse
              para tocarlos con precisión. */
+          /* Mapa de rutas existe para visualizar geografía — que en
+             mobile haya que scrollear pasando toda la lista de clientes
+             y los resultados antes de ver el mapa no tenía sentido. */
+          .howria-mapa-visual { order: -1; }
           .howria-mini-quitar button { font-size: 20px !important; padding: 6px 10px !important; min-width: 34px; min-height: 34px; }
           .howria-mini-nota { font-size: 13px !important; padding: 8px 10px !important; }
           .howria-mini-agregar { font-size: 13px !important; padding: 9px 8px !important; min-height: 38px; }
