@@ -4277,7 +4277,7 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   );
 }
 
-export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
+export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   const [busqueda, setBusqueda] = useState("");
   const [diaOffset, setDiaOffset] = useState(0);
@@ -4419,7 +4419,9 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           </div>
         </div>
 
-        {calendarioPorPaseador.length === 0 ? (
+        {cargandoClientes ? (
+          <p style={{ ...hint, marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+        ) : calendarioPorPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 12 }}>No hay paseos programados este día.</p>
         ) : (
           <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
@@ -4559,16 +4561,18 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                           <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
                           {c.nombre}
                         </span>
-                        <BotonEliminar onConfirm={() => toggleDiaCliente(c.id, dow)} label="×" title="Quitar de este día" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 13, flexShrink: 0, marginLeft: 4, padding: 0 }} />
+                        <span className="howria-mini-quitar">
+                          <BotonEliminar onConfirm={() => toggleDiaCliente(c.id, dow)} label="×" title="Quitar de este día" style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 13, flexShrink: 0, marginLeft: 4, padding: 0 }} />
+                        </span>
                       </div>
-                      <input defaultValue={registro?.nota || ""} placeholder="nota..."
+                      <input className="howria-mini-nota" defaultValue={registro?.nota || ""} placeholder="nota..."
                         onBlur={(e) => guardarNotaDia(c.id, fechaDia, e.target.value)}
                         style={{ width: "100%", fontSize: 10, marginTop: 3, padding: "2px 4px", border: "1px solid #E4DBC3", borderRadius: 4, background: "#fff" }} />
                     </div>
                   );
                 })}
                 {clientesDia.length === 0 && <p style={{ fontSize: 10.5, color: "#C4BCA0", margin: "0 0 6px" }}>Sin paseos</p>}
-                <select onChange={(e) => { if (e.target.value) { agregarClienteADia(Number(e.target.value), dow); e.target.value = ""; } }} style={{ width: "100%", fontSize: 10.5, padding: "4px 2px", marginTop: 4, border: "1px solid #E4DBC3", borderRadius: 5 }}>
+                <select className="howria-mini-agregar" onChange={(e) => { if (e.target.value) { agregarClienteADia(Number(e.target.value), dow); e.target.value = ""; } }} style={{ width: "100%", fontSize: 10.5, padding: "4px 2px", marginTop: 4, border: "1px solid #E4DBC3", borderRadius: 5 }}>
                   <option value="">+ agregar</option>
                   {disponiblesParaAgregar.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
@@ -4703,7 +4707,7 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 12.5, color: INK }}>¿Reasignar a {pendienteReasignar.nombre || "sin paseador"}?</span>
                         <button onClick={() => { asignarPaseador(c.id, pendienteReasignar.nombre); setPendienteReasignar(null); }}
-                          style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+                          style={{ border: "none", background: NAVY, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
                           Confirmar
                         </button>
                         <button onClick={() => setPendienteReasignar(null)}
