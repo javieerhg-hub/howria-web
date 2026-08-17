@@ -378,7 +378,7 @@ function pagoToDb(p) {
     paseos: p.paseos,
     clientes: p.clientes,
     ajuste: p.ajuste || 0,
-    fecha_pago: p.fechaPagoISO || new Date().toISOString().slice(0, 10),
+    fecha_pago: p.fechaPagoISO || fechaKey(new Date()),
   };
 }
 
@@ -2088,8 +2088,19 @@ export function rangoPeriodo(periodo, hoy) {
 
 
 // ---------- Mis paseos (registro del paseador) ----------
+// Fecha en hora LOCAL del navegador, no UTC — toISOString() convierte a
+// UTC, y para Chile (UTC-3/-4) eso hace que "el día" cambie como a las
+// 8-9pm hora local en vez de a medianoche real. Cualquier cosa que se
+// haga en la app pasada esa hora quedaba guardada con la fecha de
+// "mañana" (en términos UTC), que al día siguiente en la mañana ya
+// coincidía con el día real — así una fase/registro de anoche aparecía
+// como si fuera de hoy. Bug real encontrado 2026-08-17 (Javier H: "Mi
+// ruta de hoy" mostraba completada sin haberla iniciado).
 export function fechaKey(d) {
-  return d.toISOString().slice(0, 10);
+  const anio = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
 }
 
 // Truco para "despegar" Safari/iOS cuando la página queda con el zoom
@@ -2205,10 +2216,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   // guiada.
   const dowHoy = (hoy.getDay() + 6) % 7;
   const clientesHoyAnillo = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
-  let hechosHoy = 0, canceladosHoy = 0;
+  let hechosHoy = 0, canceladosHoy = 0, montoHoy = 0;
   clientesHoyAnillo.forEach((c) => {
     const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`] || {};
-    if (r.realizado) hechosHoy++;
+    if (r.realizado) { hechosHoy++; montoHoy += Number(c.tarifaPaseador || 0); }
     else if (r.cancelado) canceladosHoy++;
   });
 
@@ -2239,7 +2250,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
           <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "#B7C2CE" }}>No tienes paseos asignados hoy. Disfruta el día 🐾</p>
         ) : rutaCompletada ? (
           <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 Completaste tu ruta de hoy — reuniste {fmtCLP(totalMontoMes)} este mes.</p>
+            <p style={{ margin: 0, fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 Completaste tu ruta de hoy — reuniste {fmtCLP(montoHoy)} hoy.</p>
             <button onClick={() => setRutaAbierta(true)} style={{ ...botonSecundario, marginTop: 12, width: "auto", padding: "10px 20px", background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>
               Ver resumen
             </button>

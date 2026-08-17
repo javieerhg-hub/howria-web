@@ -2709,7 +2709,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     setPagoPendienteDbId(boleta._dbId);
     setPagoPendienteTipo(boleta._tipo);
     setPagoPendienteNumero(boleta.numero);
-    setFechaPagoForm(new Date().toISOString().slice(0, 10));
+    setFechaPagoForm(fechaKey(new Date()));
     setFormaPagoForm(FORMAS_PAGO[0]);
   }
 
@@ -3813,7 +3813,7 @@ export function PagoTrabajadores({ boletasEmitidas, clientes, usuarios, registro
       id: Date.now() + Math.random(),
       paseador: fila.paseador, periodo, etiqueta, monto: fila.monto, paseos: fila.realizados, clientes: fila.clientes,
       ajuste: fila.ajuste || 0,
-      fechaPagoISO: new Date().toISOString().slice(0, 10),
+      fechaPagoISO: fechaKey(new Date()),
       fechaPago: new Date().toLocaleDateString("es-CL"),
     }]);
   }
@@ -6010,13 +6010,13 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
     if (cita?._dbId && setCitas) setCitas((prev) => prev.filter((c) => c._dbId !== cita._dbId));
   }
   async function marcarRapido(numero) {
-    await marcarClase(plan._dbId, numero, { fechaRealizada: new Date().toISOString().slice(0, 10), temas: [], notas: "", creadoPor: nombreActual });
+    await marcarClase(plan._dbId, numero, { fechaRealizada: fechaKey(new Date()), temas: [], notas: "", creadoPor: nombreActual });
     limpiarAgendaDe(numero);
   }
   function abrirDetalle(numero) {
     const existente = itemDe(numero);
     setDetalleAbierto(numero);
-    setFechaForm(existente?.fechaRealizada || new Date().toISOString().slice(0, 10));
+    setFechaForm(existente?.fechaRealizada || fechaKey(new Date()));
     setTemasForm(existente?.temas || []);
     setNotasForm(existente?.notas || "");
   }
@@ -7455,7 +7455,7 @@ function EditorBoletaBasico({ boleta, tipo, onGuardar, onCancelar }) {
 function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestramiento, nombreUsuario }) {
   const [editando, setEditando] = useState(false);
   const [pagoPendiente, setPagoPendiente] = useState(false);
-  const [fechaPagoForm, setFechaPagoForm] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fechaPagoForm, setFechaPagoForm] = useState(() => fechaKey(new Date()));
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
   const [generandoComprobante, setGenerandoComprobante] = useState(false);
   const setBoletas = tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;

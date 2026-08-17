@@ -30,8 +30,14 @@ const label = { display: "block", fontSize: 12, fontWeight: 600, color: "#8A7E5C
 const input = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #DCD2B4", fontSize: 16, fontFamily: "inherit", background: "#FFFFFF", boxSizing: "border-box" };
 const botonPrincipal = { width: "100%", padding: "12px", borderRadius: 8, border: "none", background: NAVY, color: CREAM, fontWeight: 700, fontSize: 14, cursor: "pointer", marginTop: 6 };
 
+// Hora LOCAL, no UTC — ver el comentario en la copia de HowriaAdmin.jsx,
+// mismo bug (el "día" cambiaba a las 8-9pm hora de Chile en vez de a
+// medianoche real).
 function fechaKey(d) {
-  return d.toISOString().slice(0, 10);
+  const anio = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
 }
 
 function fmtCLP(n) {
