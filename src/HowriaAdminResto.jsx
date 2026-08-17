@@ -1769,22 +1769,32 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // acotamiento más angosto que ya tuviera por su rol de app.
   const misClientesComoResponsable = esAdmin ? [] : clientesProp.filter((c) => c.responsableNombre === user?.nombre);
   const esResponsable = misClientesComoResponsable.length > 0;
-  const vistaPersonal = esResponsable || esPaseador || esEntrenador;
-  const clientes = esResponsable
+  // Paseador/entrenador SIEMPRE ven su vista personal — es un
+  // acotamiento de datos por privacidad, no una preferencia, y "ser
+  // responsable" manda por encima igual (ver comentario arriba). Pero un
+  // coordinador (u otro rol que por defecto ve el negocio completo) que
+  // además figura como responsable de algún cliente quedaba acotado a su
+  // vista personal PARA SIEMPRE, sin ninguna forma de volver a ver los
+  // totales de la empresa — se agrega este toggle solo para ese caso.
+  const puedeAlternarVista = esResponsable && !esPaseador && !esEntrenador;
+  const [verEmpresaCompleta, setVerEmpresaCompleta] = useState(false);
+  const aplicaResponsable = esResponsable && !(puedeAlternarVista && verEmpresaCompleta);
+  const vistaPersonal = esPaseador || esEntrenador || aplicaResponsable;
+  const clientes = aplicaResponsable
     ? misClientesComoResponsable
     : esPaseador
     ? clientesProp.filter((c) => c.paseadorNombre === user.nombre)
     : esEntrenador
     ? clientesProp.filter((c) => c.adiestradorNombre === user.nombre)
     : clientesProp;
-  const boletasEmitidas = esResponsable
+  const boletasEmitidas = aplicaResponsable
     ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : esEntrenador
     ? []
     : esPaseador
     ? boletasEmitidasProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : boletasEmitidasProp;
-  const boletasAdiestramiento = esResponsable
+  const boletasAdiestramiento = aplicaResponsable
     ? boletasAdiestramientoProp.filter((b) => clientes.some((c) => esBoletaDeCliente(b, c)))
     : esPaseador
     ? []
@@ -2021,7 +2031,14 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               : "Informes generados a partir de las boletas emitidas — se actualizan solos con cada boleta nueva."}
           </p>
         </div>
-        <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+        <div className="no-imprimir" style={{ display: "flex", gap: 8, flex: "none" }}>
+          {puedeAlternarVista && (
+            <button onClick={() => setVerEmpresaCompleta((v) => !v)} style={{ ...botonSecundario, flex: "none" }}>
+              {verEmpresaCompleta ? "Ver mis clientes" : "Ver toda la empresa"}
+            </button>
+          )}
+          <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+        </div>
       </div>
 
       <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 24px" }}>
@@ -2091,7 +2108,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
           {esResponsable
             ? '"Ingresos" es lo facturado en este período a los clientes de los que eres responsable. "Tu parte" descuenta lo que le queda a Howria en las facturas de adiestramiento donde se definió un reparto — si no se definió, se cuenta completa como tuya.'
-            : 'Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.'}
+            : esPaseador
+            ? 'Esto es lo facturado a tus clientes en este período, no lo que se te paga a ti — para eso revisa "Tu pago" en Mis paseos.'
+            : 'Esto es lo facturado a los clientes que atiendes en este período, no lo que se te paga a ti por las clases — consulta con administración cómo se calcula tu pago.'}
         </p>
       )}
 
@@ -2674,9 +2693,20 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   const [fechaPagoForm, setFechaPagoForm] = useState("");
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
   const [descargando, setDescargando] = useState(null);
-  // Colapsada por defecto — apenas se acepta una factura, desaparece de
-  // "Por revisar" y pasa para acá, pero sin ocupar pantalla salvo que se
-  // abra a propósito.
+  // Cambiar el responsable reescribe el cliente completo (afecta todas
+  // sus boletas pasadas y futuras, no solo esta), así que en vez de
+  // aplicar apenas cambia el <select> se deja pendiente de confirmar —
+  // mismo espíritu que BotonConfirmable, adaptado a un selector.
+  const [responsablePendiente, setResponsablePendiente] = useState(null); // { claveFila, nombre }
+  // Eliminar una boleta la borra para siempre, sin dejar rastro — antes
+  // pasaba por la confirmación liviana (BotonEliminar), la misma que se
+  // usa para cosas de bajo riesgo. Se sube al modal pesado, reservado
+  // para lo que de verdad conviene que cueste un poco más tocar por error.
+  const [eliminandoBoleta, setEliminandoBoleta] = useState(null);
+  // Colapsa solo la TABLA de facturas ya ingresadas (puede ser larga) —
+  // los KPIs y los filtros/búsqueda de más arriba están siempre a la
+  // vista, no dependen de este toggle. Antes todo vivía detrás de este
+  // mismo acordeón y al entrar a la pestaña no se veía ningún total.
   const [yaIngresadasAbiertas, setYaIngresadasAbiertas] = useState(false);
 
   async function descargarPdf(b, claveFila) {
@@ -2713,6 +2743,42 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     setClientes((prev) => prev.map((c) => (esBoletaDeCliente(b, c) ? { ...c, responsableNombre: nuevoNombre || undefined } : c)));
   }
 
+  // Selector de responsable con confirmación — se usa tanto en la tabla
+  // de escritorio como en la tarjeta mobile, así queda editable en las
+  // dos (antes solo existía en la tarjeta) y ningún cambio se aplica sin
+  // confirmar, porque afecta retroactivamente TODAS las boletas del
+  // cliente, no solo esta.
+  function SelectorResponsable({ b, claveFila }) {
+    const responsable = responsableDe(b);
+    const pendiente = responsablePendiente?.claveFila === claveFila ? responsablePendiente : null;
+    if (pendiente) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 150 }}>
+          <p style={{ margin: 0, fontSize: 11.5, color: RUST, lineHeight: 1.3 }}>
+            ¿Cambiar el responsable de TODAS las boletas de {b.cliente} a "{pendiente.nombre || "Sin asignar"}"?
+          </p>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => { actualizarResponsable(b, pendiente.nombre); setResponsablePendiente(null); }}
+              style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 11.5, cursor: "pointer" }}>
+              Confirmar
+            </button>
+            <button onClick={() => setResponsablePendiente(null)}
+              style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "4px 10px", fontSize: 11.5, cursor: "pointer" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <select value={responsable || ""} onChange={(e) => e.target.value !== (responsable || "") && setResponsablePendiente({ claveFila, nombre: e.target.value })}
+        style={{ ...input, marginBottom: 0, fontSize: 12.5, padding: "5px 8px", width: "100%" }}>
+        <option value="">Sin asignar</option>
+        {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+      </select>
+    );
+  }
+
   function abrirFormPago(boleta) {
     if (!boleta._dbId) return;
     setPagoPendienteDbId(boleta._dbId);
@@ -2723,7 +2789,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   }
 
   function confirmarPago() {
-    editarBoleta(setterDe(pagoPendienteTipo), pagoPendienteDbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    editarBoleta(setterDe(pagoPendienteTipo), pagoPendienteDbId, conUltimaAccion({ estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm }, nombreUsuario));
     setPagoPendienteDbId(null);
     setPagoPendienteTipo(null);
     setPagoPendienteNumero(null);
@@ -2734,13 +2800,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   // confirmación (incluía poder revertir una boleta ya pagada con un solo
   // clic sin querer). Ahora cada uno pasa por BotonConfirmable.
   function cancelarBoleta(boleta) {
-    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "cancelada" });
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, conUltimaAccion({ estado: "cancelada" }, nombreUsuario));
   }
   function revertirAPendiente(boleta) {
-    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "pendiente_pago", fechaPago: undefined, formaPago: undefined });
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, conUltimaAccion({ estado: "pendiente_pago", fechaPago: undefined, formaPago: undefined }, nombreUsuario));
   }
   function reactivarBoleta(boleta) {
-    editarBoleta(setterDe(boleta._tipo), boleta._dbId, { estado: "pendiente_pago" });
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId, conUltimaAccion({ estado: "pendiente_pago" }, nombreUsuario));
   }
 
   const conteos = useMemo(() => {
@@ -2808,7 +2874,6 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   function renderFilaFactura(b) {
     const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
     const claveFila = `${b._tipo}-${b._dbId}`;
-    const responsable = responsableDe(b);
     return (
       <Fragment key={claveFila}>
         <tr style={{ borderTop: "1px solid #EDE4CE" }}>
@@ -2820,10 +2885,10 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           </td>
           <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
           <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
-          <td style={{ padding: "10px", fontSize: 12, color: responsable ? "#6B6248" : "#B0A587" }}>
-            {responsable || "Sin asignar"}
+          <td style={{ padding: "10px", fontSize: 12 }}>
+            <SelectorResponsable b={b} claveFila={claveFila} />
             {b._tipo === "adiestramiento" && b.montoResponsable != null && (
-              <div style={{ fontSize: 10.5, color: "#8A7E5C", marginTop: 2 }}>
+              <div style={{ fontSize: 10.5, color: "#8A7E5C", marginTop: 4 }}>
                 Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
               </div>
             )}
@@ -2833,7 +2898,8 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
           <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
           <td style={{ padding: "10px" }}>
-            <span style={{ display: "inline-block", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, background: est.bg, color: est.color }}>
+            <span title={b.ultimaAccionPor ? `Último cambio: ${b.ultimaAccionPor} — ${new Date(b.ultimaAccionEn).toLocaleString("es-CL")}` : undefined}
+              style={{ display: "inline-block", borderRadius: 20, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, background: est.bg, color: est.color, cursor: b.ultimaAccionPor ? "help" : "default" }}>
               {est.nombre}
             </span>
           </td>
@@ -2847,7 +2913,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {b.estado === "no_enviada" && (
-                  <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
+                  <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId, nombreUsuario)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Aceptar</button>
                 )}
                 {b.estado === "pendiente_pago" && (
                   <button onClick={() => abrirFormPago(b)} style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Marcar pagada</button>
@@ -2869,7 +2935,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
                     style={{ border: "none", background: "none", color: "#2F6A46", cursor: "pointer", fontSize: 12, fontWeight: 600 }} />
                 )}
                 <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
-                <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+                <button onClick={() => setEliminandoBoleta(b)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }}>Eliminar</button>
               </div>
             )}
           </td>
@@ -2893,12 +2959,10 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
   }
 
   // Versión ficha de la misma boleta, para mobile — mismo estado y
-  // handlers que renderFilaFactura, solo cambia el layout. Acá además se
-  // puede cambiar el responsable del dinero sin salir de Facturas.
+  // handlers que renderFilaFactura, solo cambia el layout.
   function renderTarjetaFactura(b) {
     const est = ESTADOS_FACTURA.find((e) => e.id === b.estado) || ESTADOS_FACTURA[0];
     const claveFila = `${b._tipo}-${b._dbId}`;
-    const responsable = responsableDe(b);
     const hayAccionPrincipal = b.estado === "no_enviada" || b.estado === "pendiente_pago";
     return (
       <div key={claveFila} className="howria-card" style={{ background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 12, padding: 14 }}>
@@ -2916,6 +2980,11 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
 
         <p style={{ margin: "0 0 2px", fontSize: 16, fontWeight: 700, color: NAVY }}>{b.cliente}</p>
         <p style={{ margin: "0 0 10px", fontSize: 13, color: "#6B6248" }}>{b.perro ? `🐾 ${b.perro}` : "Sin perro asociado"}</p>
+        {b.ultimaAccionPor && (
+          <p style={{ margin: "-4px 0 10px", fontSize: 11, color: "#8A7E5C" }}>
+            Último cambio: {b.ultimaAccionPor} · {new Date(b.ultimaAccionEn).toLocaleDateString("es-CL")}
+          </p>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <span style={{ fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`} · Emitida {b.fecha}</span>
@@ -2929,10 +2998,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
             Responsable del dinero
           </label>
-          <select value={responsable || ""} onChange={(e) => actualizarResponsable(b, e.target.value)} style={{ ...input, marginBottom: 0, width: "100%" }}>
-            <option value="">Sin asignar</option>
-            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
-          </select>
+          <SelectorResponsable b={b} claveFila={claveFila} />
           {b._tipo === "adiestramiento" && b.montoResponsable != null && (
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8A7E5C" }}>
               Se lleva {fmtCLP(montoParaResponsable(b))} · Howria {fmtCLP(b.total - montoParaResponsable(b))}
@@ -2946,7 +3012,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               {b.estado === "no_enviada" && (
-                <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId)}
+                <button onClick={() => aceptarBoleta(setterDe(b._tipo), b._dbId, nombreUsuario)}
                   style={{ ...botonPrincipal, marginTop: 0, background: "#2F6A46", flex: 1, minHeight: 44 }}>Aceptar</button>
               )}
               {b.estado === "pendiente_pago" && (
@@ -2974,8 +3040,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
               )}
               <button onClick={() => setEditandoBoleta(editandoBoleta === claveFila ? null : claveFila)}
                 style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
-              <BotonEliminar onConfirm={() => eliminarBoleta(setterDe(b._tipo), b._dbId)}
-                style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+              <button onClick={() => setEliminandoBoleta(b)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }}>Eliminar</button>
             </div>
           </>
         )}
@@ -3041,55 +3106,57 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             )}
           </div>
 
+          <div style={{ marginTop: 22 }}>
+            <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+              <TarjetaResumenFactura titulo="Ventas confirmadas" valor={fmtCLP(ventasConfirmadas)} color={ESTADOS_FACTURA[2].color} bg={ESTADOS_FACTURA[2].bg} />
+              <TarjetaResumenFactura titulo="Por cobrar" valor={fmtCLP(porCobrarMonto)} color={ESTADOS_FACTURA[1].color} bg={ESTADOS_FACTURA[1].bg} />
+              <TarjetaResumenFactura titulo="Por revisar" valor={`${conteos.no_enviada || 0} factura(s)`} color={ESTADOS_FACTURA[0].color} bg={ESTADOS_FACTURA[0].bg} />
+              <TarjetaResumenFactura titulo="Canceladas" valor={`${conteos.cancelada || 0} factura(s)`} color={ESTADOS_FACTURA[3].color} bg={ESTADOS_FACTURA[3].bg} />
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setFiltroEstado("todas")}
+                style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+                  border: filtroEstado === "todas" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                  background: filtroEstado === "todas" ? NAVY : "#FFFFFF", color: filtroEstado === "todas" ? CREAM : INK,
+                  fontWeight: filtroEstado === "todas" ? 600 : 400 }}>
+                Todas ({todasIngresadas.length})
+              </button>
+              {ESTADOS_FACTURA.filter((e) => e.id !== "no_enviada").map((e) => (
+                <button key={e.id} onClick={() => setFiltroEstado(e.id)}
+                  style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+                    border: filtroEstado === e.id ? `1.5px solid ${e.color}` : "1px solid #DCD2B4",
+                    background: filtroEstado === e.id ? e.bg : "#FFFFFF", color: e.color,
+                    fontWeight: filtroEstado === e.id ? 600 : 400 }}>
+                  {e.nombre} ({conteos[e.id] || 0})
+                </button>
+              ))}
+            </div>
+
+            <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+              <div style={{ position: "relative" }}>
+                <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                  style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
+              </div>
+              <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                <option value="todos">Todos los clientes</option>
+                {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Desde" />
+                <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Hasta" />
+              </div>
+            </div>
+          </div>
+
           <button onClick={() => setYaIngresadasAbiertas((v) => !v)}
-            style={{ ...botonSecundario, width: "auto", marginTop: 22 }}>
+            style={{ ...botonSecundario, width: "auto", marginTop: 6 }}>
             {yaIngresadasAbiertas ? "▾" : "▸"} Facturas ya ingresadas ({todasIngresadas.length})
           </button>
 
           {yaIngresadasAbiertas && (
             <div style={{ marginTop: 16 }}>
-              <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
-                <TarjetaResumenFactura titulo="Ventas confirmadas" valor={fmtCLP(ventasConfirmadas)} color={ESTADOS_FACTURA[2].color} bg={ESTADOS_FACTURA[2].bg} />
-                <TarjetaResumenFactura titulo="Por cobrar" valor={fmtCLP(porCobrarMonto)} color={ESTADOS_FACTURA[1].color} bg={ESTADOS_FACTURA[1].bg} />
-                <TarjetaResumenFactura titulo="Por revisar" valor={`${conteos.no_enviada || 0} factura(s)`} color={ESTADOS_FACTURA[0].color} bg={ESTADOS_FACTURA[0].bg} />
-                <TarjetaResumenFactura titulo="Canceladas" valor={`${conteos.cancelada || 0} factura(s)`} color={ESTADOS_FACTURA[3].color} bg={ESTADOS_FACTURA[3].bg} />
-              </div>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                <button onClick={() => setFiltroEstado("todas")}
-                  style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-                    border: filtroEstado === "todas" ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
-                    background: filtroEstado === "todas" ? NAVY : "#FFFFFF", color: filtroEstado === "todas" ? CREAM : INK,
-                    fontWeight: filtroEstado === "todas" ? 600 : 400 }}>
-                  Todas ({todasIngresadas.length})
-                </button>
-                {ESTADOS_FACTURA.filter((e) => e.id !== "no_enviada").map((e) => (
-                  <button key={e.id} onClick={() => setFiltroEstado(e.id)}
-                    style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
-                      border: filtroEstado === e.id ? `1.5px solid ${e.color}` : "1px solid #DCD2B4",
-                      background: filtroEstado === e.id ? e.bg : "#FFFFFF", color: e.color,
-                      fontWeight: filtroEstado === e.id ? 600 : 400 }}>
-                    {e.nombre} ({conteos[e.id] || 0})
-                  </button>
-                ))}
-              </div>
-
-              <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-                <div style={{ position: "relative" }}>
-                  <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                  <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                    style={{ ...input, marginBottom: 0, width: "100%", paddingLeft: 34 }} />
-                </div>
-                <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-                  <option value="todos">Todos los clientes</option>
-                  {nombresClientes.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Desde" />
-                  <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ ...input, marginBottom: 0 }} title="Hasta" />
-                </div>
-              </div>
-
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#8A7E5C", margin: "0 0 10px" }}>
                 <span>{lista.length} factura(s) en este listado</span>
                 <span>Suma: <b style={{ color: NAVY }}>{fmtCLP(totalListado)}</b></span>
@@ -3115,6 +3182,15 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             </div>
           )}
         </>
+      )}
+      {eliminandoBoleta && (
+        <ModalConfirmacion
+          titulo={`¿Eliminar la boleta N°${String(eliminandoBoleta.numero).padStart(3, "0")}?`}
+          mensaje={`Se borra para siempre la boleta de ${eliminandoBoleta.cliente} por ${fmtCLP(eliminandoBoleta.total)} — no queda ningún registro de que existió.`}
+          textoConfirmar="Eliminar boleta"
+          onConfirmar={() => { eliminarBoleta(setterDe(eliminandoBoleta._tipo), eliminandoBoleta._dbId); setEliminandoBoleta(null); }}
+          onCancelar={() => setEliminandoBoleta(null)}
+        />
       )}
     </div>
   );
@@ -7401,9 +7477,17 @@ export function Prospectos({ prospectos, setProspectos, setClientes, usuarios, p
 // confiable de saber a cuál boleta se refiere (ej. recién creada, todavía
 // sin volver de Supabase) — mejor no hacer nada que arriesgar matchear de
 // más (varias boletas sin _dbId, todas comparando undefined === undefined).
-function aceptarBoleta(setBoletas, dbId) {
+// Antes solo "Editar" (una corrección) registraba quién hizo algo — el
+// resto de las acciones sobre una boleta (aceptar, marcar pagada,
+// cancelar, revertir, reactivar) no dejaban ningún rastro de quién ni
+// cuándo. Se agrega este sello genérico a todas ellas.
+function conUltimaAccion(cambios, autor) {
+  return autor ? { ...cambios, ultimaAccionPor: autor, ultimaAccionEn: new Date().toISOString() } : cambios;
+}
+
+function aceptarBoleta(setBoletas, dbId, autor) {
   if (!dbId) return;
-  setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, estado: "pendiente_pago" } : b)));
+  setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, ...conUltimaAccion({ estado: "pendiente_pago" }, autor) } : b)));
 }
 
 function eliminarBoleta(setBoletas, dbId) {
@@ -7515,11 +7599,12 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
   const [fechaPagoForm, setFechaPagoForm] = useState(() => fechaKey(new Date()));
   const [formaPagoForm, setFormaPagoForm] = useState(FORMAS_PAGO[0]);
   const [generandoComprobante, setGenerandoComprobante] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
   const setBoletas = tipo === "paseo" ? setBoletasEmitidas : setBoletasAdiestramiento;
   const est = ESTADOS_FACTURA.find((e) => e.id === boleta.estado) || ESTADOS_FACTURA[0];
 
   function confirmarPago() {
-    editarBoleta(setBoletas, boleta._dbId, { estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm });
+    editarBoleta(setBoletas, boleta._dbId, conUltimaAccion({ estado: "pagada", fechaPago: fechaPagoForm, formaPago: formaPagoForm }, nombreUsuario));
     setPagoPendiente(false);
   }
 
@@ -7542,7 +7627,8 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, fontSize: 13.5 }}>
         <span style={{ color: INK }}>
           N°{String(boleta.numero).padStart(3, "0")} · {tipo === "paseo" ? `${boleta.mes} ${boleta.anio} · ${boleta.cantidad} paseos` : `Adiestramiento · ${boleta.modalidad}`}
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: est.bg, color: est.color }}>{est.nombre}</span>
+          <span title={boleta.ultimaAccionPor ? `Último cambio: ${boleta.ultimaAccionPor} — ${new Date(boleta.ultimaAccionEn).toLocaleString("es-CL")}` : undefined}
+            style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: est.bg, color: est.color, cursor: boleta.ultimaAccionPor ? "help" : "default" }}>{est.nombre}</span>
           {boleta.estado === "pagada" && boleta.formaPago && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>{boleta.formaPago} · {boleta.fechaPago}</span>
           )}
@@ -7563,7 +7649,7 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
           ) : (
             <>
               {boleta.estado === "no_enviada" && (
-                <button onClick={() => aceptarBoleta(setBoletas, boleta._dbId)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
+                <button onClick={() => aceptarBoleta(setBoletas, boleta._dbId, nombreUsuario)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Aceptar</button>
               )}
               {boleta.estado !== "pagada" && boleta.estado !== "cancelada" && (
                 <button onClick={() => setPagoPendiente(true)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Marcar pagada</button>
@@ -7573,11 +7659,20 @@ function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAdiestram
                 {generandoComprobante ? "Generando..." : boleta.editadaPor ? "Descargar comprobante actualizado" : "Descargar PDF"}
               </button>
               <button onClick={() => setEditando((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>Editar</button>
-              <BotonEliminar onConfirm={() => eliminarBoleta(setBoletas, boleta._dbId)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }} />
+              <button onClick={() => setConfirmandoEliminar(true)} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12.5 }}>Eliminar</button>
             </>
           )}
         </div>
       </div>
+      {confirmandoEliminar && (
+        <ModalConfirmacion
+          titulo={`¿Eliminar la boleta N°${String(boleta.numero).padStart(3, "0")}?`}
+          mensaje={`Se borra para siempre esta boleta por ${fmtCLP(boleta.total)} — no queda ningún registro de que existió.`}
+          textoConfirmar="Eliminar boleta"
+          onConfirmar={() => { eliminarBoleta(setBoletas, boleta._dbId); setConfirmandoEliminar(false); }}
+          onCancelar={() => setConfirmandoEliminar(false)}
+        />
+      )}
       {pagoPendiente && (
         <div style={{ background: "#D8ECDE", border: "1px solid #2F6A46", borderRadius: 8, padding: 12, marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input type="date" value={fechaPagoForm} onChange={(e) => setFechaPagoForm(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} />

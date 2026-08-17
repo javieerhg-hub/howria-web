@@ -197,6 +197,8 @@ export function boletaToDb(b) {
     forma_pago: b.formaPago || null,
     editada_por: b.editadaPor || null,
     editada_en: b.editadaEn || null,
+    ultima_accion_por: b.ultimaAccionPor || null,
+    ultima_accion_en: b.ultimaAccionEn || null,
   };
 }
 
@@ -228,6 +230,8 @@ export function dbToBoleta(row) {
     formaPago: row.forma_pago || undefined,
     editadaPor: row.editada_por || undefined,
     editadaEn: row.editada_en || undefined,
+    ultimaAccionPor: row.ultima_accion_por || undefined,
+    ultimaAccionEn: row.ultima_accion_en || undefined,
   };
 }
 
@@ -339,6 +343,8 @@ export function boletaAdiestramientoToDb(b) {
     forma_pago: b.formaPago || null,
     editada_por: b.editadaPor || null,
     editada_en: b.editadaEn || null,
+    ultima_accion_por: b.ultimaAccionPor || null,
+    ultima_accion_en: b.ultimaAccionEn || null,
   };
 }
 
@@ -364,6 +370,8 @@ export function dbToBoletaAdiestramiento(row) {
     formaPago: row.forma_pago || undefined,
     editadaPor: row.editada_por || undefined,
     editadaEn: row.editada_en || undefined,
+    ultimaAccionPor: row.ultima_accion_por || undefined,
+    ultimaAccionEn: row.ultima_accion_en || undefined,
     fecha: new Date(row.fecha_hora).toLocaleDateString("es-CL"),
     fechaISO: row.fecha_hora,
   };

@@ -105,6 +105,7 @@ no un runner de migraciones.
 | 077 | `citas_agenda_delete_entrenador.sql` | 2026-08-16 | Corrige la política de borrado de `citas_agenda`, que se había quedado solo en coordinador/administrador cuando 028 ya había ampliado insert/update a `adiestrador = mi_nombre()` — sin esto, agendar una clase por plan (076) y luego marcarla hecha o quitarla fallaba en silencio para un entrenador. |
 | 078 | `pagos_trabajadores_periodo_desde.sql` | 2026-08-17 | Agrega `periodo_desde` a `pagos_trabajadores` — la fecha de inicio del período de TRABAJO que cubre el pago (no el día en que se registró). "Ganancia de Howria" en Finanzas pasa a filtrar los costos por esta fecha, la misma dimensión que ya usan los ingresos, en vez de por `fecha_pago`. |
 | 079 | `logins_pendientes_borrar_rol.sql` | 2026-08-17 | Agrega `rol` a `logins_pendientes_borrar` — "Restaurar" un login eliminado pasa a recrear a la persona con su rol anterior en vez de asignarle siempre "paseador". |
+| 080 | `boletas_ultima_accion.sql` | 2026-08-17 | Agrega `ultima_accion_por`/`ultima_accion_en` a `boletas` y `boletas_adiestramiento` — antes solo "Editar" registraba quién había tocado una boleta; ahora aceptar/marcar pagada/cancelar/revertir/reactivar también dejan rastro. |
 
 ## Nota sobre el orden 001–023
 
