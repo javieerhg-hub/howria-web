@@ -3816,6 +3816,9 @@ export default function HowriaAdmin() {
           .howria-facturas-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
           .howria-pagos-tabla { display: none !important; }
           .howria-pagos-tarjetas { display: flex !important; flex-direction: column; gap: 12px; }
+          /* "Imprimir informe" es impresión de navegador — no tiene mucho
+             sentido en un celular, donde ya está "Exportar CSV" al lado. */
+          .howria-finanzas-imprimir { display: none !important; }
           /* Decisión a propósito, no un descuido: Javier pidió reordenar
              el Inicio del entrenador en mobile para dejar arriba el
              contenido de acción (accesos directos, citas por atender)

@@ -1745,6 +1745,8 @@ function variacion(actual, anterior) {
 
 export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, user, onVerPagos }) {
   const [periodo, setPeriodo] = useState("semana");
+  const [rangoDesde, setRangoDesde] = useState("");
+  const [rangoHasta, setRangoHasta] = useState("");
   const hoy = new Date();
 
   // Un paseador o entrenador no debe ver las finanzas generales de
@@ -1811,24 +1813,38 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // revisar o una boleta cancelada no deben sumar en ningún ingreso.
   const todasLasBoletasVenta = useMemo(() => todasLasBoletas.filter(esVenta), [todasLasBoletas]);
 
-  const { actualDesde, anteriorDesde, anteriorHasta } = useMemo(() => {
+  // "Personalizado" cubre lo que antes faltaba del todo: elegir un rango
+  // de fechas propio en vez de estar limitado a semana/mes/año fijos. Sin
+  // período anterior con el que comparar (no hay un "rango equivalente
+  // anterior" bien definido), así que anteriorDesde/anteriorHasta quedan
+  // en null y la tarjeta de variación se oculta para ese caso.
+  const { actualDesde, actualHasta, anteriorDesde, anteriorHasta } = useMemo(() => {
+    if (periodo === "personalizado") {
+      const desde = rangoDesde ? new Date(`${rangoDesde}T00:00:00`) : new Date(0);
+      const hasta = rangoHasta ? new Date(`${rangoHasta}T23:59:59`) : hoy;
+      return { actualDesde: desde, actualHasta: hasta, anteriorDesde: null, anteriorHasta: null };
+    }
     if (periodo === "semana") {
       const inicioActual = inicioSemana(hoy);
       const inicioAnterior = new Date(inicioActual); inicioAnterior.setDate(inicioAnterior.getDate() - 7);
-      return { actualDesde: inicioActual, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
+      return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
     }
     if (periodo === "mes") {
       const inicioActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
       const inicioAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-      return { actualDesde: inicioActual, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
+      return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
     }
     const inicioActual = new Date(hoy.getFullYear(), 0, 1);
     const inicioAnterior = new Date(hoy.getFullYear() - 1, 0, 1);
-    return { actualDesde: inicioActual, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
-  }, [periodo]);
+    return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
+  }, [periodo, rangoDesde, rangoHasta]);
 
-  const filtradas = useMemo(() => todasLasBoletasVenta.filter((b) => new Date(b.fechaISO) >= actualDesde), [todasLasBoletasVenta, actualDesde]);
-  const anteriores = useMemo(() => todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }), [todasLasBoletasVenta, anteriorDesde, anteriorHasta]);
+  const filtradas = useMemo(() =>
+    todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
+    [todasLasBoletasVenta, actualDesde, actualHasta]);
+  const anteriores = useMemo(() =>
+    anteriorDesde ? todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }) : [],
+    [todasLasBoletasVenta, anteriorDesde, anteriorHasta]);
 
   const actual = calcularTotales(filtradas);
   const anterior = calcularTotales(anteriores);
@@ -1842,11 +1858,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     pagosRegistrados
       .filter((p) => {
         if (p.deshechoEn) return false; // revertido: no es un costo real
-        const f = p.periodoDesdeISO || p.fechaPagoISO;
-        return f && new Date(f) >= actualDesde;
+        const fISO = p.periodoDesdeISO || p.fechaPagoISO;
+        if (!fISO) return false;
+        const f = new Date(fISO);
+        return f >= actualDesde && (!actualHasta || f <= actualHasta);
       })
       .reduce((acc, p) => acc + Number(p.monto || 0), 0),
-    [pagosRegistrados, actualDesde]);
+    [pagosRegistrados, actualDesde, actualHasta]);
   // Plata pagada a responsables de cuenta en boletas de adiestramiento —
   // costo real para Howria, igual que el pago a paseadores, así que
   // también se resta de la utilidad general.
@@ -1906,11 +1924,27 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const facturadoEsteMes = todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === mesActualIdx && f.getFullYear() === anioActualN; }).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
 
-  const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año" }[periodo];
+  const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año", personalizado: "en el rango elegido" }[periodo];
   const etiquetaAnterior = { semana: "semana anterior", mes: "mes anterior", año: "año anterior" }[periodo];
 
   function imprimirInforme() {
     window.print();
+  }
+
+  // Antes "Imprimir informe" (impresión del navegador) era la única
+  // salida de estos datos — se agrega un CSV con el detalle del período
+  // elegido, más fácil de llevar a una planilla que un PDF impreso.
+  function exportarCsvFinanzas() {
+    const encabezado = ["Numero", "Tipo", "Cliente", "Fecha", "Total"];
+    const filas = filtradas.map((b) => [String(b.numero).padStart(3, "0"), b._tipo === "paseo" ? "Paseo" : "Adiestramiento", b.cliente, b.fecha, b.total]);
+    const csv = [encabezado, ...filas].map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `finanzas-${fechaKey(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // Rama exclusiva para paseador: nada de facturación/ingresos de sus
@@ -1940,8 +1974,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       return claves;
     }
 
+    // Para semana/mes/año el rango siempre corre hasta hoy — para un
+    // rango personalizado en el pasado, hay que parar en actualHasta y no
+    // seguir contando días después de esa fecha.
+    const finPaseador = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
     const resumenPaseador = misClientesPaseador.map((c) => {
-      const claves = diasEnRango(actualDesde, hoyLocal, c.diasHabituales || []);
+      const claves = diasEnRango(actualDesde, finPaseador, c.diasHabituales || []);
       const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
       const realizados = validas.filter((k) => registroPaseos[`${c.id}_${k}`]?.realizado).length;
       return { cliente: c, programados: validas.length, realizados, monto: realizados * Number(c.tarifaPaseador || 0) };
@@ -1949,6 +1987,19 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     const totalRealizadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.realizados, 0);
     const totalProgramadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.programados, 0);
     const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0);
+
+    function exportarCsvPaseador() {
+      const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Monto"];
+      const filas = resumenPaseador.map((r) => [r.cliente.nombre, r.cliente.perro, r.programados, r.realizados, r.monto]);
+      const csv = [encabezado, ...filas].map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tu-pago-${fechaKey(new Date())}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
     return (
       <div className="howria-card" style={tarjeta} id="reporte-finanzas">
@@ -1965,11 +2016,14 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
             <h2 style={sectionTitle}>Tu pago</h2>
             <p style={hint}>Solo tus paseos y lo que se te paga por ellos — no lo que se les factura a los clientes.</p>
           </div>
-          <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+          <div className="no-imprimir" style={{ display: "flex", gap: 8, flex: "none" }}>
+            <button onClick={exportarCsvPaseador} style={{ ...botonSecundario, flex: "none" }}>Exportar CSV</button>
+            <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+          </div>
         </div>
 
-        <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 24px" }}>
-          {[["semana", "Esta semana"], ["mes", "Este mes"], ["año", "Este año"]].map(([id, nombre]) => (
+        <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 12px", flexWrap: "wrap" }}>
+          {[["semana", "Esta semana"], ["mes", "Este mes"], ["año", "Este año"], ["personalizado", "Personalizado"]].map(([id, nombre]) => (
             <button key={id} onClick={() => setPeriodo(id)}
               style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
                 border: periodo === id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -1979,8 +2033,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
             </button>
           ))}
         </div>
+        {periodo === "personalizado" && (
+          <div className="no-imprimir" style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 24px", flexWrap: "wrap" }}>
+            <input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Desde" />
+            <span style={{ fontSize: 13, color: "#8A7E5C" }}>hasta</span>
+            <input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Hasta" />
+          </div>
+        )}
 
-        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 22 }}>
+        <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 22 }}>
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
             <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosPaseador} / {totalProgramadosPaseador}</p>
@@ -2038,12 +2099,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               {verEmpresaCompleta ? "Ver mis clientes" : "Ver toda la empresa"}
             </button>
           )}
-          <button onClick={imprimirInforme} className="no-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
+          <button onClick={exportarCsvFinanzas} style={{ ...botonSecundario, flex: "none" }}>Exportar CSV</button>
+          <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
         </div>
       </div>
 
-      <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 24px" }}>
-        {[["semana", "Informe semanal"], ["mes", "Informe mensual"], ["año", "Informe anual"]].map(([id, nombre]) => (
+      <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 12px", flexWrap: "wrap" }}>
+        {[["semana", "Informe semanal"], ["mes", "Informe mensual"], ["año", "Informe anual"], ["personalizado", "Personalizado"]].map(([id, nombre]) => (
           <button key={id} onClick={() => setPeriodo(id)}
             style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
               border: periodo === id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
@@ -2053,19 +2115,28 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </button>
         ))}
       </div>
+      {periodo === "personalizado" && (
+        <div className="no-imprimir" style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 24px", flexWrap: "wrap" }}>
+          <input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Desde" />
+          <span style={{ fontSize: 13, color: "#8A7E5C" }}>hasta</span>
+          <input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Hasta" />
+        </div>
+      )}
 
       <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 6}, 1fr)`, gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
-          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: varIngresos >= 0 ? "#9FD8A8" : "#E3A08C" }}>
-            {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
-          </p>
+          {periodo !== "personalizado" && (
+            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: varIngresos >= 0 ? "#9FD8A8" : "#E3A08C" }}>
+              {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
+            </p>
+          )}
         </div>
         {vistaPersonal && esResponsable && (
-          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#2E5C41", textTransform: "uppercase", letterSpacing: 0.5 }}>Tu parte</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#2E5C41", fontFamily: "Georgia, serif" }}>{fmtCLP(tuParte)}</p>
+          <div style={{ background: "#D8ECDE", borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#2F6A46", textTransform: "uppercase", letterSpacing: 0.5 }}>Tu parte</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{fmtCLP(tuParte)}</p>
           </div>
         )}
         {!vistaPersonal && (
@@ -2081,24 +2152,18 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         )}
         {!vistaPersonal && (
           <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a responsables (adiestramiento)</p>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a responsables</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costoResponsablesAdiestramiento)}</p>
           </div>
         )}
         {!vistaPersonal && (
-          <div style={{ background: utilidad >= 0 ? "#E7F0EA" : "#F5E4E0", borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", textTransform: "uppercase", letterSpacing: 0.5 }}>Ganancia de Howria</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2E5C41" : "#9C4B34", fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
+          <div style={{ background: utilidad >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2F6A46" : RUST, textTransform: "uppercase", letterSpacing: 0.5 }}>Ganancia de Howria</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
           </div>
         )}
-        <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Boletas emitidas</p>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{actual.cantidad}</p>
-        </div>
-        <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Ticket promedio</p>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(promedioBoleta)}</p>
-        </div>
+        <TarjetaResumenFactura titulo="Boletas emitidas" valor={actual.cantidad} color="#8A7E5C" bg={CREAM_SOFT} />
+        <TarjetaResumenFactura titulo="Ticket promedio" valor={fmtCLP(promedioBoleta)} color="#8A7E5C" bg={CREAM_SOFT} />
       </div>
       {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
@@ -2116,7 +2181,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       )}
 
       <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
-        <p style={{ ...label, marginBottom: 8 }}>Proyección del mes en curso (si se factura todo el plan habitual de cada cliente activo)</p>
+        <p style={{ ...label, marginBottom: 2 }}>Proyección del mes en curso (si se factura todo el plan habitual de cada cliente activo)</p>
+        <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Siempre es el mes calendario actual — no cambia con el período elegido arriba.</p>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(proyeccionMes)}</p>
           <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>Ya facturado este mes: {fmtCLP(facturadoEsteMes)} ({porcentajeFacturado}%)</p>
@@ -2161,7 +2227,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </div>
 
         <div>
-          <p style={label}>Clientes sin boleta este mes</p>
+          <p style={{ ...label, marginBottom: 2 }}>Clientes sin boleta este mes</p>
+          <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Siempre es el mes calendario actual — no cambia con el período elegido arriba.</p>
           {clientesSinBoletaEsteMes.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>Todos los clientes tienen boleta generada este mes.</p>
           ) : (
