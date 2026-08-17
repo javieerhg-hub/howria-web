@@ -1079,7 +1079,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         ))}
       </div>
       {form.tipoServicio.includes("evaluacion") && (
-        <p style={{ ...hint, marginTop: -10 }}>Para agendar la evaluación con el adiestrador, guarda la ficha y ve a la pestaña "Agenda".</p>
+        <p style={{ ...hint, marginTop: -10 }}>Para agendar la evaluación con el entrenador, guarda la ficha y ve a la pestaña "Agenda".</p>
       )}
 
       <label style={label} htmlFor="cliente-objetivos">Objetivos a cumplir</label>
@@ -1366,7 +1366,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
         {mostrarAgendar && (
           <div style={{ marginTop: 18, padding: 14, background: CREAM_SOFT, borderRadius: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
-              <label style={label} htmlFor="agendar-adiestrador">Adiestrador</label>
+              <label style={label} htmlFor="agendar-adiestrador">Entrenador</label>
               <select id="agendar-adiestrador" value={agendarAdiestrador} onChange={(e) => setAgendarAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                 {adiestradoresDisponibles.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
               </select>
@@ -4290,6 +4290,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const dowVista = (diaVista.getDay() + 6) % 7;
   const esHoyVista = diaOffset === 0;
 
+  // "Atrasado" se calculaba una sola vez al armar calendarioDia (reloj
+  // congelado) — si un coordinador dejaba la pestaña abierta de fondo,
+  // un paseo que se atrasaba a las 9:20 seguía mostrando "Pendiente"
+  // hasta que algo más (cambiar de día, tocar un cliente) forzara el
+  // recálculo. Este tick fuerza que se vuelva a evaluar cada minuto.
+  const [tickReloj, setTickReloj] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTickReloj((t) => t + 1), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   function actualizarRegistroDia(clienteId, fecha, cambios) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...cambios } }));
@@ -4325,7 +4336,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         return { cliente: c, estado, nota: registro?.nota || "", atrasado };
       })
       .sort((a, b) => (a.cliente.horaHabitual || "99:99").localeCompare(b.cliente.horaHabitual || "99:99"));
-  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista]);
+  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj]);
 
   const calendarioPorPaseador = useMemo(() => {
     const grupos = {};
@@ -4464,11 +4475,16 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
       </SeccionPlegable>
 
       <SeccionPlegable titulo="Semana" subtitulo="Cómo se reparte la semana y el horario fijo de cada paseador.">
-        <div className="howria-dia-selector-movil" style={{ display: "none", gap: 6, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
+        {/* flex:1 1 0 (no overflow-x:auto) — una fila con overflow-x fue la
+            causa real, ya documentada, de que Safari achicara toda la
+            página al entrar a Mis Paseos; una fila de N botones que debe
+            quedarse en una sola línea se reparte el ancho disponible en
+            vez de arriesgarse a desbordar. */}
+        <div className="howria-dia-selector-movil" style={{ display: "none", gap: 6, marginBottom: 16 }}>
           {DIAS_LARGOS.map((dia, dow) => (
             <button key={dow} onClick={() => setDiaSemanaMovil(dow)}
               style={{
-                flex: "0 0 auto", padding: "8px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                flex: "1 1 0", minWidth: 0, padding: "8px 4px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                 border: dow === diaSemanaMovil ? "none" : "1px solid #E4DBC3",
                 background: dow === diaSemanaMovil ? NAVY : "#fff",
                 color: dow === diaSemanaMovil ? CREAM : INK,
@@ -4649,7 +4665,7 @@ function Asignaciones({ clientes, setClientes, usuarios }) {
                 <tr key={r.paseador} style={{ borderTop: "1px solid #EDE4CE" }}>
                   <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{r.paseador}</td>
                   {r.porDia.map((n, i) => (
-                    <td key={i} style={{ padding: "10px", textAlign: "center", color: n >= 4 ? RUST : n === 0 ? "#C9C3A8" : INK, fontWeight: n >= 4 ? 700 : 400 }}>{n || "—"}</td>
+                    <td key={i} style={{ padding: "10px", textAlign: "center", color: n > UMBRAL_SOBRECARGA ? RUST : n === 0 ? "#C9C3A8" : INK, fontWeight: n > UMBRAL_SOBRECARGA ? 700 : 400 }}>{n || "—"}</td>
                   ))}
                   <td style={{ padding: "10px", textAlign: "center", fontWeight: 700, color: NAVY }}>{r.total}</td>
                 </tr>
@@ -4792,13 +4808,10 @@ function ColumnaManada({ id, titulo, clientes, vacio, idsClientesEnConflicto, on
   );
 }
 
-export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId, mascotas = [], mascotaIncompatibilidades = [] }) {
+export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId, mascotas = [], mascotaIncompatibilidades = [],
+  incluidos, setIncluidos, ruta, setRuta, velocidad, setVelocidad, duracionParada, setDuracionParada }) {
   const paseadores = usuarios;
   const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
-  const [incluidos, setIncluidos] = useState({});
-  const [velocidad, setVelocidad] = useState(20);
-  const [duracionParada, setDuracionParada] = useState(25);
-  const [ruta, setRuta] = useState(null);
   const [geocodificando, setGeocodificando] = useState(null);
   const [errorGeo, setErrorGeo] = useState("");
   const mapaDivRef = useRef(null);
@@ -5349,7 +5362,7 @@ function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
           <FilaDetalleCita label={esPaseo ? "Fecha" : "Fecha y hora"} valor={esPaseo
             ? new Date(cita.fechaISO).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
             : new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} />
-          <FilaDetalleCita label={esPaseo ? "Paseador" : "Adiestrador"} valor={cita.adiestrador} />
+          <FilaDetalleCita label={esPaseo ? "Paseador" : "Entrenador"} valor={cita.adiestrador} />
           {cita.precio != null && <FilaDetalleCita label="Precio" valor={fmtCLP(cita.precio)} />}
           <FilaDetalleCita label="Correo" valor={cita.email || "Sin correo"} />
           <FilaDetalleCita label="Teléfono" valor={cita.telefono || "Sin teléfono"} />
@@ -5511,11 +5524,17 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
                 <DatosContactoCita cita={c} onAbrir={() => setCitaDetalleId(c.id)} />
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button onClick={() => confirmar(c)} disabled={confirmandoId === c.id}
-                    style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId === c.id ? 0.6 : 1 }}>
+                  {/* confirmar() se guarda contra doble-clic globalmente
+                      (if (confirmandoId) return;), no solo por fila — el
+                      disabled tiene que reflejar eso mismo, si no, tocar
+                      "Confirmar" en OTRA fila mientras la primera sigue en
+                      curso se ve habilitado pero no hace nada (clic
+                      silencioso, sin ningún aviso). */}
+                  <button onClick={() => confirmar(c)} disabled={!!confirmandoId}
+                    style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId ? 0.6 : 1 }}>
                     {confirmandoId === c.id ? "Confirmando..." : "Confirmar"}
                   </button>
-                  <BotonEliminar onConfirm={() => rechazar(c.id)} disabled={confirmandoId === c.id} label="Rechazar" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
+                  <BotonEliminar onConfirm={() => rechazar(c.id)} disabled={!!confirmandoId} label="Rechazar" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
                 </div>
               </div>
             ))}
@@ -5550,7 +5569,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </select>
               </div>
               <div>
-                <label style={label} htmlFor="agenda-adiestrador">Adiestrador</label>
+                <label style={label} htmlFor="agenda-adiestrador">Entrenador</label>
                 <select id="agenda-adiestrador" value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
                   {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
                 </select>
@@ -5574,7 +5593,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <h2 style={sectionTitle}>Próximas citas</h2>
           <select value={filtroAdiestrador} onChange={(e) => setFiltroAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0, width: 200 }}>
-            <option value="todos">Todos los adiestradores</option>
+            <option value="todos">Todos los entrenadores</option>
             {adiestradores.map((a) => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
           </select>
         </div>
