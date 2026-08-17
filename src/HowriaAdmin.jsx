@@ -7,6 +7,7 @@ import {
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
+import { construirICS, abrirICS } from "./lib/ics.js";
 
 // Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
 // cuando de verdad se entra a esa pestaña — así un paseador (que solo ve
@@ -2228,6 +2229,25 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     setMotivoAusencia("");
   }
 
+  // Un evento recurrente semanal por cliente (no uno por fecha) — es el
+  // mismo horario fijo que ya se ve en "Mis clientes y horarios" de abajo,
+  // solo que ahora lo puede tener el paseador en su propio Calendario de
+  // iPhone en vez de tener que abrir la app cada vez.
+  function agregarACalendario() {
+    const eventos = misClientes
+      .filter((c) => c.diasHabituales?.length)
+      .map((c) => ({
+        uid: `paseo-cliente-${c.id}@howria.app`,
+        titulo: `🐾 Paseo — ${c.perro} (${c.nombre})`,
+        descripcion: `Paseo de ${c.perro} para ${c.nombre}. Generado desde Howria.`,
+        ubicacion: c.direccion || "",
+        diasSemana: c.diasHabituales,
+        horaHabitual: c.horaHabitual,
+        duracionMin: 45,
+      }));
+    abrirICS(construirICS(eventos, `Mis paseos — ${user.nombre}`));
+  }
+
   // Un solo día seleccionado como string (mismo patrón que Itinerario,
   // en vez de semana+índice-dentro-de-semana) — más simple y ya probado
   // en mobile.
@@ -2465,17 +2485,22 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
       </div>
 
       <div className="howria-card" style={tarjeta}>
-        <button onClick={() => setMostrarClientes((v) => !v)}
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
-          <span>
-            <h2 style={{ ...sectionTitle, marginBottom: mostrarClientes ? 6 : 0 }}>Mis clientes y horarios ({misClientes.length})</h2>
-            {!mostrarClientes && <p style={{ ...hint, margin: 0 }}>Tu horario completo, para tenerlo siempre a mano.</p>}
-          </span>
-          <span style={{ fontSize: 13, color: "#8A7E5C", flex: "none", marginLeft: 10 }}>{mostrarClientes ? "▴" : "▾"}</span>
-        </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => setMostrarClientes((v) => !v)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flex: "1 1 220px", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+            <span>
+              <h2 style={{ ...sectionTitle, marginBottom: mostrarClientes ? 6 : 0 }}>Mis clientes y horarios ({misClientes.length})</h2>
+              {!mostrarClientes && <p style={{ ...hint, margin: 0 }}>Tu horario completo, para tenerlo siempre a mano.</p>}
+            </span>
+            <span style={{ fontSize: 13, color: "#8A7E5C", flex: "none", marginLeft: 10 }}>{mostrarClientes ? "▴" : "▾"}</span>
+          </button>
+          <button onClick={agregarACalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "9px 16px", fontSize: 12.5 }}>
+            📅 Agregar a mi calendario
+          </button>
+        </div>
         {mostrarClientes && (
           <>
-            <p style={hint}>Tu horario completo, para tenerlo siempre a mano.</p>
+            <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba lo exporta a tu Calendario de iPhone (u otro calendario que uses).</p>
             <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                 <thead>
