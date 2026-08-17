@@ -6144,7 +6144,8 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
     const idsNoLeidos = hilo.mensajes.filter((m) => m.direccion === "entrante" && !m.leido).map((m) => m.id);
     if (idsNoLeidos.length === 0) return;
     supabase.from("correos").update({ leido: true }).in("id", idsNoLeidos).then(({ error }) => {
-      if (!error) setCorreos((prev) => prev.map((c) => (idsNoLeidos.includes(c.id) ? { ...c, leido: true } : c)));
+      if (error) { showToast("No se pudo marcar el hilo como leído."); return; }
+      setCorreos((prev) => prev.map((c) => (idsNoLeidos.includes(c.id) ? { ...c, leido: true } : c)));
     });
   }
 
@@ -6221,23 +6222,25 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
             const abierto = hiloAbierto === hilo.contraparte;
             const nombre = nombreDe(hilo);
             return (
-              <div key={hilo.contraparte} className="howria-card" style={tarjeta}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, cursor: "pointer" }} onClick={() => abrirHilo(hilo)}>
+              <div key={hilo.contraparte} className="howria-card" style={{ ...tarjeta, cursor: "pointer" }} onClick={() => abrirHilo(hilo)}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                   <div style={{ fontSize: 13.5 }}>
                     {hilo.noLeidos > 0 && (
                       <span style={{ marginRight: 8, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: RUST, color: "#FFFFFF" }}>{hilo.noLeidos}</span>
                     )}
                     <b style={{ color: NAVY }}>{nombre}</b>
+                    {hilo.clienteId && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#D8ECDE", color: "#2F6A46" }}>Cliente</span>}
+                    {hilo.prospectoId && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#F3E3B4", color: "#8A6A1E" }}>Prospecto</span>}
                     {nombre !== hilo.contraparte && <span style={{ color: "#8A7E5C" }}> · {hilo.contraparte}</span>}
                   </div>
                   <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>{fmtFechaCorreo(hilo.ultimo.creadoEn)}</div>
                 </div>
-                <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C", cursor: "pointer" }} onClick={() => abrirHilo(hilo)}>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: "#8A7E5C" }}>
                   {hilo.ultimo.direccion === "entrante" ? "Recibido" : "Enviado"} · {hilo.ultimo.asunto || "(sin asunto)"}
                 </p>
 
                 {abierto && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3", display: "grid", gap: 14 }}>
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3", display: "grid", gap: 14, cursor: "default" }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {(hilo.clienteId || hilo.prospectoId) && (
                         <button onClick={() => (hilo.clienteId ? onVerCliente(hilo.clienteId) : onVerProspecto(hilo.contraparte))}
@@ -6260,7 +6263,7 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
                       </div>
                     ))}
 
-                    <div style={{ borderTop: "1px solid #E4DBC3", paddingTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ borderTop: "1px solid #E4DBC3", paddingTop: 14 }}>
                       <textarea placeholder={`Responder a ${hilo.contraparte}…`} value={respuesta} onChange={(e) => setRespuesta(e.target.value)}
                         rows={3} style={{ ...input, marginBottom: 8, resize: "vertical" }} />
                       {errorEnvio && <p style={{ margin: "0 0 8px", fontSize: 12.5, color: RUST }}>{errorEnvio}</p>}
