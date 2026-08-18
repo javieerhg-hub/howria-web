@@ -2650,6 +2650,45 @@ function EvaluacionesPorConfirmar({ citas, setTab }) {
   );
 }
 
+// Carrusel de avisos/recordatorios para el paseador — 3 mensajes de
+// ejemplo que rotan solos cada 3 segundos, para reforzar hábitos de
+// seguridad sin que el paseador tenga que ir a buscarlos a ningún lado.
+// Contenido de ejemplo por ahora — texto libre, se puede reemplazar más
+// adelante por campañas reales.
+const AVISOS_CARRUSEL = [
+  { Icono: Footprints, titulo: "Cada paso con atención", texto: "Revisa correa y collar antes de salir — un segundo de chequeo evita un mal rato.", bg: NAVY, color: CREAM },
+  { Icono: ShieldCheck, titulo: "La seguridad primero", texto: "Si el perro se ve nervioso o el clima está complicado, avisa antes de salir a caminar.", bg: "#2F6A46", color: CREAM },
+  { Icono: Dog, titulo: "Con cariño y responsabilidad", texto: "Cada perro que paseas es parte de una familia — trátalo como tratarías al tuyo.", bg: GOLD, color: NAVY },
+];
+
+function CarruselAvisos() {
+  const [indice, setIndice] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIndice((i) => (i + 1) % AVISOS_CARRUSEL.length), 3000);
+    return () => clearInterval(id);
+  }, []);
+  const aviso = AVISOS_CARRUSEL[indice];
+  const Icono = aviso.Icono;
+  return (
+    <div className="howria-card" style={{ ...tarjeta, background: aviso.bg, border: "none", transition: "background .4s ease" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 46, height: 46, borderRadius: 12, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+          <Icono size={22} color={aviso.color} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: aviso.color }}>{aviso.titulo}</p>
+          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: aviso.color, opacity: 0.85 }}>{aviso.texto}</p>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center" }}>
+        {AVISOS_CARRUSEL.map((_, i) => (
+          <span key={i} style={{ width: i === indice ? 16 : 6, height: 6, borderRadius: 3, background: aviso.color, opacity: i === indice ? 1 : 0.35, transition: "all .3s ease" }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
@@ -2820,6 +2859,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
   return (
     <div style={{ display: "grid", gap: 20 }}>
       {encabezado}
+      <CarruselAvisos />
 
       {/* De los cuatro roles, paseador era el único sin este launcher en
           su Inicio mobile — justo el rol más "de terreno, en el
