@@ -7,7 +7,7 @@ import {
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
-import { construirICS, abrirICS } from "./lib/ics.js";
+import { urlSuscripcionCalendario } from "./lib/ics.js";
 
 // Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
 // cuando de verdad se entra a esa pestaña — así un paseador (que solo ve
@@ -270,6 +270,7 @@ function dbToUsuario(row) {
     capacitacionCompletada: row.capacitacion_completada || [],
     capacidadMaxima: row.capacidad_maxima,
     metaMensual: row.meta_mensual,
+    calendarioToken: row.calendario_token,
   };
 }
 
@@ -2229,23 +2230,12 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     setMotivoAusencia("");
   }
 
-  // Un evento recurrente semanal por cliente (no uno por fecha) — es el
-  // mismo horario fijo que ya se ve en "Mis clientes y horarios" de abajo,
-  // solo que ahora lo puede tener el paseador en su propio Calendario de
-  // iPhone en vez de tener que abrir la app cada vez.
+  // Suscripción, no exportación de una sola vez — Calendario vuelve a
+  // pedir esta URL sola cada cierto tiempo, así que si el coordinador le
+  // cambia el horario a un cliente, el calendario del paseador se
+  // actualiza sin que tenga que volver a tocar este botón.
   function agregarACalendario() {
-    const eventos = misClientes
-      .filter((c) => c.diasHabituales?.length)
-      .map((c) => ({
-        uid: `paseo-cliente-${c.id}@howria.app`,
-        titulo: `🐾 Paseo — ${c.perro} (${c.nombre})`,
-        descripcion: `Paseo de ${c.perro} para ${c.nombre}. Generado desde Howria.`,
-        ubicacion: c.direccion || "",
-        diasSemana: c.diasHabituales,
-        horaHabitual: c.horaHabitual,
-        duracionMin: 45,
-      }));
-    abrirICS(construirICS(eventos, `Mis paseos — ${user.nombre}`));
+    window.location.href = urlSuscripcionCalendario(miUsuario.calendarioToken);
   }
 
   // Un solo día seleccionado como string (mismo patrón que Itinerario,
@@ -2500,7 +2490,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         </div>
         {mostrarClientes && (
           <>
-            <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba lo exporta a tu Calendario de iPhone (u otro calendario que uses).</p>
+            <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba suscribe tu Calendario de iPhone (u otro que uses) a este horario — se mantiene al día solo, sin que tengas que repetirlo si algo cambia.</p>
             <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                 <thead>

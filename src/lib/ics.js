@@ -84,32 +84,13 @@ export function construirICS(eventos, nombreCalendario = "Howria") {
   return lineas.join("\r\n");
 }
 
-// Probado en iPhone, tres intentos fallidos antes de este:
-// 1) location.href a una data: URI — no pasa nada (WebKit moderno bloquea en
-//    silencio la navegación de nivel superior a data: iniciada desde JS).
-// 2) <a download> con un blob: URL — sí descarga el archivo, pero el atributo
-//    download le dice al navegador "guárdalo", así que nunca llega a mirar el
-//    Content-Type y ofrecer el flujo de Calendario; solo queda en Archivos.
-// 3) location.href a un blob: URL sin download — Safari lo descargó igual,
-//    como "Unknown.ics": un blob: no tiene nombre ni extensión real, así que
-//    Safari no lo reconoce como archivo de calendario y cae al mismo cajón
-//    de descargas genéricas de siempre (ahí ya no hay flujo de Calendario,
-//    solo la hoja de compartir normal de iOS).
-// Lo que faltaba: una URL de SERVIDOR real terminada en .ics. Eso Safari sí
-// lo reconoce y dispara el Quick Look nativo de "Agregar a Calendario" — por
-// eso este envío es un <form> de verdad (navegación de página completa, no
-// fetch) a api/mis-paseos.ics.js, que reenvía el mismo contenido que ya se
-// armó acá con los headers correctos.
-export function abrirICS(contenidoICS) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "/api/mis-paseos.ics";
-  form.style.display = "none";
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "contenido";
-  input.value = contenidoICS;
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
+// 3 intentos fallidos (data: URI, blob: URL con y sin download — ver
+// memoria del proyecto) enseñaron que un archivo exportado una sola vez
+// pelea contra cómo Safari maneja calendarios en iOS. La solución no es
+// exportar mejor, es no exportar: una SUSCRIPCIÓN (webcal://) a
+// api/mis-paseos.ics.js, que calcula el .ics fresco desde Supabase en cada
+// pedido — así Calendario la vuelve a pedir sola cada cierto tiempo y el
+// horario del paseador queda al día solo, sin volver a tocar el botón.
+export function urlSuscripcionCalendario(token) {
+  return `webcal://${window.location.host}/api/mis-paseos.ics?token=${encodeURIComponent(token)}`;
 }

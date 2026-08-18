@@ -111,6 +111,7 @@ no un runner de migraciones.
 | 083 | `correos_archivado.sql` | 2026-08-17 | Agrega `archivado` a `correos` — Mail gana un botón para archivar un hilo entero (reversible), la única pestaña de la app que no tenía ninguna forma de "limpiar" lo ya resuelto. |
 | 084 | `avisos_descartados.sql` | 2026-08-17 | Crea `avisos_descartados` (por usuario, RLS acotado a cada quien) — descartar un aviso en el dashboard de Inicio antes solo se guardaba en localStorage, no sincronizaba entre el celular y la PC de la misma persona. |
 | 085 | `ajustes_pago_pendientes.sql` | 2026-08-17 | Crea `ajustes_pago_pendientes` (borrador de bono/descuento por paseador+período, mismo acceso que `pagos_trabajadores`) — antes el ajuste vivía solo en localStorage de quien lo escribía, invisible para otra persona/dispositivo hasta confirmar el pago, con riesgo real de pagar el monto equivocado. |
+| 086 | `usuarios_calendario_token.sql` | 2026-08-17 | Agrega `calendario_token` (uuid, único por fila) a `usuarios` y a `usuarios_seguro` (mismo criterio de visibilidad que banco/cuenta: solo administrador/coordinador o la propia persona) — identifica al paseador en la URL de suscripción `webcal://` de "Agregar a mi calendario", sin depender de una sesión abierta. |
 
 ## Nota sobre el orden 001–023
 
