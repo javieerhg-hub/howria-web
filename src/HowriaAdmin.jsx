@@ -2062,7 +2062,7 @@ export function inicioSemana(fecha) {
 
 
 // ---------- Pago a trabajadores ----------
-function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {} }) {
+function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   const hoyStr0 = fechaKey(hoy);
@@ -2110,6 +2110,21 @@ function calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquip
   const sinPaseador = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos")));
   if (sinPaseador.length > 0) {
     avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
+  }
+
+  // Mismo criterio exacto que "Clientes sin boleta este mes" en Finanzas
+  // (esBoletaDeCliente + mes/año calendario actual) — para que el número
+  // que aparece acá arriba nunca desentone con el que ya se ve ahí. Antes
+  // este dato solo se descubría entrando a Finanzas y scrolleando hasta
+  // abajo; ahora empuja a que se generen las boletas atrasadas en vez de
+  // quedar enterrado.
+  const todasLasBoletasDelMes = [...boletasEmitidas, ...boletasAdiestramiento];
+  const sinBoletaEsteMes = clientes.filter((c) => !todasLasBoletasDelMes.some((b) => {
+    const f = new Date(b.fechaISO);
+    return esBoletaDeCliente(b, c) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
+  }));
+  if (sinBoletaEsteMes.length > 0) {
+    avisos.push({ tipo: "boleta-pendiente", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
   }
 
   const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
@@ -2916,7 +2931,7 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
@@ -2927,7 +2942,7 @@ function Inicio({ clientes, boletasEmitidas, registroPaseos, setRegistroPaseos, 
   if (user.rol === "paseador" || user.rol === "entrenador") {
     return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />;
   }
-  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
+  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
 
   function descartarAviso(clave) {
     setAvisosDescartados((prev) => [...prev, { id: Date.now() + Math.random(), clave, usuarioEmail: user.email }]);
@@ -3937,7 +3952,7 @@ export default function HowriaAdmin() {
       <div className="howria-header" style={{ background: NAVY, padding: "14px 32px", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", position: "relative", zIndex: 30 }}>
         <LogoHowria height={56} />
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
+          {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
           <BotonNotificacionesPush usuarioEmail={user.email} />
           <div style={{ fontSize: 13, textAlign: "right", color: CREAM }}>
             <div>{user.nombre}</div>
@@ -3999,7 +4014,7 @@ export default function HowriaAdmin() {
 
           <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" }}>
-              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
+              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
               <BotonNotificacionesPush usuarioEmail={user.email} />
             </div>
             <div style={{ padding: "0 8px", fontSize: 13, color: CREAM }}>
@@ -4025,7 +4040,7 @@ export default function HowriaAdmin() {
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
