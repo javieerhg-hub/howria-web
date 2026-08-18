@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
-  GraduationCap, KeyRound,
+  GraduationCap, KeyRound, MessageCircle, Send,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
@@ -1501,6 +1501,77 @@ function useCorreos(sessionVersion) {
   }, [sessionVersion]);
 
   return [correos, setCorreos, cargando];
+}
+
+export function dbToMensajeEquipo(row) {
+  return { id: row.id, autorEmail: row.autor_email, autorNombre: row.autor_nombre, texto: row.texto, creadoEn: row.creado_en };
+}
+
+// Chat interno del equipo — un solo canal compartido por todo el staff (ver
+// database/088_mensajes_equipo.sql). Trae los últimos 200 mensajes al
+// montar (de sobra para un chat de trabajo, sin necesidad de paginación) y
+// desde ahí solo suma lo que llega por tiempo real — no hace falta volver
+// a pedir la lista completa cada vez que alguien escribe.
+function useMensajesEquipo(sessionVersion) {
+  const [mensajes, setMensajes] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("mensajes_equipo").select("*").order("creado_en", { ascending: false }).limit(200).then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar el chat: ${error.message}`);
+      else if (data) setMensajes(data.slice().reverse().map(dbToMensajeEquipo));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  useEffect(() => {
+    const canal = supabase
+      .channel("mensajes_equipo-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes_equipo" }, (payload) => {
+        setMensajes((prev) => [...prev, dbToMensajeEquipo(payload.new)]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
+  }, [sessionVersion]);
+
+  async function enviarMensajeEquipo(user, texto) {
+    const { error } = await supabase.from("mensajes_equipo").insert({ autor_email: user.email, autor_nombre: user.nombre, texto });
+    if (error) showToast(`No se pudo enviar el mensaje: ${error.message}`);
+  }
+
+  return [mensajes, enviarMensajeEquipo, cargando];
+}
+
+// Hasta cuándo leyó cada quien el chat (database/089_mensajes_equipo_lecturas.sql)
+// — de ahí sale el número de la burbuja. Se guarda en Supabase (no
+// localStorage) para que sincronice entre el celular y la PC de la misma
+// persona, mismo motivo que avisos_descartados.
+function useLecturaChatEquipo(userEmail, sessionVersion) {
+  const [ultimaLectura, setUltimaLectura] = useState(null);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    let activo = true;
+    supabase.from("mensajes_equipo_lecturas").select("ultima_lectura").eq("usuario_email", userEmail).maybeSingle().then(({ data }) => {
+      if (activo) setUltimaLectura(data?.ultima_lectura || null);
+    });
+    return () => { activo = false; };
+  }, [userEmail, sessionVersion]);
+
+  function marcarChatLeido() {
+    if (!userEmail) return;
+    const ahora = new Date().toISOString();
+    setUltimaLectura(ahora);
+    supabase.from("mensajes_equipo_lecturas").upsert({ usuario_email: userEmail, ultima_lectura: ahora }, { onConflict: "usuario_email" }).then(({ error }) => {
+      if (error) showToast(`No se pudo guardar la lectura del chat: ${error.message}`);
+    });
+  }
+
+  return [ultimaLectura, marcarChatLeido];
 }
 
 // Solicitudes de "Registro de cuenta" pendientes de revisión (ver
@@ -3843,6 +3914,119 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0 }) {
   );
 }
 
+// Burbuja de chat interno — flota sobre toda la app (cualquier pestaña,
+// cualquier rol de staff) en una esquina, igual que ToastHost. Un solo
+// canal compartido (ver database/088_mensajes_equipo.sql), no hay lista de
+// conversaciones que armar. El número de no leídos sale de comparar cada
+// mensaje contra "ultimaLectura" (database/089) — mientras el panel está
+// abierto se va marcando leído al toque, para que no vuelva a aparecer un
+// número mientras la conversación sigue a la vista.
+function ChatEquipo({ user, mensajes, enviarMensaje, cargando, ultimaLectura, marcarLeido }) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const listaRef = useRef(null);
+
+  const noLeidos = mensajes.filter((m) => m.autorEmail !== user.email && (!ultimaLectura || new Date(m.creadoEn) > new Date(ultimaLectura))).length;
+
+  useEffect(() => {
+    if (abierto) marcarLeido();
+  }, [abierto, mensajes.length]);
+
+  useEffect(() => {
+    if (abierto && listaRef.current) listaRef.current.scrollTop = listaRef.current.scrollHeight;
+  }, [mensajes.length, abierto]);
+
+  async function enviar() {
+    const limpio = texto.trim();
+    if (!limpio || enviando) return;
+    setEnviando(true);
+    await enviarMensaje(user, limpio);
+    setTexto("");
+    setEnviando(false);
+  }
+
+  return (
+    <>
+      <button onClick={() => setAbierto((v) => !v)} aria-label={abierto ? "Cerrar chat del equipo" : "Abrir chat del equipo"}
+        className="howria-chat-bubble"
+        style={{
+          position: "fixed", bottom: "calc(20px + env(safe-area-inset-bottom))", right: 20, zIndex: 10025,
+          width: 54, height: 54, borderRadius: "50%", border: "none", cursor: "pointer",
+          background: NAVY, color: CREAM, display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+        }}>
+        <MessageCircle size={22} />
+        {!abierto && noLeidos > 0 && (
+          <span style={{
+            position: "absolute", top: -3, right: -3, minWidth: 20, height: 20, borderRadius: 10, padding: "0 5px",
+            background: RUST, color: "#FFFFFF", fontSize: 11, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${CREAM}`,
+          }}>
+            {noLeidos > 9 ? "9+" : noLeidos}
+          </span>
+        )}
+      </button>
+
+      {abierto && (
+        <div className="howria-chat-panel" style={{
+          position: "fixed", bottom: "calc(84px + env(safe-area-inset-bottom))", right: 20, zIndex: 10025,
+          width: 320, maxWidth: "calc(100vw - 40px)", height: 440, maxHeight: "calc(100vh - 150px)",
+          background: CREAM, borderRadius: 14, boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
+          display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #E4DBC3",
+        }}>
+          <div style={{ background: NAVY, color: CREAM, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flex: "none" }}>
+            <h3 style={{ margin: 0, fontSize: 14.5, fontFamily: "'Fraunces', Georgia, serif" }}>Chat del equipo</h3>
+            <button onClick={() => setAbierto(false)} aria-label="Cerrar" style={{ background: "none", border: "none", color: CREAM, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 4 }}>✕</button>
+          </div>
+
+          <div ref={listaRef} style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {cargando ? (
+              <p style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>Cargando…</p>
+            ) : mensajes.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>Todavía no hay mensajes — escribe el primero.</p>
+            ) : (
+              mensajes.map((m) => {
+                const esMio = m.autorEmail === user.email;
+                return (
+                  <div key={m.id} style={{ alignSelf: esMio ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                    {!esMio && <p style={{ margin: "0 0 2px 2px", fontSize: 10.5, color: "#8A7E5C", fontWeight: 700 }}>{m.autorNombre}</p>}
+                    <div style={{
+                      background: esMio ? NAVY : "#FFFFFF", color: esMio ? CREAM : INK,
+                      border: esMio ? "none" : "1px solid #E4DBC3", borderRadius: 12,
+                      padding: "8px 11px", fontSize: 13, lineHeight: 1.4, wordBreak: "break-word",
+                    }}>
+                      {m.texto}
+                    </div>
+                    <p style={{ margin: "2px 2px 0", fontSize: 10, color: "#8A7E5C", textAlign: esMio ? "right" : "left" }}>
+                      {new Date(m.creadoEn).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ padding: 10, borderTop: "1px solid #E4DBC3", display: "flex", gap: 8, flex: "none" }}>
+            <input value={texto} onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") enviar(); }}
+              placeholder="Escribe un mensaje…"
+              style={{ flex: 1, padding: "9px 12px", borderRadius: 20, border: "1px solid #E1D7B8", fontSize: 16, fontFamily: "'Inter', sans-serif" }} />
+            <button onClick={enviar} disabled={!texto.trim() || enviando}
+              style={{
+                width: 38, height: 38, borderRadius: "50%", border: "none", flex: "none",
+                cursor: texto.trim() ? "pointer" : "default", background: GOLD, color: NAVY, opacity: texto.trim() ? 1 : 0.5,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 const USUARIOS_INICIAL = [
   { id: 1, nombre: "Camila Soto", rol: "coordinador", fotoUrl: null },
   { id: 2, nombre: "Pedro Vidal", rol: "entrenador", fotoUrl: null },
@@ -3989,6 +4173,8 @@ export default function HowriaAdmin() {
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
+  const [mensajesEquipo, enviarMensajeEquipo, cargandoMensajesEquipo] = useMensajesEquipo(sessionVersion);
+  const [ultimaLecturaChat, marcarChatLeido] = useLecturaChatEquipo(user?.email, sessionVersion);
   const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
@@ -4118,6 +4304,11 @@ export default function HowriaAdmin() {
           .howria-horario-fila input[type="time"] { width: 0 !important; flex: 1 1 90px; min-width: 90px; }
           .howria-launcher-mobile { display: block !important; }
           .howria-bottom-nav { display: flex !important; }
+          /* La burbuja de chat vive fija en la esquina en desktop, pero en
+             mobile la barra de navegación inferior ocupa ese mismo rincón
+             — subirla despeja la barra en vez de quedar encima. */
+          .howria-chat-bubble { bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
+          .howria-chat-panel { bottom: calc(138px + env(safe-area-inset-bottom)) !important; }
           .howria-inicio-stats { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-finanzas-stats { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-stats-3 { grid-template-columns: repeat(2, 1fr) !important; }
@@ -4302,6 +4493,7 @@ export default function HowriaAdmin() {
         </div>
       </div>
       <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} correosNoLeidos={correosNoLeidos} />
+      <ChatEquipo user={user} mensajes={mensajesEquipo} enviarMensaje={enviarMensajeEquipo} cargando={cargandoMensajesEquipo} ultimaLectura={ultimaLecturaChat} marcarLeido={marcarChatLeido} />
     </div>
   );
 }
