@@ -1167,7 +1167,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         </select>
         <input placeholder="Tarifa a pagar al paseador por paseo" type="number" min="0" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
       </div>
-      <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente. Para reasignar paseadores en bloque, usa la pestaña "Asignaciones".</p>
+      <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente.</p>
 
       <p style={label}>Entrenador asignado (para clases de adiestramiento)</p>
       <select value={form.adiestradorNombre} onChange={(e) => setForm({ ...form, adiestradorNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
@@ -4650,8 +4650,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   }).sort((a, b) => b.total - a.total);
   const maxCarga = Math.max(1, ...cargaPorPaseador.map((p) => p.total));
 
-  const sinPaseador = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos")));
-
   const clientesDelPaseador = clientes.filter((c) => c.paseadorNombre === paseadorSel);
   const qBusqueda = busqueda.trim().toLowerCase();
 
@@ -4911,26 +4909,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
       </SeccionPlegable>
 
-      <SeccionPlegable titulo="Reasignar" subtitulo="Cambiar el paseador asignado a un cliente.">
-        {sinPaseador.length > 0 && (
-          <div style={{ background: "#FBEFE3", border: "1px solid #E8CBA0", borderRadius: 10, padding: 14, marginBottom: 18 }}>
-            <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "#8A5A22" }}>⚠️ Clientes sin paseador ({sinPaseador.length})</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {sinPaseador.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", borderRadius: 8, padding: "8px 12px" }}>
-                  <span style={{ fontSize: 13, color: INK }}>{c.nombre} — {c.perro}</span>
-                  <select defaultValue="" onChange={(e) => e.target.value && asignarPaseadorRapido(c.id, e.target.value)} style={{ fontSize: 12.5, padding: "5px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
-                    <option value="">Asignar a...</option>
-                    {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <Asignaciones clientes={clientes} setClientes={setClientes} usuarios={usuarios} />
-      </SeccionPlegable>
-
       <SeccionPlegable titulo="Reprogramar paseos" subtitulo="Mover el paseo de un cliente a otro día puntual — sin tocar su horario habitual ni el pago del paseador.">
         <p style={{ ...hint, marginTop: -4 }}>
           Por ejemplo: el cliente no pudo ayer y pide dejarlo para hoy — el paseador sigue siendo el mismo, solo cambia el día. El horario habitual del cliente no se toca, y el paseo cuenta igual para la meta y el pago de quien lo hace.
@@ -4984,141 +4962,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           </div>
         )}
       </SeccionPlegable>
-    </div>
-  );
-}
-
-function Asignaciones({ clientes, setClientes, usuarios }) {
-  const paseadoresDisponibles = usuarios;
-  const [pendienteReasignar, setPendienteReasignar] = useState(null);
-
-  function asignarPaseador(clienteId, nombre) {
-    setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, paseadorNombre: nombre } : c)));
-  }
-
-  function actualizarTarifa(clienteId, tarifa) {
-    setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, tarifaPaseador: Number(tarifa) || 0 } : c)));
-  }
-
-  const clientesPorPaseador = useMemo(() => {
-    const mapa = {};
-    paseadoresDisponibles.forEach((p) => { mapa[p.nombre] = 0; });
-    clientes.forEach((c) => { if (c.paseadorNombre) mapa[c.paseadorNombre] = (mapa[c.paseadorNombre] || 0) + 1; });
-    return mapa;
-  }, [clientes, paseadoresDisponibles]);
-
-  const cargaPorDia = useMemo(() => {
-    return paseadoresDisponibles.map((p) => {
-      const clientesDe = clientes.filter((c) => c.paseadorNombre === p.nombre);
-      const porDia = DIAS_SEMANA.map((_, dow) => clientesDe.filter((c) => c.diasHabituales?.includes(dow)).length);
-      return { paseador: p.nombre, porDia, total: porDia.reduce((a, b) => a + b, 0) };
-    });
-  }, [clientes, paseadoresDisponibles]);
-
-  const sinAsignar = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos"))).length;
-
-  return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Paseadores de la empresa</h2>
-        <p style={hint}>Cuántos clientes tiene asignado cada uno ahora mismo.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginTop: 14 }}>
-          {paseadoresDisponibles.map((p) => (
-            <div key={p.id} style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
-              <div style={{ fontWeight: 600, color: NAVY }}>{p.nombre}</div>
-              <div style={{ fontSize: 12, color: "#8A7E5C", textTransform: "capitalize" }}>{p.rol}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: NAVY, marginTop: 8, fontFamily: "Georgia, serif" }}>{clientesPorPaseador[p.nombre] || 0}</div>
-              <div style={{ fontSize: 11.5, color: "#8A7E5C" }}>clientes asignados</div>
-            </div>
-          ))}
-          {paseadoresDisponibles.length === 0 && <p style={hint}>Todavía no hay paseadores registrados en "Usuarios".</p>}
-        </div>
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Carga de trabajo por día</h2>
-        <p style={hint}>Cantidad de paseos programados cada día de la semana — dos paseadores con la misma cantidad de clientes pueden tener cargas muy distintas.</p>
-        <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
-                <th style={{ padding: "8px 10px" }}>Paseador</th>
-                {DIAS_SEMANA_LARGO.map((d) => <th key={d} style={{ padding: "8px 10px", textAlign: "center" }}>{d.slice(0, 3)}</th>)}
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>Total sem.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cargaPorDia.map((r) => (
-                <tr key={r.paseador} style={{ borderTop: "1px solid #EDE4CE" }}>
-                  <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{r.paseador}</td>
-                  {r.porDia.map((n, i) => (
-                    <td key={i} style={{ padding: "10px", textAlign: "center", color: n > UMBRAL_SOBRECARGA ? RUST : n === 0 ? "#C9C3A8" : INK, fontWeight: n > UMBRAL_SOBRECARGA ? 700 : 400 }}>{n || "—"}</td>
-                  ))}
-                  <td style={{ padding: "10px", textAlign: "center", fontWeight: 700, color: NAVY }}>{r.total}</td>
-                </tr>
-              ))}
-              {cargaPorDia.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay paseadores registrados.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Asignar clientes</h2>
-        <p style={hint}>{sinAsignar > 0 ? `${sinAsignar} cliente(s) sin paseador asignado.` : "Todos los clientes tienen paseador asignado."}</p>
-
-
-        <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>
-                <th style={{ padding: "8px 10px" }}>Cliente</th>
-                <th style={{ padding: "8px 10px" }}>Perro</th>
-                <th style={{ padding: "8px 10px" }}>Paseador asignado</th>
-                <th style={{ padding: "8px 10px" }}>Tarifa por paseo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientes.map((c) => (
-                <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
-                  <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
-                  <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
-                  <td style={{ padding: "10px" }}>
-                    {pendienteReasignar?.clienteId === c.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 12.5, color: INK }}>¿Reasignar a {pendienteReasignar.nombre || "sin paseador"}?</span>
-                        <button onClick={() => { asignarPaseador(c.id, pendienteReasignar.nombre); setPendienteReasignar(null); }}
-                          style={{ border: "none", background: NAVY, color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
-                          Confirmar
-                        </button>
-                        <button onClick={() => setPendienteReasignar(null)}
-                          style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <select value={c.paseadorNombre || ""} onChange={(e) => setPendienteReasignar({ clienteId: c.id, nombre: e.target.value })}
-                        style={{ ...input, marginBottom: 0, padding: "8px 10px", fontSize: 13 }}>
-                        <option value="">Sin asignar</option>
-                        {paseadoresDisponibles.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
-                      </select>
-                    )}
-                  </td>
-                  <td style={{ padding: "10px" }}>
-                    <input type="number" value={c.tarifaPaseador || ""} onChange={(e) => actualizarTarifa(c.id, e.target.value)}
-                      style={{ ...input, marginBottom: 0, width: 130, padding: "8px 10px", fontSize: 13 }} placeholder="$ por paseo" />
-                  </td>
-                </tr>
-              ))}
-              {clientes.length === 0 && (
-                <tr><td colSpan={4} style={{ padding: "20px 10px", color: "#9A9179", textAlign: "center" }}>No hay clientes registrados todavía.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
@@ -5395,7 +5238,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
           </div>
         )}
         {clientesDelPaseador.length === 0 ? (
-          <p style={{ ...hint, marginTop: 8 }}>Este paseador no tiene clientes asignados (ve a "Asignaciones").</p>
+          <p style={{ ...hint, marginTop: 8 }}>Este paseador no tiene clientes asignados (asigna un paseador desde la ficha del cliente, en la pestaña Clientes).</p>
         ) : (
           <>
             <input
