@@ -94,3 +94,11 @@ export function construirICS(eventos, nombreCalendario = "Howria") {
 export function urlSuscripcionCalendario(token) {
   return `webcal://${window.location.host}/api/mis-paseos.ics?token=${encodeURIComponent(token)}`;
 }
+
+// Mismo recurso, protocolo https: — webcal:// es lo que reconoce Calendario
+// de iPhone al tocar el botón, pero para pegar el enlace a mano en Google
+// Calendar/Outlook conviene la variante https, que es la que esas apps
+// esperan en su campo "agregar por URL".
+export function urlSuscripcionCalendarioHttps(token) {
+  return `https://${window.location.host}/api/mis-paseos.ics?token=${encodeURIComponent(token)}`;
+}

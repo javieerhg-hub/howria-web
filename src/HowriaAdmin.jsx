@@ -7,7 +7,7 @@ import {
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
-import { urlSuscripcionCalendario } from "./lib/ics.js";
+import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 
 // Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
 // cuando de verdad se entra a esa pestaña — así un paseador (que solo ve
@@ -2238,6 +2238,11 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     window.location.href = urlSuscripcionCalendario(miUsuario.calendarioToken);
   }
 
+  function copiarEnlaceCalendario() {
+    navigator.clipboard.writeText(urlSuscripcionCalendarioHttps(miUsuario.calendarioToken))
+      .then(() => showToast("Enlace copiado — pégalo en Google Calendar, Outlook, o donde prefieras suscribirte.", "exito"));
+  }
+
   // Un solo día seleccionado como string (mismo patrón que Itinerario,
   // en vez de semana+índice-dentro-de-semana) — más simple y ya probado
   // en mobile.
@@ -2491,6 +2496,15 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         {mostrarClientes && (
           <>
             <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba suscribe tu Calendario de iPhone (u otro que uses) a este horario — se mantiene al día solo, sin que tengas que repetirlo si algo cambia.</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: CREAM_SOFT, borderRadius: 8, padding: "10px 12px", marginBottom: 14, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: "#8A7E5C", flex: "none", textTransform: "uppercase", letterSpacing: 0.3 }}>Enlace de suscripción</span>
+              <code style={{ fontSize: 11.5, color: NAVY, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {urlSuscripcionCalendarioHttps(miUsuario.calendarioToken)}
+              </code>
+              <button onClick={copiarEnlaceCalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "6px 12px", fontSize: 11.5 }}>
+                Copiar
+              </button>
+            </div>
             <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                 <thead>
