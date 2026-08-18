@@ -2203,22 +2203,51 @@ export function forzarRecalculoZoomIOS() {
   setTimeout(() => meta.setAttribute("content", viewportOriginal), 300);
 }
 
+// Mientras la ruta está en curso, la app se queda "encerrada" en ese panel:
+// si el paseador recarga o vuelve a entrar, reabre solo — no tiene que ir a
+// buscar el botón. La única salida real es tocar la X, que guarda esta
+// marca (por persona y por día, para que mañana vuelva a abrirse solo sin
+// arrastrar la salida de ayer) — mientras esté guardada, no se reabre solo.
+function claveSalidaRuta(email, hoy) {
+  return `howria_ruta_salida_${email}_${fechaKey(hoy)}`;
+}
+
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+  const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
+  const rutaEnCurso = faseHoy === "en_recoleccion" || faseHoy === "en_parque" || faseHoy === "en_retorno";
+
   const [notaAbiertaId, setNotaAbiertaId] = useState(null);
   const [notaTexto, setNotaTexto] = useState("");
   const [mostrarClientes, setMostrarClientes] = useState(false);
   const [mostrarCapacitacion, setMostrarCapacitacion] = useState(false);
-  const [rutaAbierta, setRutaAbierta] = useState(false);
+  const [rutaAbierta, setRutaAbierta] = useState(() => {
+    if (!rutaEnCurso) return false;
+    try { return localStorage.getItem(claveSalidaRuta(user.email, hoy)) !== "1"; } catch { return true; }
+  });
   const [mostrarJustificar, setMostrarJustificar] = useState(false);
   const [motivoAusencia, setMotivoAusencia] = useState("");
 
+  function limpiarSalidaGuardada() {
+    try { localStorage.removeItem(claveSalidaRuta(user.email, hoy)); } catch {}
+  }
+
+  // La X de RutaGuiada — a diferencia de simplemente cerrar el panel,
+  // esto es lo único que hace que la app deje de reabrirlo sola.
+  function salirDeRuta() {
+    try { localStorage.setItem(claveSalidaRuta(user.email, hoy), "1"); } catch {}
+    setRutaAbierta(false);
+  }
+
   // Acceso directo desde Inicio ("Volver a mi ruta") — llega acá como una
   // señal de "abrí de nuevo esta pestaña con la intención de reabrir la
-  // ruta", mismo patrón que saltarAlumnoDbId/saltarClienteDbId.
+  // ruta", mismo patrón que saltarAlumnoDbId/saltarClienteDbId. Al volver
+  // a entrar a propósito, se borra la marca de "salió" — vuelve a quedar
+  // en modo "se reabre sola" hasta la próxima vez que toque la X.
   useEffect(() => {
     if (abrirRutaGuiada) {
+      limpiarSalidaGuardada();
       setRutaAbierta(true);
       limpiarAbrirRutaGuiada?.();
     }
@@ -2333,10 +2362,8 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   }
 
   const hoyLargo = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
-  const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
   const ausenciaHoy = ausenciasPaseador[user.nombre] || null;
   const rutaCompletada = faseHoy === "completado";
-  const rutaEnCurso = faseHoy === "en_recoleccion" || faseHoy === "en_parque" || faseHoy === "en_retorno";
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -2365,7 +2392,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         ) : rutaEnCurso ? (
           <div style={{ marginTop: 12 }}>
             <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Ruta en curso — {hechosHoy + canceladosHoy}/{clientesHoyAnillo.length} resueltos.</p>
-            <button onClick={() => setRutaAbierta(true)}
+            <button onClick={() => { limpiarSalidaGuardada(); setRutaAbierta(true); }}
               style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
               Continuar mi ruta
             </button>
@@ -2401,7 +2428,6 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         <Suspense fallback={<p style={hint}>Cargando tu ruta…</p>}>
           <RutaGuiada
             clientesHoy={clientesHoyAnillo}
-            mascotas={mascotas}
             registroPaseos={registroPaseos}
             setRegistroPaseos={setRegistroPaseos}
             user={user}
@@ -2409,7 +2435,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
             actualizarFaseDia={actualizarFaseDia}
             metaMensual={miUsuario.metaMensual}
             totalMontoMes={totalMontoMes}
-            onSalir={() => setRutaAbierta(false)}
+            onSalir={salirDeRuta}
           />
         </Suspense>
       )}
