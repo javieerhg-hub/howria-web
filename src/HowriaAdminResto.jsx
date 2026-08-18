@@ -5721,6 +5721,83 @@ function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
   );
 }
 
+// Pestaña "Notificaciones" — coordinación/administración escriben un aviso
+// a mano y eligen a quién de terreno (entrenador o paseador) se lo mandan.
+// A diferencia de los avisos automáticos (cita nueva, correo entrante,
+// ronda que arranca), acá el mensaje y el destinatario los decide una
+// persona en el momento — pasa por api/enviar-notificacion-manual.js, que
+// vuelve a validar el rol del que lo manda (esta pestaña ya está gateada
+// por permisos_roles, pero eso es cosmético, no seguridad real).
+export function EnviarNotificaciones({ usuarios, user }) {
+  const destinatarios = usuarios
+    .filter((u) => u.rol === "entrenador" || u.rol === "paseador")
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  const [destinatarioEmail, setDestinatarioEmail] = useState("");
+  const [mensaje, setMensaje] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function enviar() {
+    if (!destinatarioEmail || !mensaje.trim()) {
+      showToast("Elige a quién enviárselo y escribe el mensaje.");
+      return;
+    }
+    setEnviando(true);
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const res = await fetch("/api/enviar-notificacion-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ destinatarioEmail, titulo: `Aviso de ${user.nombre}`, cuerpo: mensaje.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || "No se pudo enviar el aviso.");
+        return;
+      }
+      if (data.entregada) {
+        showToast("Aviso enviado — le va a aparecer como notificación en su teléfono.", "exito");
+      } else {
+        showToast("El aviso se registró, pero esa persona todavía no tiene notificaciones activadas en su teléfono.", "info");
+      }
+      setMensaje("");
+    } catch {
+      showToast("No se pudo enviar el aviso. Intenta de nuevo.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const puedeEnviar = destinatarioEmail && mensaje.trim() && !enviando;
+
+  return (
+    <div style={{ display: "grid", gap: 20 }}>
+      <div className="howria-card" style={{ ...tarjeta, maxWidth: 480 }}>
+        <h2 style={sectionTitle}>Enviar notificación</h2>
+        <p style={hint}>Escribe un aviso y elige a quién de tu equipo se lo mandas — le va a aparecer como notificación en su teléfono, si ya la activó.</p>
+
+        <label style={label}>Para</label>
+        <select value={destinatarioEmail} onChange={(e) => setDestinatarioEmail(e.target.value)} style={input}>
+          <option value="">Selecciona a alguien del equipo…</option>
+          {destinatarios.map((u) => (
+            <option key={u.email} value={u.email}>{u.nombre} — {u.rol === "paseador" ? "Paseador" : "Entrenador"}</option>
+          ))}
+        </select>
+
+        <label style={label}>Mensaje</label>
+        <textarea value={mensaje} onChange={(e) => setMensaje(e.target.value)} rows={4}
+          placeholder="Escribe el mensaje que quieres que le llegue…"
+          style={{ ...input, resize: "vertical", fontFamily: "'Inter', sans-serif" }} />
+
+        <button onClick={enviar} disabled={!puedeEnviar}
+          style={{ ...botonPrincipal, opacity: puedeEnviar ? 1 : 0.55, cursor: puedeEnviar ? "pointer" : "default" }}>
+          {enviando ? "Enviando…" : "Enviar notificación"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponibilidadFecha, toggleBloqueDisponibilidad, aplicarPatronSemanal, tarifas, actualizarTarifas, rolActual, nombreActual }) {
   const adiestradores = usuarios.filter((u) => u.rol === "entrenador");
   const [filtroAdiestrador, setFiltroAdiestrador] = useState("todos");

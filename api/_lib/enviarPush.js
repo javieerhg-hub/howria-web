@@ -68,17 +68,21 @@ export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, event
 // Igual que enviarNotificacionPush, pero para destinatarios que no son del
 // staff (un tutor no está en la tabla "usuarios" ni en notificaciones_roles)
 // — manda directo a la lista de correos que le pases.
+// Devuelve la cantidad de suscripciones a las que efectivamente se mandó —
+// api/enviar-notificacion-manual.js lo usa para avisarle a quien lo mandó
+// si la persona ni siquiera tiene notificaciones activadas en su teléfono.
 export async function enviarNotificacionPushAEmails(admin, emails, { titulo, cuerpo, url, tag }) {
-  if (!asegurarVapid()) return;
+  if (!asegurarVapid()) return 0;
 
   const unicos = [...new Set((emails || []).filter(Boolean))];
-  if (unicos.length === 0) return;
+  if (unicos.length === 0) return 0;
 
   const { data: subs, error } = await admin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth, usuario_email")
     .in("usuario_email", unicos);
-  if (error || !subs || subs.length === 0) return;
+  if (error || !subs || subs.length === 0) return 0;
 
   await enviarYLimpiarVencidas(admin, subs, JSON.stringify({ titulo, cuerpo, url, tag }));
+  return subs.length;
 }

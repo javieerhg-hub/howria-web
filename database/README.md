@@ -112,6 +112,7 @@ no un runner de migraciones.
 | 084 | `avisos_descartados.sql` | 2026-08-17 | Crea `avisos_descartados` (por usuario, RLS acotado a cada quien) — descartar un aviso en el dashboard de Inicio antes solo se guardaba en localStorage, no sincronizaba entre el celular y la PC de la misma persona. |
 | 085 | `ajustes_pago_pendientes.sql` | 2026-08-17 | Crea `ajustes_pago_pendientes` (borrador de bono/descuento por paseador+período, mismo acceso que `pagos_trabajadores`) — antes el ajuste vivía solo en localStorage de quien lo escribía, invisible para otra persona/dispositivo hasta confirmar el pago, con riesgo real de pagar el monto equivocado. |
 | 086 | `usuarios_calendario_token.sql` | 2026-08-17 | Agrega `calendario_token` (uuid, único por fila) a `usuarios` y a `usuarios_seguro` (mismo criterio de visibilidad que banco/cuenta: solo administrador/coordinador o la propia persona) — identifica al paseador en la URL de suscripción `webcal://` de "Agregar a mi calendario", sin depender de una sesión abierta. |
+| 087 | `permisos_roles_tab_notificaciones.sql` | 2026-08-18 | Registra la pestaña nueva "Notificaciones" en `permisos_roles`, solo para coordinador/administrador — un panel para escribirle y mandarle un aviso push a mano a un entrenador o paseador puntual. |
 
 ## Nota sobre el orden 001–023
 

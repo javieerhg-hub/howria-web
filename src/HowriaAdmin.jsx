@@ -30,6 +30,7 @@ const Itinerario = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) =>
 const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Mail })));
 const Prospectos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Prospectos })));
 const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PanelAdmin })));
+const EnviarNotificaciones = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EnviarNotificaciones })));
 
 // Aparte de las 14 pestañas de arriba: la ruta guiada de Mis Paseos es su
 // propio chunk, ni en este archivo (se carga siempre, para todo rol, y no
@@ -1101,6 +1102,7 @@ export const TODOS_LOS_TABS = [
   { id: "finanzas", label: "Finanzas", grupo: "Clientes y boletas" },
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo" },
+  { id: "notificaciones", label: "Notificaciones", grupo: "Equipo" },
   { id: "usuarios", label: "Usuarios", grupo: "Equipo" },
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
 ];
@@ -1125,6 +1127,7 @@ const ICONOS_TAB = {
   finanzas: TrendingUp,
   pagos: Banknote,
   equipo: Users,
+  notificaciones: Bell,
   usuarios: ShieldCheck,
   seguimiento: Target,
 };
@@ -4285,6 +4288,7 @@ export default function HowriaAdmin() {
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} esAdmin={esAdmin} />}
+        {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
