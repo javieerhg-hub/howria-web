@@ -2137,32 +2137,16 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         {resumenPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados.</p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-            {resumenPaseador.map((r) => {
-              const pct = r.programados ? Math.round((r.realizados / r.programados) * 100) : 0;
-              return (
-                <div key={r.cliente.id} style={{ padding: "16px 18px", borderRadius: 12, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "none", background: r.cliente.fotoUrl ? `url(${r.cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
-                      <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {r.cliente.perro}</p>
-                    </div>
-                  </div>
-                  <p style={{ margin: "0 0 12px", fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
-                  <div style={{ height: 7, borderRadius: 4, background: "#EDE4CE", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: "#2F6A46", borderRadius: 4, transition: "width .3s ease" }} />
-                  </div>
-                  <p style={{ margin: "6px 0 0", fontSize: 12, color: "#2F6A46", fontWeight: 600 }}>{r.realizados}/{r.programados} paseos realizados</p>
-                  {(r.faltantes > 0 || r.cancelados > 0) && (
-                    <div style={{ display: "flex", gap: 10, marginTop: 8, paddingTop: 8, borderTop: "1px solid #F1EAD9" }}>
-                      {r.faltantes > 0 && <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>⏳ {r.faltantes} sin marcar</span>}
-                      {r.cancelados > 0 && <span style={{ fontSize: 11.5, color: RUST }}>✕ {r.cancelados} cancelado{r.cancelados === 1 ? "" : "s"}</span>}
-                    </div>
-                  )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+            {resumenPaseador.map((r) => (
+              <div key={r.cliente.id} style={{ padding: "16px 18px", borderRadius: 12, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
+                <p style={{ margin: "0 0 8px", fontWeight: 600, color: NAVY, fontSize: 14.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#8A7E5C" }}>{r.realizados}/{r.programados} paseos realizados</p>
+                <div style={{ background: GOLD, borderRadius: 8, padding: "10px 14px" }}>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
