@@ -117,6 +117,7 @@ no un runner de migraciones.
 | 089 | `mensajes_equipo_lecturas.sql` | 2026-08-18 | Crea `mensajes_equipo_lecturas` (marca de "hasta cuándo leyó cada quien" el chat, una fila por persona) — de ahí sale el número de no leídos en la burbuja. |
 | 090 | `entregas_inventario.sql` | 2026-08-18 | Crea `entregas_inventario` (registro con fecha de qué equipo entregado a cada paseador/entrenador: collares, correas, poleras, polerones, accesorios — solo coordinación/administración). |
 | 091 | `permisos_roles_tab_inventario.sql` | 2026-08-18 | Registra la pestaña nueva "Inventario" en `permisos_roles`, solo para coordinador/administrador. |
+| 092 | `paseos_reprogramados.sql` | 2026-08-18 | Crea `paseos_reprogramados` (mover un paseo puntual a otro día, sin tocar `dias_habituales` del cliente, agregada a `supabase_realtime`) — nueva sección "Reprogramar paseos" en Coordinación. |
 
 ## Nota sobre el orden 001–023
 

@@ -1626,6 +1626,83 @@ function useEntregasInventario(sessionVersion) {
   return [entregas, registrarEntrega, eliminarEntrega, cargando];
 }
 
+export function dbToReprogramacion(row) {
+  return {
+    id: row.id, clienteId: row.cliente_id, fechaOrigen: row.fecha_origen, fechaNueva: row.fecha_nueva,
+    paseadorNombre: row.paseador_nombre, motivo: row.motivo, creadoPor: row.creado_por, creadoEn: row.creado_en,
+  };
+}
+
+// Paseos movidos de un día a otro puntualmente (database/092_paseos_reprogramados.sql)
+// — sin tocar diasHabituales del cliente ni la meta/pago del paseador (el
+// paseo igual cuenta como hecho, solo que en otra fecha). RLS ya acota
+// qué ve cada quien (coordinador/administrador ven todas, un paseador
+// solo las suyas), así que un simple select("*") alcanza para cualquier rol.
+function useReprogramaciones(sessionVersion) {
+  const [reprogramaciones, setReprogramaciones] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("paseos_reprogramados").select("*").order("fecha_nueva").then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar las reprogramaciones: ${error.message}`);
+      else if (data) setReprogramaciones(data.map(dbToReprogramacion));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  // El paseador tiene que enterarse al toque si le mueven un paseo con la
+  // app ya abierta — mismo criterio que citas_agenda/fase_dia_paseador.
+  useEffect(() => {
+    const canal = supabase
+      .channel("paseos_reprogramados-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "paseos_reprogramados" }, (payload) => {
+        setReprogramaciones((prev) => {
+          if (payload.eventType === "DELETE") return prev.filter((r) => r.id !== payload.old.id);
+          const mapeado = dbToReprogramacion(payload.new);
+          const idx = prev.findIndex((r) => r.id === mapeado.id);
+          if (idx === -1) return [...prev, mapeado];
+          const copia = [...prev]; copia[idx] = mapeado; return copia;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
+  }, [sessionVersion]);
+
+  async function moverPaseo({ cliente, fechaOrigen, fechaNueva, motivo, creadoPor }) {
+    const { error } = await supabase.from("paseos_reprogramados").insert({
+      cliente_id: cliente._dbId, fecha_origen: fechaKey(fechaOrigen), fecha_nueva: fechaKey(fechaNueva),
+      paseador_nombre: cliente.paseadorNombre, motivo: motivo || null, creado_por: creadoPor,
+    });
+    if (error) { showToast(`No se pudo mover el paseo: ${error.message}`); return false; }
+    return true;
+  }
+
+  async function eliminarReprogramacion(id) {
+    const anterior = reprogramaciones;
+    setReprogramaciones((prev) => prev.filter((r) => r.id !== id));
+    const { error } = await supabase.from("paseos_reprogramados").delete().eq("id", id);
+    if (error) { showToast(`No se pudo deshacer: ${error.message}`); setReprogramaciones(anterior); }
+  }
+
+  return [reprogramaciones, moverPaseo, eliminarReprogramacion, cargando];
+}
+
+// ¿Este cliente pasea en esta fecha? — sus días habituales de siempre,
+// más cualquier paseo movido HACIA esta fecha en particular. La fecha de
+// ORIGEN de un movimiento no se resta acá — eso ya lo resuelve marcar
+// "cancelado" ese día en registroPaseos (mismo mecanismo que cualquier
+// otra cancelación, ver salirDeRuta/moverPaseo).
+export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
+  const dow = (fecha.getDay() + 6) % 7;
+  if (cliente.diasHabituales?.includes(dow)) return true;
+  const clave = fechaKey(fecha);
+  return reprogramaciones.some((r) => r.clienteId === cliente._dbId && r.fechaNueva === clave);
+}
+
 // Solicitudes de "Registro de cuenta" pendientes de revisión (ver
 // api/solicitud-registro.js) — solo trae las que siguen en estado
 // "pendiente"; aprobar/rechazar las saca de esta lista.
@@ -2346,7 +2423,7 @@ function claveSalidaRuta(email, hoy) {
   return `howria_ruta_salida_${email}_${fechaKey(hoy)}`;
 }
 
-function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada }) {
+function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada, reprogramaciones = [] }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
@@ -2445,7 +2522,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const [diaSel, setDiaSel] = useState(() => fechaKey(hoy));
   const diaActivo = new Date(diaSel + "T00:00:00");
   const dow = (diaActivo.getDay() + 6) % 7;
-  const clientesDelDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
+  const clientesDelDia = misClientes.filter((c) => estaProgramadoEnFecha(c, diaActivo, reprogramaciones));
 
   function cambiarDia(delta) {
     const d = new Date(diaSel + "T00:00:00");
@@ -2465,7 +2542,14 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
   const resumenMensual = misClientes.map((c) => {
     const diasDelPlan = diasSegunPlan(mesActual, anioActual, c.diasHabituales || []);
-    const diasValidos = diasDelPlan.filter((dNum) => !registroPaseos[`${c.id}_${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`]?.cancelado);
+    // Un paseo movido HACIA este mes (venga de donde venga) también debe
+    // contar para "Tu pago" — si no, el paseador pierde la plata de un
+    // paseo que sí hizo, solo porque cayó en un día no habitual.
+    const diasReprogramados = reprogramaciones
+      .filter((r) => r.clienteId === c._dbId && r.fechaNueva.startsWith(`${anioActual}-${String(mesActual + 1).padStart(2, "0")}`))
+      .map((r) => Number(r.fechaNueva.slice(8, 10)));
+    const diasDelPlanConMovidos = [...new Set([...diasDelPlan, ...diasReprogramados])];
+    const diasValidos = diasDelPlanConMovidos.filter((dNum) => !registroPaseos[`${c.id}_${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`]?.cancelado);
     const realizados = diasValidos.filter((dNum) => registroPaseos[`${c.id}_${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`]?.realizado).length;
     return { cliente: c, programados: diasValidos.length, realizados, monto: realizados * Number(c.tarifaPaseador || 0) };
   });
@@ -2476,10 +2560,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   // Clientes de hoy (siempre el día real, no el día que se esté mirando en
   // el detalle de abajo) — para el mensaje de "Mi ruta de hoy" y la ruta
   // guiada.
-  const dowHoy = (hoy.getDay() + 6) % 7;
   // Ordenado por horaHabitual — es lo que la ruta guiada usa como su orden
   // de partida (el paseador puede después ajustarlo a mano en el panel).
-  const clientesHoyAnillo = ordenarPorHora(misClientes.filter((c) => c.diasHabituales?.includes(dowHoy)));
+  const clientesHoyAnillo = ordenarPorHora(misClientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones)));
   let hechosHoy = 0, canceladosHoy = 0, montoHoy = 0;
   clientesHoyAnillo.forEach((c) => {
     const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`] || {};
@@ -2875,7 +2958,7 @@ function CarruselAvisos() {
 // paseador algo que no dependía de él). Ahora es un mes real navegable, y
 // las cancelaciones se sacan de "programados" — mismo criterio que ya usa
 // "Tu pago" en Finanzas.
-function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab }) {
+function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab, reprogramaciones = [] }) {
   const [mesVisto, setMesVisto] = useState(hoy.getMonth());
   const [anioVisto, setAnioVisto] = useState(hoy.getFullYear());
   const esMesActual = mesVisto === hoy.getMonth() && anioVisto === hoy.getFullYear();
@@ -2892,8 +2975,7 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab }) {
   const resumenPorDia = {};
   for (let d = 1; d <= totalDias; d++) {
     const fecha = new Date(anioVisto, mesVisto, d);
-    const dow = (fecha.getDay() + 6) % 7;
-    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
+    const clientesDia = misClientes.filter((c) => estaProgramadoEnFecha(c, fecha, reprogramaciones));
     let realizados = 0, cancelados = 0;
     clientesDia.forEach((c) => {
       const r = registroPaseos[`${c.id}_${fechaKey(fecha)}`];
@@ -2976,7 +3058,7 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab }) {
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta, reprogramaciones = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -3119,8 +3201,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     );
   }
 
-  const dowHoy = (hoy.getDay() + 6) % 7;
-  const clientesHoy = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
+  const clientesHoy = misClientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const pendientesHoy = clientesHoy.filter((c) => {
     const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`];
     return !r?.realizado && !r?.cancelado;
@@ -3219,7 +3300,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
         </div>
       )}
 
-      <CalendarioExpres misClientes={misClientes} registroPaseos={registroPaseos} hoy={hoy} setTab={setTab} />
+      <CalendarioExpres misClientes={misClientes} registroPaseos={registroPaseos} hoy={hoy} setTab={setTab} reprogramaciones={reprogramaciones} />
     </div>
   );
 }
@@ -3266,16 +3347,15 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
   // sección plegable.
   const [detallesAbiertos, setDetallesAbiertos] = useState(true);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirRuta={onAbrirRuta} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirRuta={onAbrirRuta} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
 
@@ -3284,7 +3364,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   }
   const avisos = todosLosAvisos.filter((a) => !avisosDescartados.some((d) => d.clave === a.clave));
 
-  const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dow));
+  const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
 
   const pendientesCobro = boletasEmitidas.filter(esPorCobrar);
@@ -4228,6 +4308,7 @@ export default function HowriaAdmin() {
   const [mensajesEquipo, enviarMensajeEquipo, cargandoMensajesEquipo] = useMensajesEquipo(sessionVersion);
   const [ultimaLecturaChat, marcarChatLeido] = useLecturaChatEquipo(user?.email, sessionVersion);
   const [entregasInventario, registrarEntregaInventario, eliminarEntregaInventario, cargandoInventario] = useEntregasInventario(sessionVersion);
+  const [reprogramaciones, moverPaseo, eliminarReprogramacion] = useReprogramaciones(sessionVersion);
   const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
@@ -4515,8 +4596,8 @@ export default function HowriaAdmin() {
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
-        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
+        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
             onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])}
@@ -4527,9 +4608,9 @@ export default function HowriaAdmin() {
         )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
-        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
+        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
-        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} />}
+        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} esAdmin={esAdmin} />}
         {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}

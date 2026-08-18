@@ -30,6 +30,7 @@ import {
   fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo, inicioSemana, slugEmailUsuario,
   showToast, comprimirImagen,
   boletaToDb, dbToBoleta, boletaAdiestramientoToDb, dbToBoletaAdiestramiento, dbToCorreo,
+  estaProgramadoEnFecha,
 } from "./HowriaAdmin.jsx";
 
 const EVENTOS_NOTIFICACION = [
@@ -1815,7 +1816,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, user, onVerPagos }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], user, onVerPagos }) {
   const [periodo, setPeriodo] = useState("semana");
   const [rangoDesde, setRangoDesde] = useState("");
   const [rangoHasta, setRangoHasta] = useState("");
@@ -2051,7 +2052,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     // seguir contando días después de esa fecha.
     const finPaseador = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
     const resumenPaseador = misClientesPaseador.map((c) => {
-      const claves = diasEnRango(actualDesde, finPaseador, c.diasHabituales || []);
+      const clavesHabituales = diasEnRango(actualDesde, finPaseador, c.diasHabituales || []);
+      // Un paseo movido HACIA una fecha dentro del rango (venga de donde
+      // venga) también cuenta — si no, el paseador pierde la plata de un
+      // paseo que sí hizo, solo porque cayó en un día no habitual.
+      const desdeKey = fechaKey(actualDesde), hastaKey = fechaKey(finPaseador);
+      const clavesReprogramadas = reprogramaciones
+        .filter((r) => r.clienteId === c._dbId && r.fechaNueva >= desdeKey && r.fechaNueva <= hastaKey)
+        .map((r) => r.fechaNueva);
+      const claves = [...new Set([...clavesHabituales, ...clavesReprogramadas])];
       const cancelados = claves.filter((k) => registroPaseos[`${c.id}_${k}`]?.cancelado).length;
       const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
       const realizados = validas.filter((k) => registroPaseos[`${c.id}_${k}`]?.realizado).length;
@@ -4521,7 +4530,7 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   );
 }
 
-export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false }) {
+export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   // Filtro de "Todos"/un paseador puntual — vive arriba del todo de la
   // pestaña (resumen + tarjetas de "Hoy"), separado de paseadorSel (que
@@ -4531,6 +4540,12 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [diaOffset, setDiaOffset] = useState(0);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dowHoy = (hoy.getDay() + 6) % 7;
+  const ayer = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() - 1); return d; }, []);
+  const [clienteMoverSel, setClienteMoverSel] = useState("");
+  const [fechaOrigenSel, setFechaOrigenSel] = useState(() => fechaKey(ayer));
+  const [fechaNuevaSel, setFechaNuevaSel] = useState(() => fechaKey(hoy));
+  const [motivoMover, setMotivoMover] = useState("");
+  const [moviendoPaseo, setMoviendoPaseo] = useState(false);
   const [diaSemanaMovil, setDiaSemanaMovil] = useState(dowHoy);
   const inicioSemana = inicioSemanaActual();
 
@@ -4569,7 +4584,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const calendarioDia = useMemo(() => {
     const ahora = new Date();
     return clientes
-      .filter((c) => c.diasHabituales?.includes(dowVista))
+      .filter((c) => estaProgramadoEnFecha(c, diaVista, reprogramaciones))
       .map((c) => {
         const key = `${c.id}_${fechaKey(diaVista)}`;
         const registro = registroPaseos[key];
@@ -4584,7 +4599,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         return { cliente: c, estado, nota: registro?.nota || "", atrasado };
       })
       .sort((a, b) => (a.cliente.horaHabitual || "99:99").localeCompare(b.cliente.horaHabitual || "99:99"));
-  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj]);
+  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
 
   const calendarioPorPaseador = useMemo(() => {
     const grupos = {};
@@ -4610,7 +4625,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   // se navegue a otro día donde esa persona no tenga nada.
   const equipoPaseo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
-  const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dowHoy));
+  const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const clientesHoyFiltrados = filtroPaseador === "todos" ? clientesHoy : clientesHoy.filter((c) => (c.paseadorNombre || "Sin asignar") === filtroPaseador);
   const realizadosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
   const canceladosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
@@ -4665,6 +4680,29 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   function guardarNotaDia(clienteId, fecha, nota) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), nota } }));
+  }
+
+  // Todo cliente con paseador asignado — no solo los de hoy, porque el
+  // origen de un movimiento suele ser un día pasado que ya no aparece en
+  // "Hoy" (ya se marcó cancelado, o quedó atrás con el navegador de días).
+  const clientesConPaseador = clientes.filter((c) => c.paseadorNombre).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  async function handleMoverPaseo() {
+    const cliente = clientesConPaseador.find((c) => c.id === Number(clienteMoverSel));
+    if (!cliente || !fechaOrigenSel || !fechaNuevaSel || moviendoPaseo) return;
+    setMoviendoPaseo(true);
+    const fechaOrigenDate = new Date(fechaOrigenSel + "T00:00:00");
+    const fechaNuevaDate = new Date(fechaNuevaSel + "T00:00:00");
+    const ok = await moverPaseo({ cliente, fechaOrigen: fechaOrigenDate, fechaNueva: fechaNuevaDate, motivo: motivoMover.trim(), creadoPor: user.nombre });
+    if (ok) {
+      // El día de origen queda "cancelado" (no "sin marcar para siempre")
+      // — mismo mecanismo que cualquier otra cancelación, así no sigue
+      // apareciendo como pendiente ni atrasado.
+      actualizarRegistroDia(cliente.id, fechaOrigenDate, { cancelado: true, realizado: false });
+      showToast(`Paseo de ${cliente.nombre} movido a ${fechaNuevaDate.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} — a ${cliente.paseadorNombre} le va a aparecer ese día.`, "exito");
+      setClienteMoverSel(""); setMotivoMover("");
+    }
+    setMoviendoPaseo(false);
   }
 
   function estiloCuboFiltro(activo) {
@@ -4891,6 +4929,60 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           </div>
         )}
         <Asignaciones clientes={clientes} setClientes={setClientes} usuarios={usuarios} />
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Reprogramar paseos" subtitulo="Mover el paseo de un cliente a otro día puntual — sin tocar su horario habitual ni el pago del paseador.">
+        <p style={{ ...hint, marginTop: -4 }}>
+          Por ejemplo: el cliente no pudo ayer y pide dejarlo para hoy — el paseador sigue siendo el mismo, solo cambia el día. El horario habitual del cliente no se toca, y el paseo cuenta igual para la meta y el pago de quien lo hace.
+        </p>
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 14 }}>
+          <div>
+            <label style={label}>Cliente</label>
+            <select value={clienteMoverSel} onChange={(e) => setClienteMoverSel(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+              <option value="">Selecciona un cliente…</option>
+              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro} ({c.paseadorNombre})</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={label}>De este día</label>
+            <input type="date" value={fechaOrigenSel} onChange={(e) => setFechaOrigenSel(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+          </div>
+          <div>
+            <label style={label}>A este día</label>
+            <input type="date" value={fechaNuevaSel} onChange={(e) => setFechaNuevaSel(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+          </div>
+        </div>
+        <label style={{ ...label, marginTop: 14 }}>Motivo (opcional)</label>
+        <input value={motivoMover} onChange={(e) => setMotivoMover(e.target.value)} placeholder="Ej: el cliente no pudo el lunes, lo dejamos para hoy" style={input} />
+        <button onClick={handleMoverPaseo} disabled={!clienteMoverSel || moviendoPaseo}
+          style={{ ...botonPrincipal, width: "auto", padding: "12px 24px", opacity: !clienteMoverSel || moviendoPaseo ? 0.6 : 1, cursor: !clienteMoverSel || moviendoPaseo ? "default" : "pointer" }}>
+          {moviendoPaseo ? "Moviendo…" : "Mover paseo"}
+        </button>
+
+        {reprogramaciones.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <p style={label}>Paseos movidos</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {reprogramaciones.map((r) => {
+                const cliente = clientes.find((c) => c._dbId === r.clienteId);
+                return (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 8, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, color: INK }}>
+                        <b style={{ color: NAVY }}>{cliente?.nombre || "Cliente eliminado"}</b> — {new Date(r.fechaOrigen + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })} → {new Date(r.fechaNueva + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })} ({r.paseadorNombre})
+                      </p>
+                      <p style={{ margin: "2px 0 0", fontSize: 11, color: "#8A7E5C" }}>
+                        {r.motivo ? `${r.motivo} — ` : ""}movido por {r.creadoPor}
+                      </p>
+                    </div>
+                    <BotonEliminar onConfirm={() => eliminarReprogramacion(r.id)} label="Deshacer" title="Quitar esta reprogramación (no revierte el día de origen)"
+                      style={{ ...botonSecundario, padding: "6px 12px", fontSize: 11.5, borderColor: RUST, color: RUST, flex: "none" }} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </SeccionPlegable>
     </div>
   );
