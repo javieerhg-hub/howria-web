@@ -5,7 +5,7 @@ import {
   GraduationCap, KeyRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
-import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta } from "./lib/pushNotificaciones.js";
+import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 
@@ -2401,7 +2401,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         ) : rutaEnCurso ? (
           <div style={{ marginTop: 12 }}>
             <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Ruta en curso — {hechosHoy + canceladosHoy}/{clientesHoyAnillo.length} resueltos.</p>
-            <button onClick={() => { limpiarSalidaGuardada(); setRutaAbierta(true); }}
+            <button onClick={() => { limpiarSalidaGuardada(); setRutaAbierta(true); mostrarNotificacionRuta(clientesHoyAnillo.length - (hechosHoy + canceladosHoy)); }}
               style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
               Continuar mi ruta
             </button>
@@ -3041,7 +3041,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
           ) : (
             <p style={{ margin: "12px 0 0", fontSize: 13, color: "#9BAAB8" }}>Ya resolviste todos los paseos de hoy.</p>
           )}
-          <button onClick={onAbrirRuta}
+          <button onClick={() => { onAbrirRuta(); mostrarNotificacionRuta(pendientesHoy.length); }}
             style={{ width: "100%", marginTop: 16, padding: "14px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 14.5, fontWeight: 700 }}>
             Volver a mi ruta
           </button>

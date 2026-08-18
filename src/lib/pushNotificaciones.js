@@ -99,3 +99,30 @@ export async function cerrarNotificacionRuta() {
     // silencioso a propósito — no bloquea salir del panel ni terminar la ruta
   }
 }
+
+// Complemento de cerrarNotificacionRuta: al retomar la ruta a mano
+// ("Continuar mi ruta" en Mis Paseos, "Volver a mi ruta" en Inicio) la
+// vuelve a dejar en las notificaciones del teléfono, por si el paseador la
+// había descartado antes (o la habíamos cerrado nosotros al tocar la X).
+// A diferencia del aviso de api/avisar-inicio-ronda.js, esto se muestra
+// directo desde la página con el service worker ya registrado — no hace
+// falta ir y volver por el servidor de push, porque en este momento la app
+// ya está abierta en primer plano. Mismo tag: reemplaza la anterior si
+// seguía ahí, en vez de duplicarla.
+export async function mostrarNotificacionRuta(pendientesHoy) {
+  if (!("serviceWorker" in navigator)) return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    const registro = await navigator.serviceWorker.getRegistration();
+    if (!registro) return;
+    await registro.showNotification("Tu ruta está lista 🐾", {
+      body: `${pendientesHoy} paseo${pendientesHoy === 1 ? "" : "s"} por hacer — toca para deslizar y completar cada uno.`,
+      icon: "/logo-howria.png",
+      badge: "/logo-howria.png",
+      tag: "howria-ruta-en-curso",
+      data: { url: "/admin?tab=mis-paseos&ruta=1" },
+    });
+  } catch {
+    // silencioso a propósito — no bloquea continuar la ruta
+  }
+}
