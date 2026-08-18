@@ -2171,6 +2171,13 @@ export function fechaKey(d) {
   return `${anio}-${mes}-${dia}`;
 }
 
+// Mismo criterio que ya usa Coordinación para ordenar la tabla de "Paseos
+// de hoy" por horario — los que no tienen hora fija quedan al final, no
+// arriba, para no desordenar a los que sí la tienen.
+export function ordenarPorHora(lista) {
+  return [...lista].sort((a, b) => (a.horaHabitual || "99:99").localeCompare(b.horaHabitual || "99:99"));
+}
+
 // Truco para "despegar" Safari/iOS cuando la página queda con el zoom
 // trabado (todo se ve chico, aplastado) tras un cambio de contenido
 // abrupto — forzar `maximum-scale` un instante obliga a recalcular el
@@ -2196,7 +2203,7 @@ export function forzarRecalculoZoomIOS() {
   setTimeout(() => meta.setAttribute("content", viewportOriginal), 300);
 }
 
-function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia }) {
+function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const [notaAbiertaId, setNotaAbiertaId] = useState(null);
@@ -2206,6 +2213,16 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const [rutaAbierta, setRutaAbierta] = useState(false);
   const [mostrarJustificar, setMostrarJustificar] = useState(false);
   const [motivoAusencia, setMotivoAusencia] = useState("");
+
+  // Acceso directo desde Inicio ("Volver a mi ruta") — llega acá como una
+  // señal de "abrí de nuevo esta pestaña con la intención de reabrir la
+  // ruta", mismo patrón que saltarAlumnoDbId/saltarClienteDbId.
+  useEffect(() => {
+    if (abrirRutaGuiada) {
+      setRutaAbierta(true);
+      limpiarAbrirRutaGuiada?.();
+    }
+  }, [abrirRutaGuiada]);
 
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -2296,7 +2313,9 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   // el detalle de abajo) — para el mensaje de "Mi ruta de hoy" y la ruta
   // guiada.
   const dowHoy = (hoy.getDay() + 6) % 7;
-  const clientesHoyAnillo = misClientes.filter((c) => c.diasHabituales?.includes(dowHoy));
+  // Ordenado por horaHabitual — es lo que la ruta guiada usa como su orden
+  // de partida (el paseador puede después ajustarlo a mano en el panel).
+  const clientesHoyAnillo = ordenarPorHora(misClientes.filter((c) => c.diasHabituales?.includes(dowHoy)));
   let hechosHoy = 0, canceladosHoy = 0, montoHoy = 0;
   clientesHoyAnillo.forEach((c) => {
     const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`] || {};
@@ -2796,7 +2815,7 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab }) {
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -2946,6 +2965,16 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     return !r?.realizado && !r?.cancelado;
   });
 
+  // Acceso directo desde Inicio a la ruta guiada de Mis Paseos — antes
+  // solo se podía retomar entrando a Mis Paseos y tocando "Continuar mi
+  // ruta". Ordenado por horaHabitual (el horario real del cliente, mismo
+  // dato que ya se ve en "Mis clientes y horarios") y recortado a los
+  // primeros 4 para que el acceso directo sea un vistazo rápido, no una
+  // lista larga — el detalle completo sigue viviendo en la ruta guiada.
+  const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
+  const rutaEnCurso = faseHoy === "en_recoleccion" || faseHoy === "en_parque" || faseHoy === "en_retorno";
+  const proximosPaseos = ordenarPorHora(pendientesHoy).slice(0, 4);
+
   function resolverPaseo(clienteId, cambios) {
     const key = `${clienteId}_${fechaKey(hoy)}`;
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...prev[key], ...cambios } }));
@@ -2955,6 +2984,34 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     <div style={{ display: "grid", gap: 20 }}>
       {encabezado}
       <CarruselAvisos />
+
+      {rutaEnCurso && onAbrirRuta && (
+        <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+            <h2 style={{ ...sectionTitle, color: CREAM }}>Tu ruta de hoy</h2>
+            <span style={{ fontSize: 11.5, color: GOLD, fontWeight: 600 }}>En curso</span>
+          </div>
+          {proximosPaseos.length > 0 ? (
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {proximosPaseos.map((c) => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)" }} />
+                  <p style={{ margin: 0, fontSize: 13, color: CREAM, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.nombre} <span style={{ color: "#9BAAB8" }}>· 🐾 {c.perro}</span>
+                  </p>
+                  {c.horaHabitual && <span style={{ fontSize: 12, color: "#9BAAB8", flex: "none" }}>{c.horaHabitual}</span>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: "12px 0 0", fontSize: 13, color: "#9BAAB8" }}>Ya resolviste todos los paseos de hoy.</p>
+          )}
+          <button onClick={onAbrirRuta}
+            style={{ width: "100%", marginTop: 16, padding: "14px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 14.5, fontWeight: 700 }}>
+            Volver a mi ruta
+          </button>
+        </div>
+      )}
 
       {/* De los cuatro roles, paseador era el único sin este launcher en
           su Inicio mobile — justo el rol más "de terreno, en el
@@ -3048,7 +3105,7 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
@@ -3057,7 +3114,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirRuta={onAbrirRuta} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
 
@@ -3897,6 +3954,10 @@ export default function HowriaAdmin() {
   const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
+  // "Volver a mi ruta" desde Inicio: manda a Mis Paseos y le avisa que
+  // abra la ruta guiada apenas llegue — mismo patrón de salto que
+  // saltarAlumnoDbId/saltarClienteDbId.
+  const [abrirRutaGuiada, setAbrirRutaGuiada] = useState(false);
   const [enfoqueEmailProspecto, setEnfoqueEmailProspecto] = useState(null);
   const correosNoLeidos = correos.filter((c) => c.direccion === "entrante" && !c.leido).length;
   const cargandoEquipo = cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
@@ -4157,8 +4218,8 @@ export default function HowriaAdmin() {
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
       <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} />}
-        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
+        {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
             onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])}
