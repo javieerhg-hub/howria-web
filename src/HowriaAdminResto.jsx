@@ -2137,13 +2137,16 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         {resumenPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados.</p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
             {resumenPaseador.map((r) => (
-              <div key={r.cliente.id} style={{ padding: "16px 18px", borderRadius: 12, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
-                <p style={{ margin: "0 0 8px", fontWeight: 600, color: NAVY, fontSize: 14.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
-                <p style={{ margin: "0 0 12px", fontSize: 13, color: "#8A7E5C" }}>{r.realizados}/{r.programados} paseos realizados</p>
-                <div style={{ background: GOLD, borderRadius: 8, padding: "10px 14px" }}>
-                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
+              <div key={r.cliente.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #EDE4CE", background: "#FFFFFF", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: r.cliente.fotoUrl ? `url(${r.cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                  <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
+                </div>
+                <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>{r.realizados}/{r.programados} paseos</p>
+                <div style={{ display: "inline-block", background: GOLD, borderRadius: 6, padding: "5px 9px" }}>
+                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
                 </div>
               </div>
             ))}
