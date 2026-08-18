@@ -626,6 +626,7 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
   const insertando = useRef(new Set());
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     (async () => {
@@ -890,6 +891,7 @@ function useFaseDiaPaseador(sessionVersion) {
   const avisosEnviadosRef = useRef({});
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     (async () => {
       const { data, error } = await supabase.from("fase_dia_paseador").select("*").eq("fecha", fechaKey(new Date()));
       if (!error && data) {
@@ -1159,6 +1161,7 @@ function usePermisosRoles(sessionVersion) {
   const colaPorRol = useRef({});
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     (async () => {
       const { data, error } = await supabase.from("permisos_roles").select("*");
       if (!error && data) {
@@ -1208,6 +1211,7 @@ function useNotificacionesRoles(sessionVersion) {
   const colaPorRol = useRef({});
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     (async () => {
       const { data, error } = await supabase.from("notificaciones_roles").select("*");
       if (!error && data) {
@@ -1251,6 +1255,7 @@ function useConfiguracion(sessionVersion) {
   const [config, setConfigState] = useState(null); // null mientras carga
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     (async () => {
       const { data, error } = await supabase.from("configuracion").select("*");
       if (!error && data) {
@@ -1285,6 +1290,7 @@ function useDisponibilidadFecha(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("disponibilidad_fecha").select("*").then(({ data, error }) => {
@@ -1369,6 +1375,7 @@ function useClasesRealizadas(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("clases_realizadas").select("*").then(({ data, error }) => {
@@ -1417,6 +1424,7 @@ function useTarifas(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("tarifas_adiestrador").select("*").then(({ data, error }) => {
@@ -1471,6 +1479,7 @@ function useCorreos(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("correos").select("*").order("creado_en", { ascending: false }).then(({ data, error }) => {
@@ -1520,6 +1529,7 @@ function useMensajesEquipo(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("mensajes_equipo").select("*").order("creado_en", { ascending: false }).limit(200).then(({ data, error }) => {
@@ -1557,7 +1567,7 @@ function useLecturaChatEquipo(userEmail, sessionVersion) {
   const [ultimaLectura, setUltimaLectura] = useState(null);
 
   useEffect(() => {
-    if (!userEmail) return;
+    if (!userEmail || sessionVersion == null) return;
     let activo = true;
     supabase.from("mensajes_equipo_lecturas").select("ultima_lectura").eq("usuario_email", userEmail).maybeSingle().then(({ data }) => {
       if (activo) setUltimaLectura(data?.ultima_lectura || null);
@@ -1596,6 +1606,7 @@ function useEntregasInventario(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("entregas_inventario").select("*").order("entregado_en", { ascending: false }).then(({ data, error }) => {
@@ -1643,6 +1654,7 @@ function useReprogramaciones(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("paseos_reprogramados").select("*").order("fecha_nueva").then(({ data, error }) => {
@@ -1711,6 +1723,7 @@ function useSolicitudesRegistro(sessionVersion) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
     supabase.from("solicitudes_registro").select("*").eq("estado", "pendiente").order("creado_en").then(({ data, error }) => {
@@ -4171,7 +4184,18 @@ export default function HowriaAdmin() {
   const [verificandoSesion, setVerificandoSesion] = useState(true);
   const [clienteSesion, setClienteSesion] = useState(null);
   const [clientesParaElegir, setClientesParaElegir] = useState(null);
-  const [sessionVersion, setSessionVersion] = useState(0);
+  // null = "todavía no sabemos si hay sesión" — a propósito, distinto de
+  // 0/1/2... (que sí son sesiones reales). Mientras es null, ninguno de los
+  // hooks de datos de abajo dispara su consulta: antes se pedían las ~25
+  // tablas de la app apenas cargaba /admin, sin sesión todavía, así que
+  // volvían vacías por RLS y había que volver a pedirlas TODAS de nuevo
+  // apenas se confirmaba el login — una tanda entera de consultas
+  // desperdiciada en cada apertura. Ver el useEffect de getSession() más
+  // abajo: si hay sesión ya guardada, sessionVersion pasa a un número real
+  // (null + 1 = 1) y los hooks disparan una sola vez, ya autenticados; si
+  // no hay sesión, sessionVersion se queda en null hasta el login real
+  // (onAuthStateChange "SIGNED_IN").
+  const [sessionVersion, setSessionVersion] = useState(null);
   // Permite entrar directo a una pestaña desde un link (ej. una
   // notificación push manda a /admin?tab=agenda) — se lee al montar. La
   // URL se mantiene sincronizada con la pestaña actual en todo momento
