@@ -2153,10 +2153,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                   <div style={{ height: 7, borderRadius: 4, background: "#EDE4CE", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: "#2F6A46", borderRadius: 4, transition: "width .3s ease" }} />
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 6 }}>
-                    <span style={{ fontSize: 12, color: "#2F6A46", fontWeight: 600 }}>{r.realizados}/{r.programados} realizados</span>
-                    <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{pct}%</span>
-                  </div>
+                  <p style={{ margin: "6px 0 0", fontSize: 12, color: "#2F6A46", fontWeight: 600 }}>{r.realizados}/{r.programados} paseos realizados</p>
                   {(r.faltantes > 0 || r.cancelados > 0) && (
                     <div style={{ display: "flex", gap: 10, marginTop: 8, paddingTop: 8, borderTop: "1px solid #F1EAD9" }}>
                       {r.faltantes > 0 && <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>⏳ {r.faltantes} sin marcar</span>}
