@@ -1075,6 +1075,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
 
   return (
     <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 22, margin: "16px 0" }}>
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginBottom: 14 }}>Datos del cliente y del perro</h3>
       <div className="howria-photo-row" style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 20 }}>
         <div>
           <div style={{ width: 100, height: 100, borderRadius: 10, background: form.fotoUrl ? `url(${form.fotoUrl}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
@@ -1098,7 +1099,8 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         </div>
       </div>
 
-      <p style={{ ...label, marginTop: 18 }} id="cliente-plan-label">Plan que normalmente contrata</p>
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Plan y horario de paseo</h3>
+      <p style={{ ...label, marginTop: 0 }} id="cliente-plan-label">Plan que normalmente contrata</p>
       <div role="group" aria-labelledby="cliente-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
           <button key={p.id} type="button" onClick={() => elegirPlan(p.id)} aria-pressed={form.planHabitual === p.id}
@@ -1131,7 +1133,8 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         </>
       )}
 
-      <p style={label}>Estado del cliente y fecha de inicio</p>
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Estado y objetivos</h3>
+      <p style={{ ...label, marginTop: 0 }}>Estado del cliente y fecha de inicio</p>
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
         <select value={form.estadoCliente} onChange={(e) => setForm({ ...form, estadoCliente: e.target.value })} style={{ ...input, marginBottom: 0 }}>
           {ESTADOS_CLIENTE.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
@@ -1159,7 +1162,8 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
       <textarea id="cliente-objetivos" value={form.objetivos} onChange={(e) => setForm({ ...form, objetivos: e.target.value })} placeholder="Ej. socialización, bajar ansiedad, mejorar caminata con correa..."
         style={{ ...input, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
 
-      <p style={label}>Paseador asignado</p>
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Equipo asignado</h3>
+      <p style={{ ...label, marginTop: 0 }}>Paseador asignado</p>
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
         <select value={form.paseadorNombre} onChange={(e) => setForm({ ...form, paseadorNombre: e.target.value })} style={{ ...input, marginBottom: 0 }}>
           <option value="">Sin asignar</option>
@@ -1183,12 +1187,14 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
       </select>
       <p style={{ ...hint, marginTop: -10 }}>Quién es el dueño del caso (ej. Javier Arniaz) — define de quién son las ventas de este cliente en la Finanzas personal de esa persona, sin importar su rol en la app.</p>
 
-      {intentoGuardar && formInvalido && (
-        <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
-      )}
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0, opacity: intentoGuardar && formInvalido ? 0.6 : 1 }}>Guardar ficha</button>
-        <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+      <div style={{ marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3" }}>
+        {intentoGuardar && formInvalido && (
+          <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0, opacity: intentoGuardar && formInvalido ? 0.6 : 1 }}>Guardar ficha</button>
+          <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+        </div>
       </div>
     </div>
   );
@@ -1388,9 +1394,29 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
     setClientes((prev) => prev.map((c) => (c.id === cliente.id ? { ...c, bitacora: [...(c.bitacora || []), { creadoEn: new Date().toISOString(), texto }] } : c)));
   }
 
+  // Resúmenes de una línea para cada sección plegable de abajo — se ven
+  // aunque la sección esté cerrada, así una ficha larga (mucho historial,
+  // muchas boletas) sigue siendo escaneable sin tener que abrir todo.
+  const resumenMascotas = mascotasDelCliente.length === 0
+    ? "Sin perfil de mascota todavía."
+    : `${mascotasDelCliente.length} mascota${mascotasDelCliente.length > 1 ? "s" : ""} registrada${mascotasDelCliente.length > 1 ? "s" : ""}.`;
+  const resumenPlanTrabajo = !cliente.tipoServicio?.includes("paseos")
+    ? "Este cliente no tiene paseos en su plan."
+    : cliente.diasHabituales?.length
+    ? `Paseos: ${cliente.diasHabituales.map((d) => DIAS_SEMANA[d]).join(" ")}${cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}`
+    : "Sin días de paseo asignados todavía.";
+  const totalItemsHistorial = (cliente.bitacora?.length || 0) + correosCliente.length + citasCliente.length;
+  const resumenHistorial = totalItemsHistorial === 0
+    ? "Sin notas, correos ni citas registradas."
+    : `${totalItemsHistorial} registro(s) — notas, correos y citas.`;
+  const resumenVentas = historialVentas.length === 0
+    ? "Todavía no se le ha generado ninguna boleta."
+    : `${historialVentas.length} boleta(s) · total histórico ${fmtCLP(totalHistorico)}.`;
+
   return (
     <div>
       <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18, flex: "none" }}>← Volver a clientes</button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14 }}>
           <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
@@ -1499,81 +1525,77 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
             </div>
           </div>
         </div>
+      </div>
 
-        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-            <h3 style={{ ...sectionTitle, marginBottom: 0 }}>Mascotas {mascotasDelCliente.length > 1 ? `(${mascotasDelCliente.length})` : ""}</h3>
-            <button onClick={() => { setEditandoMascotaId(null); setMostrarFormMascota((v) => !v); }} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-              {mostrarFormMascota && !editandoMascotaId ? "Cancelar" : "+ Agregar mascota"}
-            </button>
-          </div>
-          {mostrarFormMascota && (
-            <FormularioMascota
-              inicial={editandoMascotaId ? mascotasDelCliente.find((m) => m.id === editandoMascotaId) : null}
-              onGuardar={guardarMascota}
-              onCancelar={() => { setMostrarFormMascota(false); setEditandoMascotaId(null); }}
-            />
-          )}
-          {mascotasDelCliente.length === 0 ? (
-            <p style={{ ...hint, marginTop: 8 }}>Sin perfil de mascota todavía — usa "+ Agregar mascota" para cargar raza, energía y temperamento.</p>
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              {mascotasDelCliente.map((m) => (
-                <FilaMascota key={m.id} mascota={m} todasLasMascotas={mascotas} incompatibilidades={mascotaIncompatibilidades}
-                  setMascotaIncompatibilidades={setMascotaIncompatibilidades}
-                  onEditar={() => { setEditandoMascotaId(m.id); setMostrarFormMascota(true); }}
-                  onEliminar={() => eliminarMascota(m)} />
-              ))}
-            </div>
-          )}
+      <SeccionPlegable titulo="Mascotas" subtitulo={resumenMascotas} defaultAbierta>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: mostrarFormMascota ? 12 : 4 }}>
+          <button onClick={() => { setEditandoMascotaId(null); setMostrarFormMascota((v) => !v); }} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            {mostrarFormMascota && !editandoMascotaId ? "Cancelar" : "+ Agregar mascota"}
+          </button>
         </div>
+        {mostrarFormMascota && (
+          <FormularioMascota
+            inicial={editandoMascotaId ? mascotasDelCliente.find((m) => m.id === editandoMascotaId) : null}
+            onGuardar={guardarMascota}
+            onCancelar={() => { setMostrarFormMascota(false); setEditandoMascotaId(null); }}
+          />
+        )}
+        {mascotasDelCliente.length === 0 ? (
+          <p style={hint}>Sin perfil de mascota todavía — usa "+ Agregar mascota" para cargar raza, energía y temperamento.</p>
+        ) : (
+          <div>
+            {mascotasDelCliente.map((m) => (
+              <FilaMascota key={m.id} mascota={m} todasLasMascotas={mascotas} incompatibilidades={mascotaIncompatibilidades}
+                setMascotaIncompatibilidades={setMascotaIncompatibilidades}
+                onEditar={() => { setEditandoMascotaId(m.id); setMostrarFormMascota(true); }}
+                onEliminar={() => eliminarMascota(m)} />
+            ))}
+          </div>
+        )}
+      </SeccionPlegable>
 
-        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
-          <h3 style={sectionTitle}>Plan de trabajo</h3>
-          <div style={{ display: "grid", gap: 18 }}>
-            {cliente.tipoServicio?.includes("paseos") && (
-              <div>
-                <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {DIAS_SEMANA.map((d, dow) => (
-                    <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
-                      background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
-                      {d}
-                    </span>
-                  ))}
-                </div>
+      <SeccionPlegable titulo="Plan de trabajo" subtitulo={resumenPlanTrabajo} defaultAbierta>
+        <div style={{ display: "grid", gap: 18 }}>
+          {cliente.tipoServicio?.includes("paseos") && (
+            <div>
+              <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                {DIAS_SEMANA.map((d, dow) => (
+                  <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+                    background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
+                    {d}
+                  </span>
+                ))}
               </div>
-            )}
-            <div>
-              <p style={label}>Objetivos a cumplir</p>
-              <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
-          <h3 style={sectionTitle}>Historial</h3>
-          <p style={{ ...hint, marginTop: -2 }}>Notas, correos y citas de este cliente, todo junto y por fecha — las boletas están más abajo, en Historial de ventas.</p>
-          <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
-            <HistorialUnificado notas={cliente.bitacora || []} onAgregarNota={agregarNotaCliente}
-              correos={correosCliente} citas={citasCliente}
-              placeholderNota="Ej. llamó para reagendar, quedamos el jueves..." />
-          </div>
-        </div>
-
-        <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
-          <h3 style={sectionTitle}>Historial de ventas</h3>
-          {historialVentas.length === 0 ? (
-            <p style={{ ...hint, marginTop: 8 }}>Todavía no se le ha generado ninguna boleta.</p>
-          ) : (
-            <div>
-              {historialVentas.map((b) => (
-                <FilaBoletaVenta key={`${b._tipo}-${b.numero}`} boleta={b} tipo={b._tipo}
-                  setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} nombreUsuario={nombreUsuario} />
-              ))}
             </div>
           )}
+          <div>
+            <p style={label}>Objetivos a cumplir</p>
+            <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
+          </div>
         </div>
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Historial" subtitulo={resumenHistorial}>
+        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
+          <HistorialUnificado notas={cliente.bitacora || []} onAgregarNota={agregarNotaCliente}
+            correos={correosCliente} citas={citasCliente}
+            placeholderNota="Ej. llamó para reagendar, quedamos el jueves..." />
+        </div>
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Historial de ventas" subtitulo={resumenVentas}>
+        {historialVentas.length === 0 ? (
+          <p style={hint}>Todavía no se le ha generado ninguna boleta.</p>
+        ) : (
+          <div>
+            {historialVentas.map((b) => (
+              <FilaBoletaVenta key={`${b._tipo}-${b.numero}`} boleta={b} tipo={b._tipo}
+                setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} nombreUsuario={nombreUsuario} />
+            ))}
+          </div>
+        )}
+      </SeccionPlegable>
       </div>
     </div>
   );
