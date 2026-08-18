@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
-  GraduationCap, KeyRound, MessageCircle, Send,
+  GraduationCap, KeyRound, MessageCircle, Send, Package,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
@@ -31,6 +31,7 @@ const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ de
 const Prospectos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Prospectos })));
 const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PanelAdmin })));
 const EnviarNotificaciones = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EnviarNotificaciones })));
+const Inventario = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Inventario })));
 
 // Aparte de las 14 pestañas de arriba: la ruta guiada de Mis Paseos es su
 // propio chunk, ni en este archivo (se carga siempre, para todo rol, y no
@@ -1103,6 +1104,7 @@ export const TODOS_LOS_TABS = [
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo" },
   { id: "notificaciones", label: "Notificaciones", grupo: "Equipo" },
+  { id: "inventario", label: "Inventario", grupo: "Equipo" },
   { id: "usuarios", label: "Usuarios", grupo: "Equipo" },
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
 ];
@@ -1128,6 +1130,7 @@ const ICONOS_TAB = {
   pagos: Banknote,
   equipo: Users,
   notificaciones: Bell,
+  inventario: Package,
   usuarios: ShieldCheck,
   seguimiento: Target,
 };
@@ -1572,6 +1575,55 @@ function useLecturaChatEquipo(userEmail, sessionVersion) {
   }
 
   return [ultimaLectura, marcarChatLeido];
+}
+
+export function dbToEntregaInventario(row) {
+  return {
+    id: row.id, paseadorNombre: row.paseador_nombre, articulo: row.articulo,
+    talla: row.talla, descripcion: row.descripcion, cantidad: row.cantidad,
+    entregadoPor: row.entregado_por, entregadoEn: row.entregado_en,
+  };
+}
+
+// Inventario del coordinador (database/090_entregas_inventario.sql) — cada
+// fila es una entrega puntual con fecha, no un total que se pisa; el total
+// actual por paseador se deriva sumando en el propio componente
+// (Inventario, en HowriaAdminResto.jsx). Sin tiempo real: es una
+// herramienta de registro de baja frecuencia, no un tablero en vivo como
+// Coordinación o el chat.
+function useEntregasInventario(sessionVersion) {
+  const [entregas, setEntregas] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    setCargando(true);
+    supabase.from("entregas_inventario").select("*").order("entregado_en", { ascending: false }).then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar el inventario: ${error.message}`);
+      else if (data) setEntregas(data.map(dbToEntregaInventario));
+      setCargando(false);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  async function registrarEntrega(entrega) {
+    const { data, error } = await supabase.from("entregas_inventario").insert({
+      paseador_nombre: entrega.paseadorNombre, articulo: entrega.articulo, talla: entrega.talla || null,
+      descripcion: entrega.descripcion || null, cantidad: entrega.cantidad, entregado_por: entrega.entregadoPor,
+    }).select().single();
+    if (error) { showToast(`No se pudo registrar la entrega: ${error.message}`); return; }
+    setEntregas((prev) => [dbToEntregaInventario(data), ...prev]);
+  }
+
+  async function eliminarEntrega(id) {
+    const anterior = entregas;
+    setEntregas((prev) => prev.filter((e) => e.id !== id));
+    const { error } = await supabase.from("entregas_inventario").delete().eq("id", id);
+    if (error) { showToast(`No se pudo eliminar el registro: ${error.message}`); setEntregas(anterior); }
+  }
+
+  return [entregas, registrarEntrega, eliminarEntrega, cargando];
 }
 
 // Solicitudes de "Registro de cuenta" pendientes de revisión (ver
@@ -4175,6 +4227,7 @@ export default function HowriaAdmin() {
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
   const [mensajesEquipo, enviarMensajeEquipo, cargandoMensajesEquipo] = useMensajesEquipo(sessionVersion);
   const [ultimaLecturaChat, marcarChatLeido] = useLecturaChatEquipo(user?.email, sessionVersion);
+  const [entregasInventario, registrarEntregaInventario, eliminarEntregaInventario, cargandoInventario] = useEntregasInventario(sessionVersion);
   const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
@@ -4480,6 +4533,7 @@ export default function HowriaAdmin() {
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} esAdmin={esAdmin} />}
         {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}
+        {tab === "inventario" && tabsPermitidosRol.includes("inventario") && <Inventario usuarios={usuarios} entregas={entregasInventario} registrarEntrega={registrarEntregaInventario} eliminarEntrega={eliminarEntregaInventario} cargando={cargandoInventario} user={user} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}

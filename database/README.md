@@ -115,6 +115,8 @@ no un runner de migraciones.
 | 087 | `permisos_roles_tab_notificaciones.sql` | 2026-08-18 | Registra la pestaña nueva "Notificaciones" en `permisos_roles`, solo para coordinador/administrador — un panel para escribirle y mandarle un aviso push a mano a un entrenador o paseador puntual. |
 | 088 | `mensajes_equipo.sql` | 2026-08-18 | Crea `mensajes_equipo` (chat interno, un solo canal compartido por todo el staff, agregada a `supabase_realtime`) — la burbuja de chat que aparece en toda la app. |
 | 089 | `mensajes_equipo_lecturas.sql` | 2026-08-18 | Crea `mensajes_equipo_lecturas` (marca de "hasta cuándo leyó cada quien" el chat, una fila por persona) — de ahí sale el número de no leídos en la burbuja. |
+| 090 | `entregas_inventario.sql` | 2026-08-18 | Crea `entregas_inventario` (registro con fecha de qué equipo entregado a cada paseador/entrenador: collares, correas, poleras, polerones, accesorios — solo coordinación/administración). |
+| 091 | `permisos_roles_tab_inventario.sql` | 2026-08-18 | Registra la pestaña nueva "Inventario" en `permisos_roles`, solo para coordinador/administrador. |
 
 ## Nota sobre el orden 001–023
 
