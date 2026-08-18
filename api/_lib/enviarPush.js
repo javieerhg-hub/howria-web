@@ -42,7 +42,12 @@ async function enviarYLimpiarVencidas(admin, destinatarios, payload) {
 // notificaciones_roles (pestaña Usuarios del panel). No lanza si falla — un
 // aviso push que no llega no debe romper la operación principal (guardar
 // la cita/correo ya quedó hecho antes).
-export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, evento }) {
+// tag (opcional): mismo campo que Notification.tag del lado del navegador
+// — permite que el propio cliente encuentre y cierre esta notificación más
+// tarde con registration.getNotifications({tag}) (ver cerrarNotificacionRuta
+// en src/lib/pushNotificaciones.js), en vez de esperar a que el usuario la
+// descarte a mano.
+export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, evento, tag }) {
   if (!asegurarVapid()) return;
 
   const [{ data: config }, { data: usuarios }, { data: subs, error }] = await Promise.all([
@@ -57,13 +62,13 @@ export async function enviarNotificacionPush(admin, { titulo, cuerpo, url, event
   const destinatarios = subs.filter((s) => rolesQueReciben.has(rolPorEmail.get(s.usuario_email)));
   if (destinatarios.length === 0) return;
 
-  await enviarYLimpiarVencidas(admin, destinatarios, JSON.stringify({ titulo, cuerpo, url }));
+  await enviarYLimpiarVencidas(admin, destinatarios, JSON.stringify({ titulo, cuerpo, url, tag }));
 }
 
 // Igual que enviarNotificacionPush, pero para destinatarios que no son del
 // staff (un tutor no está en la tabla "usuarios" ni en notificaciones_roles)
 // — manda directo a la lista de correos que le pases.
-export async function enviarNotificacionPushAEmails(admin, emails, { titulo, cuerpo, url }) {
+export async function enviarNotificacionPushAEmails(admin, emails, { titulo, cuerpo, url, tag }) {
   if (!asegurarVapid()) return;
 
   const unicos = [...new Set((emails || []).filter(Boolean))];
@@ -75,5 +80,5 @@ export async function enviarNotificacionPushAEmails(admin, emails, { titulo, cue
     .in("usuario_email", unicos);
   if (error || !subs || subs.length === 0) return;
 
-  await enviarYLimpiarVencidas(admin, subs, JSON.stringify({ titulo, cuerpo, url }));
+  await enviarYLimpiarVencidas(admin, subs, JSON.stringify({ titulo, cuerpo, url, tag }));
 }

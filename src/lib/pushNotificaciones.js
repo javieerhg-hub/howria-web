@@ -79,3 +79,23 @@ export async function desuscribirNotificaciones() {
   await sub.unsubscribe();
   await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
 }
+
+// La app le pide a api/avisar-inicio-ronda.js que le mande al paseador un
+// push con tag "howria-ruta-en-curso" apenas arranca la ruta — esto la
+// cierra a mano en las dos únicas salidas reales (terminar la ruta o tocar
+// la X del panel), en vez de dejar que solo desaparezca si el paseador la
+// descarta él mismo. iOS no ofrece una notificación web verdaderamente "no
+// descartable" (eso es propio de apps nativas) — esto es lo más cerca:
+// mientras el paseador no la cierre a mano, la app la mantiene ahí y la
+// retira ella misma en el momento justo.
+export async function cerrarNotificacionRuta() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registro = await navigator.serviceWorker.getRegistration();
+    if (!registro) return;
+    const notifs = await registro.getNotifications({ tag: "howria-ruta-en-curso" });
+    notifs.forEach((n) => n.close());
+  } catch {
+    // silencioso a propósito — no bloquea salir del panel ni terminar la ruta
+  }
+}

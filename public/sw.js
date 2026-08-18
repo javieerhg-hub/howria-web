@@ -26,6 +26,12 @@ self.addEventListener("push", (event) => {
     badge: "/logo-howria.png",
     data: { url: datos.url || "/admin" },
   };
+  // tag: cuando viene (ej. la ruta en curso del paseador), permite que la
+  // propia app la encuentre después vía getNotifications({tag}) y la
+  // cierre a mano al terminar la ruta o salir del panel — ver
+  // cerrarNotificacionRuta en src/lib/pushNotificaciones.js. Sin tag, cada
+  // push es independiente como siempre (citas, correos).
+  if (datos.tag) opciones.tag = datos.tag;
 
   event.waitUntil(self.registration.showNotification(titulo, opciones));
 });

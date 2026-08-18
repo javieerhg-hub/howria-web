@@ -109,6 +109,12 @@ export default async function handler(req, res) {
           titulo: "Tu ruta está lista 🐾",
           cuerpo: `${pendientesHoy} paseo${pendientesHoy === 1 ? "" : "s"} por hacer — toca para deslizar y completar cada uno.`,
           url: "/admin?tab=mis-paseos&ruta=1",
+          // Mismo tag siempre (no por paseador: cada uno solo ve sus
+          // propias push en su propio teléfono) — así el cliente la puede
+          // encontrar y cerrarla a mano al terminar la ruta o salir del
+          // panel (ver cerrarNotificacionRuta), en vez de que solo
+          // desaparezca si el paseador la descarta él mismo.
+          tag: "howria-ruta-en-curso",
         })
       : Promise.resolve(),
   ]);

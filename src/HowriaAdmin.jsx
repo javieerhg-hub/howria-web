@@ -5,7 +5,7 @@ import {
   GraduationCap, KeyRound,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
-import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
+import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 
@@ -940,6 +940,14 @@ function useFaseDiaPaseador(sessionVersion) {
       avisosEnviadosRef.current[paseadorNombre] = true;
       avisarInicioRonda(paseadorNombre);
     }
+    // Cierra en el propio dispositivo el push "Tu ruta está lista" que
+    // quedó pegado en las notificaciones desde que arrancó — este es el
+    // único punto donde la fase llega a "completado" (ver el efecto en
+    // RutaGuiada.jsx que la dispara al resolver el último pendiente), así
+    // que alcanza con engancharse acá en vez de repetirlo en cada lugar
+    // que podría terminar la ruta. La salida por la X del panel se cierra
+    // aparte, en salirDeRuta (MisPaseos) — no pasa por acá.
+    if (fase === "completado") cerrarNotificacionRuta();
   }
 
   // Upsert parcial — no manda `fase`, así que un conflicto no le pisa la
@@ -2238,6 +2246,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   function salirDeRuta() {
     try { localStorage.setItem(claveSalidaRuta(user.email, hoy), "1"); } catch {}
     setRutaAbierta(false);
+    cerrarNotificacionRuta();
   }
 
   // Acceso directo desde Inicio ("Volver a mi ruta") — llega acá como una
