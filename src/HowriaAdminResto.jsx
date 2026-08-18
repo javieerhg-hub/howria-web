@@ -2052,17 +2052,22 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     const finPaseador = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
     const resumenPaseador = misClientesPaseador.map((c) => {
       const claves = diasEnRango(actualDesde, finPaseador, c.diasHabituales || []);
+      const cancelados = claves.filter((k) => registroPaseos[`${c.id}_${k}`]?.cancelado).length;
       const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
       const realizados = validas.filter((k) => registroPaseos[`${c.id}_${k}`]?.realizado).length;
-      return { cliente: c, programados: validas.length, realizados, monto: realizados * Number(c.tarifaPaseador || 0) };
+      // "faltantes": de los días netos de cancelación, los que ya deberían
+      // haberse hecho (el rango nunca pasa de hoy, ver finPaseador arriba)
+      // pero todavía no se marcaron — un paseo que se quedó sin registrar.
+      const faltantes = validas.length - realizados;
+      return { cliente: c, programados: validas.length, realizados, cancelados, faltantes, monto: realizados * Number(c.tarifaPaseador || 0) };
     });
     const totalRealizadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.realizados, 0);
     const totalProgramadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.programados, 0);
     const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0);
 
     function exportarCsvPaseador() {
-      const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Monto"];
-      const filas = resumenPaseador.map((r) => [r.cliente.nombre, r.cliente.perro, r.programados, r.realizados, r.monto]);
+      const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Cancelados", "Faltantes", "Monto"];
+      const filas = resumenPaseador.map((r) => [r.cliente.nombre, r.cliente.perro, r.programados, r.realizados, r.cancelados, r.faltantes, r.monto]);
       const csv = [encabezado, ...filas].map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
       const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -2132,14 +2137,35 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         {resumenPaseador.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>Todavía no tienes clientes asignados.</p>
         ) : (
-          <div>
-            {resumenPaseador.map((r) => (
-              <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                <span style={{ color: INK }}>{r.cliente.nombre} · {r.cliente.perro}</span>
-                <span style={{ color: "#8A7E5C" }}>{r.realizados} / {r.programados} paseos</span>
-                <b style={{ color: NAVY }}>{fmtCLP(r.monto)}</b>
-              </div>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+            {resumenPaseador.map((r) => {
+              const pct = r.programados ? Math.round((r.realizados / r.programados) * 100) : 0;
+              return (
+                <div key={r.cliente.id} style={{ padding: "16px 18px", borderRadius: 12, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "none", background: r.cliente.fotoUrl ? `url(${r.cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
+                      <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {r.cliente.perro}</p>
+                    </div>
+                  </div>
+                  <p style={{ margin: "0 0 12px", fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
+                  <div style={{ height: 7, borderRadius: 4, background: "#EDE4CE", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: "#2F6A46", borderRadius: 4, transition: "width .3s ease" }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 6 }}>
+                    <span style={{ fontSize: 12, color: "#2F6A46", fontWeight: 600 }}>{r.realizados}/{r.programados} realizados</span>
+                    <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{pct}%</span>
+                  </div>
+                  {(r.faltantes > 0 || r.cancelados > 0) && (
+                    <div style={{ display: "flex", gap: 10, marginTop: 8, paddingTop: 8, borderTop: "1px solid #F1EAD9" }}>
+                      {r.faltantes > 0 && <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>⏳ {r.faltantes} sin marcar</span>}
+                      {r.cancelados > 0 && <span style={{ fontSize: 11.5, color: RUST }}>✕ {r.cancelados} cancelado{r.cancelados === 1 ? "" : "s"}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
