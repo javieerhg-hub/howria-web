@@ -4265,7 +4265,7 @@ export default function HowriaAdmin() {
   }, []);
 
   useEffect(() => {
-    if (!verificandoSesion || usuarios.length === 0 || clientes.length === 0 || user || clienteSesion) return;
+    if (!verificandoSesion || cargandoUsuarios || cargandoClientes || user || clienteSesion) return;
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         const emailSesion = data.session.user.email;
@@ -4286,7 +4286,7 @@ export default function HowriaAdmin() {
       }
       setVerificandoSesion(false);
     });
-  }, [usuarios, clientes, verificandoSesion, user, clienteSesion]);
+  }, [usuarios, clientes, cargandoUsuarios, cargandoClientes, verificandoSesion, user, clienteSesion]);
 
   function cerrarSesion() {
     supabase.auth.signOut();
