@@ -2,8 +2,8 @@
 // propio chunk. HowriaAdmin.jsx se carga siempre (hasta para la pantalla
 // de login), y recharts es pesada — no vale la pena bajarla antes de que
 // alguien entre de verdad y llegue a ver un gráfico. Cargado con
-// React.lazy() desde HowriaAdmin.jsx, mismo patrón que las 14 pestañas de
-// HowriaAdminResto.jsx y la ruta guiada de RutaGuiada.jsx.
+// React.lazy() desde HowriaAdmin.jsx, mismo patrón que las pestañas de
+// src/tabs/*.jsx y la ruta guiada de RutaGuiada.jsx.
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { NAVY, fmtCLP } from "./HowriaAdmin.jsx";
 

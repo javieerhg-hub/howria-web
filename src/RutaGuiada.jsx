@@ -2,8 +2,9 @@
 // React.lazy() desde HowriaAdmin.jsx (ver import ahí). No vive en
 // HowriaAdmin.jsx (Core, se carga siempre, para todo rol — no vale la
 // pena meterle Leaflet si un coordinador nunca la abre) ni en
-// HowriaAdminResto.jsx (ese lazy trae las 14 pestañas juntas — importar
-// desde ahí arrastraría todo Resto solo para esta pantalla).
+// src/tabs/MapaRutas.jsx (ese lazy trae solo esa pestaña, pero seguiría
+// siendo Leaflet + su código para una pantalla que un coordinador que
+// nunca abre Mis Paseos tampoco necesita).
 import { useState, useEffect, useRef, useMemo } from "react";
 import { MessageCircle, CircleCheck, ChevronUp, ChevronDown } from "lucide-react";
 import L from "leaflet";
@@ -14,8 +15,8 @@ import {
   estadoGlobalUI,
 } from "./HowriaAdmin.jsx";
 
-// Copia local — no se importa desde HowriaAdminResto.jsx (traería todo el
-// chunk de Resto solo por esta constante). Mismo centro que usa Mapa.
+// Copia local — no se importa desde src/tabs/MapaRutas.jsx (traería ese
+// chunk entero solo por esta constante). Mismo centro que usa Mapa.
 const SANTIAGO_CENTRO = { lat: -33.4489, lng: -70.6693 };
 
 export function RutaGuiada({ clientesHoy, registroPaseos, setRegistroPaseos, user, faseHoy, actualizarFaseDia, metaMensual, totalMontoMes, onSalir }) {
@@ -138,7 +139,7 @@ export function RutaGuiada({ clientesHoy, registroPaseos, setRegistroPaseos, use
   );
 }
 
-// Reutiliza el patrón Leaflet de MapaRutas (HowriaAdminResto.jsx) — mismo
+// Reutiliza el patrón Leaflet de MapaRutas (src/tabs/MapaRutas.jsx) — mismo
 // init/cleanup, mismo estilo de marcador. Los clientes sin geocodificar
 // (nadie tocó "Ubicar en el mapa" antes) se saltan sin bloquear nada: no
 // aparecen acá, pero sí en la lista igual.

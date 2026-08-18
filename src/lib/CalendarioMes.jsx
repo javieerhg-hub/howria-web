@@ -1,7 +1,7 @@
 // Grilla de calendario mensual reusable — la usan tanto el editor de
-// disponibilidad del adiestrador (Agenda, en HowriaAdminResto.jsx) como
+// disponibilidad del adiestrador (Agenda, en src/tabs/Agenda.jsx) como
 // el calendario de reserva público (AgendarPublico.jsx). Archivo chico y
-// sin depender de HowriaAdmin.jsx/HowriaAdminResto.jsx a propósito, para
+// sin depender de HowriaAdmin.jsx/src/tabs/*.jsx a propósito, para
 // que los dos bundles lo puedan importar sin acoplarse entre sí (mismo
 // criterio que calculosBoletas.js).
 import { diasDelMes } from "./calculosBoletas.js";

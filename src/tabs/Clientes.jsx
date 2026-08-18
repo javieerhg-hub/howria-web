@@ -1,0 +1,807 @@
+// Pestaña Clientes — ficha madre del cliente (formulario, mascotas, perfil,
+// historial) y la lista con filtros. Ver src/HowriaAdmin.jsx (React.lazy)
+// por la lista completa de pestañas y src/tabs/_compartido.jsx para lo compartido.
+import { useState, useEffect } from "react";
+import { Search, ArrowUpDown } from "lucide-react";
+import {
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
+  NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
+  botonSecundario, Spinner, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
+  comprimirImagen,
+} from "../HowriaAdmin.jsx";
+import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
+import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
+
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+
+function FormularioCliente({ inicial, paseadores, entrenadores, responsables, onGuardar, onCancelar }) {
+  const [form, setForm] = useState(inicial ?? FORM_VACIO);
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  const formInvalido = !form.nombre.trim() || !form.perro.trim();
+
+  function toggleDiaHabitual(dow) {
+    setForm((f) => ({ ...f, diasHabituales: f.diasHabituales.includes(dow) ? f.diasHabituales.filter((d) => d !== dow) : [...f.diasHabituales, dow].sort() }));
+  }
+
+  function toggleTipoServicio(tipoId) {
+    setForm((f) => ({ ...f, tipoServicio: f.tipoServicio.includes(tipoId) ? f.tipoServicio.filter((t) => t !== tipoId) : [...f.tipoServicio, tipoId] }));
+  }
+
+  function elegirPlan(planId) {
+    const plan = PLANES.find((p) => p.id === planId);
+    setForm((f) => ({ ...f, planHabitual: planId, diasHabituales: plan.id === "PERSONALIZADO" ? f.diasHabituales : plan.dias }));
+  }
+
+  async function subirFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fotoUrl = await comprimirImagen(file);
+    setForm((f) => ({ ...f, fotoUrl }));
+  }
+
+  function guardar() {
+    setIntentoGuardar(true);
+    if (formInvalido) return;
+    onGuardar(form);
+  }
+
+  return (
+    <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 22, margin: "16px 0" }}>
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginBottom: 14 }}>Datos del cliente y del perro</h3>
+      <div className="howria-photo-row" style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 20 }}>
+        <div>
+          <div style={{ width: 100, height: 100, borderRadius: 10, background: form.fotoUrl ? `url(${form.fotoUrl}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
+            {!form.fotoUrl && "Foto del perro"}
+          </div>
+          <label style={{ ...botonSecundario, display: "inline-block", marginTop: 10, padding: "6px 10px", fontSize: 11, textAlign: "center", cursor: "pointer" }}>
+            Subir foto
+            <input type="file" accept="image/*" onChange={subirFoto} style={{ display: "none" }} />
+          </label>
+        </div>
+
+        <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <input placeholder="Nombre cliente" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Teléfono / WhatsApp" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input type="email" placeholder="Correo (para que pueda entrar a su portal)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Nombre del perro" value={form.perro} onChange={(e) => setForm({ ...form, perro: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Raza" value={form.raza} onChange={(e) => setForm({ ...form, raza: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Peso (kg)" type="number" min="0" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Valor paseo referencial" type="number" min="0" value={form.valorPaseoRef} onChange={(e) => setForm({ ...form, valorPaseoRef: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+          <input placeholder="Dirección (para la pestaña Mapa)" value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value, lat: null, lng: null })} style={{ ...input, marginBottom: 0, gridColumn: "1 / -1" }} />
+        </div>
+      </div>
+
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Plan y horario de paseo</h3>
+      <p style={{ ...label, marginTop: 0 }} id="cliente-plan-label">Plan que normalmente contrata</p>
+      <div role="group" aria-labelledby="cliente-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
+          <button key={p.id} type="button" onClick={() => elegirPlan(p.id)} aria-pressed={form.planHabitual === p.id}
+            style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+              border: form.planHabitual === p.id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+              background: form.planHabitual === p.id ? NAVY : "#FFFFFF",
+              color: form.planHabitual === p.id ? CREAM : INK }}>
+            {p.nombre}
+          </button>
+        ))}
+      </div>
+
+      {form.tipoServicio.includes("paseos") && (
+        <>
+          <p style={label} id="cliente-dias-label">Días de paseo habituales</p>
+          <div role="group" aria-labelledby="cliente-dias-label" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+            {DIAS_SEMANA.map((d, dow) => (
+              <button key={dow} type="button" onClick={() => toggleDiaHabitual(dow)} aria-pressed={form.diasHabituales.includes(dow)}
+                style={{ width: 34, height: 34, borderRadius: 8, cursor: "pointer",
+                  border: form.diasHabituales.includes(dow) ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
+                  background: form.diasHabituales.includes(dow) ? NAVY : "#FFFFFF",
+                  color: form.diasHabituales.includes(dow) ? CREAM : INK, fontSize: 13 }}>
+                {d}
+              </button>
+            ))}
+          </div>
+
+          <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
+          <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />
+        </>
+      )}
+
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Estado y objetivos</h3>
+      <p style={{ ...label, marginTop: 0 }}>Estado del cliente y fecha de inicio</p>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <select value={form.estadoCliente} onChange={(e) => setForm({ ...form, estadoCliente: e.target.value })} style={{ ...input, marginBottom: 0 }}>
+          {ESTADOS_CLIENTE.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+        </select>
+        <input type="date" value={form.fechaInicio} onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+      </div>
+
+      <p style={label} id="cliente-tiposervicio-label">Tipo de servicio</p>
+      <div role="group" aria-labelledby="cliente-tiposervicio-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        {TIPOS_SERVICIO.map((t) => (
+          <button key={t.id} type="button" onClick={() => toggleTipoServicio(t.id)} aria-pressed={form.tipoServicio.includes(t.id)}
+            style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+              border: form.tipoServicio.includes(t.id) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+              background: form.tipoServicio.includes(t.id) ? NAVY : "#FFFFFF",
+              color: form.tipoServicio.includes(t.id) ? CREAM : INK }}>
+            {t.nombre}
+          </button>
+        ))}
+      </div>
+      {form.tipoServicio.includes("evaluacion") && (
+        <p style={{ ...hint, marginTop: -10 }}>Para agendar la evaluación con el entrenador, guarda la ficha y ve a la pestaña "Agenda".</p>
+      )}
+
+      <label style={label} htmlFor="cliente-objetivos">Objetivos a cumplir</label>
+      <textarea id="cliente-objetivos" value={form.objetivos} onChange={(e) => setForm({ ...form, objetivos: e.target.value })} placeholder="Ej. socialización, bajar ansiedad, mejorar caminata con correa..."
+        style={{ ...input, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
+
+      <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Equipo asignado</h3>
+      <p style={{ ...label, marginTop: 0 }}>Paseador asignado</p>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <select value={form.paseadorNombre} onChange={(e) => setForm({ ...form, paseadorNombre: e.target.value })} style={{ ...input, marginBottom: 0 }}>
+          <option value="">Sin asignar</option>
+          {paseadores.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+        </select>
+        <input placeholder="Tarifa a pagar al paseador por paseo" type="number" min="0" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+      </div>
+      <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente.</p>
+
+      <p style={label}>Entrenador asignado (para clases de adiestramiento)</p>
+      <select value={form.adiestradorNombre} onChange={(e) => setForm({ ...form, adiestradorNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
+        <option value="">Sin asignar</option>
+        {entrenadores.map((e) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+      </select>
+      <p style={{ ...hint, marginTop: -10 }}>Define de quién son "sus" clientes en la Finanzas personal del entrenador.</p>
+
+      <p style={label}>Responsable de la cuenta</p>
+      <select value={form.responsableNombre} onChange={(e) => setForm({ ...form, responsableNombre: e.target.value })} style={{ ...input, marginBottom: 16 }}>
+        <option value="">Sin asignar</option>
+        {responsables.map((r) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+      </select>
+      <p style={{ ...hint, marginTop: -10 }}>Quién es el dueño del caso (ej. Javier Arniaz) — define de quién son las ventas de este cliente en la Finanzas personal de esa persona, sin importar su rol en la app.</p>
+
+      <div style={{ marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3" }}>
+        {intentoGuardar && formInvalido && (
+          <p style={{ color: RUST, fontSize: 12.5, margin: "0 0 10px" }}>Falta el nombre del cliente y/o del perro — son obligatorios para guardar.</p>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={guardar} style={{ ...botonPrincipal, marginTop: 0, opacity: intentoGuardar && formInvalido ? 0.6 : 1 }}>Guardar ficha</button>
+          <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Mascotas (perfil del perro, separado del tutor) ----------
+function FormularioMascota({ inicial, onGuardar, onCancelar }) {
+  const [form, setForm] = useState(inicial ?? { nombre: "", raza: "", pesoKg: "", nivelEnergia: "", temperamento: [], notas: "" });
+
+  function toggleTemperamento(tagId) {
+    setForm((f) => ({ ...f, temperamento: f.temperamento.includes(tagId) ? f.temperamento.filter((t) => t !== tagId) : [...f.temperamento, tagId] }));
+  }
+
+  function guardar() {
+    if (!form.nombre.trim()) return;
+    onGuardar({ ...form, pesoKg: Number(form.pesoKg) || 0 });
+  }
+
+  return (
+    <div style={{ background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 8, padding: 16, marginBottom: 10 }}>
+      <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Nombre del perro" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <input placeholder="Raza" value={form.raza} onChange={(e) => setForm({ ...form, raza: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <input placeholder="Peso (kg)" type="number" min="0" value={form.pesoKg} onChange={(e) => setForm({ ...form, pesoKg: e.target.value })} style={{ ...input, marginBottom: 0 }} />
+        <select value={form.nivelEnergia || ""} onChange={(e) => setForm({ ...form, nivelEnergia: e.target.value })} style={{ ...input, marginBottom: 0 }}>
+          <option value="">Nivel de energía...</option>
+          {NIVELES_ENERGIA.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+        </select>
+      </div>
+      <p style={{ ...label, marginTop: 12 }} id="mascota-temperamento-label">Temperamento</p>
+      <div role="group" aria-labelledby="mascota-temperamento-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {TAGS_TEMPERAMENTO.map((t) => (
+          <button key={t.id} type="button" onClick={() => toggleTemperamento(t.id)} aria-pressed={form.temperamento.includes(t.id)}
+            style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+              border: form.temperamento.includes(t.id) ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+              background: form.temperamento.includes(t.id) ? NAVY : "#FFFFFF",
+              color: form.temperamento.includes(t.id) ? CREAM : INK }}>
+            {t.nombre}
+          </button>
+        ))}
+      </div>
+      <input placeholder="Notas (opcional)" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} style={{ ...input, marginBottom: 12 }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={guardar} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0 }}>Guardar</button>
+        <button onClick={onCancelar} style={botonSecundario}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// Cada perro con sus datos y, si ya tiene _dbId, un desplegable para
+// marcar con quién no se lleva bien (persiste al toque, sin botón de
+// guardar aparte — mismo criterio que el resto de los checkboxes de la app).
+function FilaMascota({ mascota, todasLasMascotas, incompatibilidades, setMascotaIncompatibilidades, onEditar, onEliminar }) {
+  const [verIncompatibles, setVerIncompatibles] = useState(false);
+  const misIncompatibles = incompatibilidades.filter((i) => i.mascotaId1 === mascota._dbId || i.mascotaId2 === mascota._dbId);
+  const idsIncompatibles = new Set(misIncompatibles.map((i) => (i.mascotaId1 === mascota._dbId ? i.mascotaId2 : i.mascotaId1)));
+  const otrasMascotas = todasLasMascotas.filter((m) => m._dbId && m._dbId !== mascota._dbId);
+
+  function toggleIncompatible(otraId) {
+    if (idsIncompatibles.has(otraId)) {
+      setMascotaIncompatibilidades((prev) => prev.filter((i) =>
+        !((i.mascotaId1 === mascota._dbId && i.mascotaId2 === otraId) || (i.mascotaId1 === otraId && i.mascotaId2 === mascota._dbId))));
+    } else {
+      setMascotaIncompatibilidades((prev) => [...prev, { id: Date.now(), mascotaId1: mascota._dbId, mascotaId2: otraId }]);
+    }
+  }
+
+  return (
+    <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <span style={{ fontWeight: 600, color: NAVY, fontSize: 13.5 }}>🐾 {mascota.nombre}</span>
+          {mascota.necesitaRevision && (
+            <span title="Puede ser más de un perro escrito junto — revisar y separar" style={{ marginLeft: 8, fontSize: 11, color: RUST, fontWeight: 600 }}>⚠️ Revisar</span>
+          )}
+          <span style={{ marginLeft: 8, fontSize: 12, color: "#8A7E5C" }}>
+            {mascota.raza || "raza sin especificar"}{mascota.pesoKg ? ` · ${mascota.pesoKg} kg` : ""}
+            {mascota.nivelEnergia ? ` · energía ${NIVELES_ENERGIA.find((n) => n.id === mascota.nivelEnergia)?.nombre?.toLowerCase()}` : ""}
+          </span>
+          {mascota.temperamento?.length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+              {mascota.temperamento.map((t) => (
+                <span key={t} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 20, background: "#fff", color: "#8A7E5C" }}>
+                  {TAGS_TEMPERAMENTO.find((x) => x.id === t)?.nombre || t}
+                </span>
+              ))}
+            </div>
+          )}
+          {misIncompatibles.length > 0 && (
+            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: RUST }}>
+              ⚠️ No se lleva bien con: {[...idsIncompatibles].map((id) => todasLasMascotas.find((m) => m._dbId === id)?.nombre || "?").join(", ")}
+            </p>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          {mascota._dbId && (
+            <button onClick={() => setVerIncompatibles((v) => !v)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12 }}>
+              {verIncompatibles ? "Cerrar" : "Incompatibilidades"}
+            </button>
+          )}
+          <button onClick={onEditar} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Editar</button>
+          <BotonEliminar onConfirm={onEliminar} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 12 }} />
+        </div>
+      </div>
+      {verIncompatibles && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4DBC3" }}>
+          {otrasMascotas.length === 0 ? (
+            <p style={{ ...hint, margin: 0 }}>No hay otros perros cargados todavía.</p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {otrasMascotas.map((m) => (
+                <button key={m._dbId} onClick={() => toggleIncompatible(m._dbId)}
+                  style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, cursor: "pointer",
+                    border: idsIncompatibles.has(m._dbId) ? `1.5px solid ${RUST}` : "1px solid #DCD2B4",
+                    background: idsIncompatibles.has(m._dbId) ? RUST : "#FFFFFF",
+                    color: idsIncompatibles.has(m._dbId) ? "#FFFFFF" : INK }}>
+                  {m.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Perfil de cliente ----------
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], usuarios = [], citasAgenda = [], setCitas, setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
+  const plan = PLANES.find((p) => p.id === cliente.planHabitual);
+  const historialVentas = [
+    ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
+    ...boletasAdiestramientoCliente.map((b) => ({ ...b, _tipo: "adiestramiento" })),
+  ].sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+  const totalHistorico = calcularTotales(historialVentas.filter(esVenta)).ingresos;
+  const puedeAgendar = cliente.tipoServicio?.includes("clases") || cliente.tipoServicio?.includes("evaluacion");
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
+  const [mostrarFormMascota, setMostrarFormMascota] = useState(false);
+  const [editandoMascotaId, setEditandoMascotaId] = useState(null);
+  const mascotasDelCliente = mascotas.filter((m) => m.clienteId === cliente._dbId);
+
+  const adiestradoresDisponibles = usuarios.filter((u) => u.rol === "entrenador");
+  const [mostrarAgendar, setMostrarAgendar] = useState(false);
+  const [agendarAdiestrador, setAgendarAdiestrador] = useState(cliente.adiestradorNombre || adiestradoresDisponibles[0]?.nombre || "");
+  const [agendarTipo, setAgendarTipo] = useState(cliente.tipoServicio?.includes("evaluacion") ? "evaluacion" : "clase");
+  const [agendarFechaHora, setAgendarFechaHora] = useState("");
+
+  function agregarAlCalendario() {
+    if (!agendarFechaHora || !agendarAdiestrador) return;
+    if (new Date(agendarFechaHora).getTime() <= Date.now()) {
+      showToast("La fecha y hora deben ser en el futuro.");
+      return;
+    }
+    if (hayChoqueHorario(citasAgenda, agendarAdiestrador, agendarFechaHora)) {
+      showToast(`${agendarAdiestrador} ya tiene otra cita agendada en ese horario.`);
+      return;
+    }
+    setCitas((prev) => [...prev, {
+      id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
+      email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
+      tipo: agendarTipo, adiestrador: agendarAdiestrador, fechaISO: new Date(agendarFechaHora).toISOString(),
+      estado: "agendada", origen: "staff", notas: "",
+    }]);
+    setAgendarFechaHora("");
+    setMostrarAgendar(false);
+    showToast(`Agregado al calendario de ${agendarAdiestrador}.`);
+  }
+
+  function copiarLinkAgenda() {
+    const link = `${window.location.origin}/agendaadiestrador?c=${cliente._dbId}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2500);
+    });
+  }
+
+  function guardarMascota(datos) {
+    if (editandoMascotaId) {
+      setMascotas((prev) => prev.map((m) => (m.id === editandoMascotaId ? { ...datos, id: editandoMascotaId, _dbId: m._dbId, clienteId: cliente._dbId } : m)));
+    } else {
+      setMascotas((prev) => [...prev, { ...datos, id: Date.now(), clienteId: cliente._dbId }]);
+    }
+    setMostrarFormMascota(false);
+    setEditandoMascotaId(null);
+  }
+
+  function eliminarMascota(m) {
+    setMascotas((prev) => prev.filter((x) => x.id !== m.id));
+    if (m._dbId) {
+      setMascotaIncompatibilidades((prev) => prev.filter((i) => i.mascotaId1 !== m._dbId && i.mascotaId2 !== m._dbId));
+    }
+  }
+
+  function agregarNotaCliente(texto) {
+    setClientes((prev) => prev.map((c) => (c.id === cliente.id ? { ...c, bitacora: [...(c.bitacora || []), { creadoEn: new Date().toISOString(), texto }] } : c)));
+  }
+
+  // Resúmenes de una línea para cada sección plegable de abajo — se ven
+  // aunque la sección esté cerrada, así una ficha larga (mucho historial,
+  // muchas boletas) sigue siendo escaneable sin tener que abrir todo.
+  const resumenMascotas = mascotasDelCliente.length === 0
+    ? "Sin perfil de mascota todavía."
+    : `${mascotasDelCliente.length} mascota${mascotasDelCliente.length > 1 ? "s" : ""} registrada${mascotasDelCliente.length > 1 ? "s" : ""}.`;
+  const resumenPlanTrabajo = !cliente.tipoServicio?.includes("paseos")
+    ? "Este cliente no tiene paseos en su plan."
+    : cliente.diasHabituales?.length
+    ? `Paseos: ${cliente.diasHabituales.map((d) => DIAS_SEMANA[d]).join(" ")}${cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}`
+    : "Sin días de paseo asignados todavía.";
+  const totalItemsHistorial = (cliente.bitacora?.length || 0) + correosCliente.length + citasCliente.length;
+  const resumenHistorial = totalItemsHistorial === 0
+    ? "Sin notas, correos ni citas registradas."
+    : `${totalItemsHistorial} registro(s) — notas, correos y citas.`;
+  const resumenVentas = historialVentas.length === 0
+    ? "Todavía no se le ha generado ninguna boleta."
+    : `${historialVentas.length} boleta(s) · total histórico ${fmtCLP(totalHistorico)}.`;
+
+  return (
+    <div>
+      <button onClick={onVolver} style={{ ...botonSecundario, marginBottom: 18, flex: "none" }}>← Volver a clientes</button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14 }}>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
+            <div style={{ width: 100, height: 100, borderRadius: "50%", background: cliente.fotoUrl ? `url(${cliente.fotoUrl}) center/cover` : CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", color: "#8A7E5C", fontSize: 12, flex: "none", border: `3px solid ${CREAM_SOFT}` }}>
+              {!cliente.fotoUrl && "Sin foto"}
+            </div>
+            <div>
+              <h2 style={{ ...sectionTitle, fontSize: 22, marginBottom: 2 }}>{cliente.perro}
+                {(() => { const e = ESTADOS_CLIENTE.find((x) => x.id === (cliente.estadoCliente || "activo")); return (
+                  <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: e.bg, color: e.color, verticalAlign: "middle" }}>{e.nombre}</span>
+                ); })()}
+                {cliente.tipoServicio?.includes("evaluacion") && (
+                  <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A", verticalAlign: "middle" }}>Evaluación</span>
+                )}
+              </h2>
+              <p style={{ margin: "0 0 4px", color: "#8A7E5C", fontSize: 14 }}>Dueño/a: {cliente.nombre}</p>
+              <p style={{ margin: 0, color: "#8A7E5C", fontSize: 14 }}>{cliente.telefono || "sin teléfono"} {cliente.email ? `· ${cliente.email}` : "· sin correo (no puede entrar a su portal)"}</p>
+              <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>{cliente.raza || "Raza no especificada"} {cliente.pesoKg ? `· ${cliente.pesoKg} kg` : ""}</p>
+              <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>📍 {cliente.direccion || "Sin dirección registrada"}</p>
+              {cliente.fechaInicio && <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>Cliente desde: {new Date(cliente.fechaInicio + "T00:00:00").toLocaleDateString("es-CL")}</p>}
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {(cliente.tipoServicio || []).map((t) => (
+                  <span key={t} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: CREAM_SOFT, color: NAVY }}>
+                    {TIPOS_SERVICIO.find((x) => x.id === t)?.nombre || t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flex: "none", maxWidth: "100%", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {puedeAgendar && cliente._dbId && (
+              <button onClick={copiarLinkAgenda} style={botonSecundario}>{linkCopiado ? "¡Copiado!" : "Copiar link de agenda"}</button>
+            )}
+            {adiestradoresDisponibles.length > 0 && cliente._dbId && (
+              <button onClick={() => setMostrarAgendar((v) => !v)} style={botonSecundario}>
+                {mostrarAgendar ? "Cancelar" : "+ Agregar al calendario del adiestrador"}
+              </button>
+            )}
+            <button onClick={onEditar} style={botonSecundario}>Editar</button>
+            {puedeEliminar && (
+              <button onClick={() => setConfirmandoEliminar(true)} style={{ ...botonSecundario, borderColor: RUST, color: RUST }}>Eliminar</button>
+            )}
+          </div>
+        </div>
+
+        {mostrarAgendar && (
+          <div style={{ marginTop: 18, padding: 14, background: CREAM_SOFT, borderRadius: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={label} htmlFor="agendar-adiestrador">Entrenador</label>
+              <select id="agendar-adiestrador" value={agendarAdiestrador} onChange={(e) => setAgendarAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                {adiestradoresDisponibles.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label} htmlFor="agendar-tipo">Tipo</label>
+              <select id="agendar-tipo" value={agendarTipo} onChange={(e) => setAgendarTipo(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                {TIPOS_CITA.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label} htmlFor="agendar-fecha">Fecha y hora</label>
+              <input id="agendar-fecha" type="datetime-local" value={agendarFechaHora} onChange={(e) => setAgendarFechaHora(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <button onClick={agregarAlCalendario} disabled={!agendarFechaHora} style={{ ...botonPrincipal, width: "auto", padding: "8px 18px", marginTop: 0, opacity: agendarFechaHora ? 1 : 0.6 }}>
+                Agregar al calendario
+              </button>
+            </div>
+          </div>
+        )}
+
+        {confirmandoEliminar && (
+          <ModalConfirmacion
+            titulo={`¿Eliminar a ${cliente.nombre}?`}
+            mensaje={`Se borra la ficha de ${cliente.nombre} y de su perro ${cliente.perro} — boletas, historial y datos de contacto quedan asociados a un cliente que ya no vas a poder ver ni editar.`}
+            textoConfirmar="Eliminar cliente"
+            onConfirmar={() => { onEliminar(); setConfirmandoEliminar(false); }}
+            onCancelar={() => setConfirmandoEliminar(false)}
+          />
+        )}
+
+        <div style={{ marginTop: 28, paddingTop: 22, borderTop: "1px solid #EDE4CE" }}>
+          <h3 style={sectionTitle}>Datos clave</h3>
+          <div className="howria-g5" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Plan habitual</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{plan?.nombre || "No definido"}</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Valor de paseo referencial</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{fmtCLP(cliente.valorPaseoRef)}</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Paseador asignado</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>
+                {cliente.paseadorNombre || "Sin asignar"}{cliente.tarifaPaseador ? ` · ${fmtCLP(cliente.tarifaPaseador)}/paseo` : ""}
+              </p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 14 }}>
+              <p style={{ ...label, marginBottom: 6 }}>Responsable de la cuenta</p>
+              <p style={{ margin: 0, color: NAVY, fontWeight: 600, fontSize: 14 }}>{cliente.responsableNombre || "Sin asignar"}</p>
+            </div>
+            <div style={{ background: NAVY, borderRadius: 8, padding: 14 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 }}>Total facturado histórico</p>
+              <p style={{ margin: 0, color: CREAM, fontWeight: 700, fontSize: 15 }}>{fmtCLP(totalHistorico)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <SeccionPlegable titulo="Mascotas" subtitulo={resumenMascotas} defaultAbierta>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: mostrarFormMascota ? 12 : 4 }}>
+          <button onClick={() => { setEditandoMascotaId(null); setMostrarFormMascota((v) => !v); }} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            {mostrarFormMascota && !editandoMascotaId ? "Cancelar" : "+ Agregar mascota"}
+          </button>
+        </div>
+        {mostrarFormMascota && (
+          <FormularioMascota
+            inicial={editandoMascotaId ? mascotasDelCliente.find((m) => m.id === editandoMascotaId) : null}
+            onGuardar={guardarMascota}
+            onCancelar={() => { setMostrarFormMascota(false); setEditandoMascotaId(null); }}
+          />
+        )}
+        {mascotasDelCliente.length === 0 ? (
+          <p style={hint}>Sin perfil de mascota todavía — usa "+ Agregar mascota" para cargar raza, energía y temperamento.</p>
+        ) : (
+          <div>
+            {mascotasDelCliente.map((m) => (
+              <FilaMascota key={m.id} mascota={m} todasLasMascotas={mascotas} incompatibilidades={mascotaIncompatibilidades}
+                setMascotaIncompatibilidades={setMascotaIncompatibilidades}
+                onEditar={() => { setEditandoMascotaId(m.id); setMostrarFormMascota(true); }}
+                onEliminar={() => eliminarMascota(m)} />
+            ))}
+          </div>
+        )}
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Plan de trabajo" subtitulo={resumenPlanTrabajo} defaultAbierta>
+        <div style={{ display: "grid", gap: 18 }}>
+          {cliente.tipoServicio?.includes("paseos") && (
+            <div>
+              <p style={label}>Días de paseo habituales{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                {DIAS_SEMANA.map((d, dow) => (
+                  <span key={dow} style={{ width: 30, height: 30, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+                    background: cliente.diasHabituales?.includes(dow) ? NAVY : "#EDE4CE", color: cliente.diasHabituales?.includes(dow) ? CREAM : "#B0A587" }}>
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <p style={label}>Objetivos a cumplir</p>
+            <p style={{ margin: 0, color: INK, fontSize: 14, lineHeight: 1.6 }}>{cliente.objetivos || "Sin objetivos registrados."}</p>
+          </div>
+        </div>
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Historial" subtitulo={resumenHistorial}>
+        <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>
+          <HistorialUnificado notas={cliente.bitacora || []} onAgregarNota={agregarNotaCliente}
+            correos={correosCliente} citas={citasCliente}
+            placeholderNota="Ej. llamó para reagendar, quedamos el jueves..." />
+        </div>
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Historial de ventas" subtitulo={resumenVentas}>
+        {historialVentas.length === 0 ? (
+          <p style={hint}>Todavía no se le ha generado ninguna boleta.</p>
+        ) : (
+          <div>
+            {historialVentas.map((b) => (
+              <FilaBoletaVenta key={`${b._tipo}-${b.numero}`} boleta={b} tipo={b._tipo}
+                setBoletasEmitidas={setBoletasEmitidas} setBoletasAdiestramiento={setBoletasAdiestramiento} nombreUsuario={nombreUsuario} />
+            ))}
+          </div>
+        )}
+      </SeccionPlegable>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Clientes (base de datos madre) ----------
+
+// Filtros/orden de la lista (no la búsqueda de texto, que es más
+// puntual) sobreviven a un refresh — se guardan en localStorage apenas
+// cambian, mismo criterio que howria_pago_ajustes.
+function cargarFiltrosClientesGuardados() {
+  try { return JSON.parse(localStorage.getItem("howria_filtros_clientes") || "{}"); } catch { return {}; }
+}
+
+// Mismo lenguaje visual para las pastillas de filtro rápido de estado y
+// de evaluación — antes el estado era un <select> y evaluación una
+// pastilla aparte, dos widgets distintos para el mismo tipo de acción.
+function estiloPillaFiltro(activo, color, bg) {
+  return {
+    padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+    border: activo ? `1.5px solid ${color}` : "1px solid #DCD2B4",
+    background: activo ? bg : "#FFFFFF", color: activo ? color : "#8A7E5C", fontWeight: activo ? 600 : 400,
+  };
+}
+
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [editandoId, setEditandoId] = useState(null);
+  const [perfilId, setPerfilId] = useState(null);
+  const [busqueda, setBusqueda] = useState("");
+  const filtrosGuardados = cargarFiltrosClientesGuardados();
+  const [filtroPaseador, setFiltroPaseador] = useState(filtrosGuardados.filtroPaseador || "todos");
+  const [filtroEstado, setFiltroEstado] = useState(filtrosGuardados.filtroEstado || "todos");
+  const [soloEvaluacion, setSoloEvaluacion] = useState(filtrosGuardados.soloEvaluacion || false);
+  const [orden, setOrden] = useState(filtrosGuardados.orden || "nombre-asc");
+
+  useEffect(() => {
+    try { localStorage.setItem("howria_filtros_clientes", JSON.stringify({ filtroPaseador, filtroEstado, soloEvaluacion, orden })); } catch {}
+  }, [filtroPaseador, filtroEstado, soloEvaluacion, orden]);
+
+  useEffect(() => {
+    if (!saltarClienteDbId) return;
+    const c = clientes.find((x) => x._dbId === saltarClienteDbId);
+    if (c) setPerfilId(c.id);
+    limpiarSaltoCliente();
+  }, [saltarClienteDbId, clientes]);
+
+  // Entrar a la ficha de un cliente (o volver a la lista) es un cambio de
+  // pantalla completo, igual que cambiar de pestaña — mismo criterio que
+  // el scrollTo(0,0) de App() al cambiar `tab`, para que no quede a mitad
+  // de la lista larga de la que se venía.
+  useEffect(() => { window.scrollTo(0, 0); }, [perfilId]);
+
+  function guardar(datos) {
+    const limpio = { ...datos, valorPaseoRef: Number(datos.valorPaseoRef) || 0, pesoKg: Number(datos.pesoKg) || 0, tarifaPaseador: Number(datos.tarifaPaseador) || 0 };
+    if (editandoId) {
+      setClientes((prev) => prev.map((c) => (c.id === editandoId ? { ...limpio, id: editandoId } : c)));
+    } else {
+      setClientes((prev) => [...prev, { ...limpio, id: Date.now() }]);
+    }
+    setMostrarForm(false);
+    setEditandoId(null);
+  }
+
+  const clientePerfil = clientes.find((c) => c.id === perfilId);
+  if (clientePerfil) {
+    return (
+      <PerfilCliente
+        cliente={clientePerfil}
+        boletasCliente={boletasEmitidas.filter((b) => esBoletaDeCliente(b, clientePerfil))}
+        boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
+        correosCliente={correos.filter((c) => c.clienteId === clientePerfil._dbId)}
+        citasCliente={citasAgenda.filter((c) => c.clienteId === clientePerfil._dbId)}
+        usuarios={usuarios}
+        citasAgenda={citasAgenda}
+        setCitas={setCitas}
+        setClientes={setClientes}
+        setBoletasEmitidas={setBoletasEmitidas}
+        setBoletasAdiestramiento={setBoletasAdiestramiento}
+        onVolver={() => setPerfilId(null)}
+        onEditar={() => { setEditandoId(clientePerfil.id); setPerfilId(null); setMostrarForm(true); }}
+        onEliminar={() => { setClientes((prev) => prev.filter((x) => x.id !== clientePerfil.id)); setPerfilId(null); }}
+        puedeEliminar={puedeEliminar}
+        nombreUsuario={nombreUsuario}
+        mascotas={mascotas}
+        setMascotas={setMascotas}
+        mascotaIncompatibilidades={mascotaIncompatibilidades}
+        setMascotaIncompatibilidades={setMascotaIncompatibilidades}
+      />
+    );
+  }
+
+  const paseadoresDisponibles = [...new Set(clientes.map((c) => c.paseadorNombre).filter(Boolean))].sort();
+  const conteoPorEstado = { activo: 0, pausado: 0, baja: 0 };
+  clientes.forEach((c) => { conteoPorEstado[c.estadoCliente || "activo"] = (conteoPorEstado[c.estadoCliente || "activo"] || 0) + 1; });
+  const totalEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion")).length;
+
+  const filtrados = clientes
+    .filter((c) => {
+      const q = busqueda.trim().toLowerCase();
+      if (q && !(c.nombre.toLowerCase().includes(q) || c.perro.toLowerCase().includes(q))) return false;
+      if (filtroPaseador !== "todos" && c.paseadorNombre !== filtroPaseador) return false;
+      if (filtroEstado !== "todos" && (c.estadoCliente || "activo") !== filtroEstado) return false;
+      if (soloEvaluacion && !c.tipoServicio?.includes("evaluacion")) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      switch (orden) {
+        case "nombre-desc": return b.nombre.localeCompare(a.nombre, "es");
+        case "perro-asc": return a.perro.localeCompare(b.perro, "es");
+        case "perro-desc": return b.perro.localeCompare(a.perro, "es");
+        case "paseador-asc": return (a.paseadorNombre || "").localeCompare(b.paseadorNombre || "", "es");
+        case "valor-desc": return (b.valorPaseoRef || 0) - (a.valorPaseoRef || 0);
+        case "valor-asc": return (a.valorPaseoRef || 0) - (b.valorPaseoRef || 0);
+        case "recientes": return new Date(b.fechaInicio || 0) - new Date(a.fechaInicio || 0);
+        default: return a.nombre.localeCompare(b.nombre, "es");
+      }
+    });
+
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Clientes registrados</h2>
+          <p style={hint}>Ficha completa por cliente — es la base madre que alimenta boletas, finanzas y perfiles. {clientes.length} en total.</p>
+        </div>
+        <button onClick={() => { setEditandoId(null); setMostrarForm((v) => !v); }} style={{ ...botonSecundario, padding: "8px 16px", flex: "none" }}>
+          {mostrarForm ? "Cancelar" : "+ Nuevo cliente"}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <FormularioCliente
+          inicial={editandoId ? clientes.find((c) => c.id === editandoId) : null}
+          paseadores={usuarios}
+          entrenadores={usuarios.filter((u) => u.rol === "entrenador")}
+          responsables={usuarios}
+          onGuardar={guardar}
+          onCancelar={() => { setMostrarForm(false); setEditandoId(null); }}
+        />
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginTop: 20 }}>
+        <TarjetaResumenFactura titulo="Total clientes" valor={clientes.length} color={NAVY} bg={CREAM_SOFT} />
+        <TarjetaResumenFactura titulo="Activos" valor={conteoPorEstado.activo} color={ESTADOS_CLIENTE[0].color} bg={ESTADOS_CLIENTE[0].bg} />
+        <TarjetaResumenFactura titulo="Pausados" valor={conteoPorEstado.pausado} color={ESTADOS_CLIENTE[1].color} bg={ESTADOS_CLIENTE[1].bg} />
+        <TarjetaResumenFactura titulo="Evaluación pendiente" valor={totalEvaluacion} color="#1E5A7A" bg="#D6E6EE" />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+        <button onClick={() => setFiltroEstado("todos")} style={estiloPillaFiltro(filtroEstado === "todos", NAVY, CREAM)}>
+          Todos ({clientes.length})
+        </button>
+        {ESTADOS_CLIENTE.map((e) => (
+          <button key={e.id} onClick={() => setFiltroEstado(e.id)} style={estiloPillaFiltro(filtroEstado === e.id, e.color, e.bg)}>
+            {e.nombre} ({conteoPorEstado[e.id] || 0})
+          </button>
+        ))}
+        <button onClick={() => setSoloEvaluacion((v) => !v)} style={estiloPillaFiltro(soloEvaluacion, "#1E5A7A", "#D6E6EE")}>
+          Evaluación ({totalEvaluacion})
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, marginBottom: 4 }}>
+        <div style={{ position: "relative", flex: "1 1 220px" }}>
+          <Search size={15} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
+        </div>
+        <select value={filtroPaseador} onChange={(e) => setFiltroPaseador(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 170px" }}>
+          <option value="todos">Todos los paseadores</option>
+          {paseadoresDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 150px" }}>
+          <option value="todos">Todos los estados</option>
+          <option value="activo">Activo</option>
+          <option value="pausado">Pausado</option>
+          <option value="baja">Baja</option>
+        </select>
+        <div style={{ position: "relative", flex: "1 1 190px" }}>
+          <ArrowUpDown size={14} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          <select value={orden} onChange={(e) => setOrden(e.target.value)} style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }}>
+            <option value="nombre-asc">Nombre (A-Z)</option>
+            <option value="nombre-desc">Nombre (Z-A)</option>
+            <option value="perro-asc">Perro (A-Z)</option>
+            <option value="perro-desc">Perro (Z-A)</option>
+            <option value="paseador-asc">Paseador (A-Z)</option>
+            <option value="valor-desc">Valor paseo (mayor a menor)</option>
+            <option value="valor-asc">Valor paseo (menor a mayor)</option>
+            <option value="recientes">Más recientes primero</option>
+          </select>
+        </div>
+      </div>
+      <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: "6px 0 0" }}>{filtrados.length} de {clientes.length} cliente(s)</p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14, marginTop: 14 }}>
+        {cargandoClientes ? (
+          <p style={{ ...hint, gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando clientes…</p>
+        ) : (
+          <>
+            {filtrados.map((c) => {
+              const estado = ESTADOS_CLIENTE.find((e) => e.id === (c.estadoCliente || "activo"));
+              return (
+                <button key={c.id} onClick={() => setPerfilId(c.id)} className="howria-card" style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 14, padding: 16, cursor: "pointer", font: "inherit", position: "relative" }}>
+                  <div style={{ position: "absolute", top: 14, right: 14, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
+                    {c.tipoServicio?.includes("evaluacion") && (
+                      <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A" }}>Evaluación</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", paddingRight: 70 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
+                    <div>
+                      <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
+                      <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
+                    {c.telefono || "Sin teléfono"}<br />
+                    Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
+                    Paseador: {c.paseadorNombre || "sin asignar"}
+                    {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
+                  </div>
+                </button>
+              );
+            })}
+            {filtrados.length === 0 && (
+              <p style={{ ...hint, gridColumn: "1 / -1" }}>
+                {clientes.length === 0 ? "No hay clientes registrados todavía." : `No se encontraron clientes con "${busqueda}".`}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

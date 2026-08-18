@@ -9,35 +9,42 @@ import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNot
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 
-// Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
-// cuando de verdad se entra a esa pestaña — así un paseador (que solo ve
-// Inicio/Mis paseos/Finanzas) no descarga el código de las otras 14
-// pestañas que nunca usa. Los 14 nombres son componentes React normales
-// una vez resueltos; el resto del archivo los usa igual que si estuvieran
-// definidos acá mismo.
-const Boletas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Boletas })));
-const Facturas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Facturas })));
-const Clientes = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Clientes })));
-const Finanzas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Finanzas })));
-const PagoTrabajadores = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PagoTrabajadores })));
-const Coordinacion = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Coordinacion })));
-const MapaRutas = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.MapaRutas })));
-const EquipoTrabajo = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EquipoTrabajo })));
-const Agenda = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Agenda })));
-const Alumnos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Alumnos })));
-const CalendarioAlumnos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.CalendarioAlumnos })));
-const Itinerario = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Itinerario })));
-const Mail = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Mail })));
-const Prospectos = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Prospectos })));
-const PanelAdmin = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.PanelAdmin })));
-const EnviarNotificaciones = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.EnviarNotificaciones })));
-const Inventario = React.lazy(() => import("./HowriaAdminResto.jsx").then((m) => ({ default: m.Inventario })));
+// Cada pestaña (menos Inicio/Mis paseos) vive en su propio archivo bajo
+// ./tabs/, cargado solo cuando de verdad se entra a esa pestaña — así un
+// paseador (que solo ve Inicio/Mis paseos/Finanzas) no descarga el código
+// de Coordinación, Facturas, Alumnos, Mail, etc. que nunca usa. Antes las
+// 14 vivían todas en un solo HowriaAdminResto.jsx: abrir cualquiera de
+// ellas bajaba el código de las 14 juntas (~700KB) aunque ese día se usara
+// solo una o dos (ver audit agosto 2026, hallazgo "un solo chunk gigante").
+// Lo que de verdad comparten 2+ pestañas (dibujo de boletas en canvas,
+// helpers de citas, HistorialUnificado, etc.) vive en ./tabs/_compartido.jsx
+// — cada pestaña importa de ahí solo lo que usa, en vez de quedar todo
+// junto en un archivo enorme otra vez. CalendarioAlumnos e Itinerario
+// comparten tanto entre sí (arman los mismos "items del día") que quedaron
+// en un solo archivo, ./tabs/CalendarioItinerario.jsx.
+const Boletas = React.lazy(() => import("./tabs/Boletas.jsx").then((m) => ({ default: m.Boletas })));
+const Facturas = React.lazy(() => import("./tabs/Facturas.jsx").then((m) => ({ default: m.Facturas })));
+const Clientes = React.lazy(() => import("./tabs/Clientes.jsx").then((m) => ({ default: m.Clientes })));
+const Finanzas = React.lazy(() => import("./tabs/Finanzas.jsx").then((m) => ({ default: m.Finanzas })));
+const PagoTrabajadores = React.lazy(() => import("./tabs/PagoTrabajadores.jsx").then((m) => ({ default: m.PagoTrabajadores })));
+const Coordinacion = React.lazy(() => import("./tabs/Coordinacion.jsx").then((m) => ({ default: m.Coordinacion })));
+const MapaRutas = React.lazy(() => import("./tabs/MapaRutas.jsx").then((m) => ({ default: m.MapaRutas })));
+const EquipoTrabajo = React.lazy(() => import("./tabs/EquipoTrabajo.jsx").then((m) => ({ default: m.EquipoTrabajo })));
+const Agenda = React.lazy(() => import("./tabs/Agenda.jsx").then((m) => ({ default: m.Agenda })));
+const Alumnos = React.lazy(() => import("./tabs/Alumnos.jsx").then((m) => ({ default: m.Alumnos })));
+const CalendarioAlumnos = React.lazy(() => import("./tabs/CalendarioItinerario.jsx").then((m) => ({ default: m.CalendarioAlumnos })));
+const Itinerario = React.lazy(() => import("./tabs/CalendarioItinerario.jsx").then((m) => ({ default: m.Itinerario })));
+const Mail = React.lazy(() => import("./tabs/Mail.jsx").then((m) => ({ default: m.Mail })));
+const Prospectos = React.lazy(() => import("./tabs/Prospectos.jsx").then((m) => ({ default: m.Prospectos })));
+const PanelAdmin = React.lazy(() => import("./tabs/PanelAdmin.jsx").then((m) => ({ default: m.PanelAdmin })));
+const EnviarNotificaciones = React.lazy(() => import("./tabs/EnviarNotificaciones.jsx").then((m) => ({ default: m.EnviarNotificaciones })));
+const Inventario = React.lazy(() => import("./tabs/Inventario.jsx").then((m) => ({ default: m.Inventario })));
 
-// Aparte de las 14 pestañas de arriba: la ruta guiada de Mis Paseos es su
+// Aparte de las pestañas de arriba: la ruta guiada de Mis Paseos es su
 // propio chunk, ni en este archivo (se carga siempre, para todo rol, y no
 // vale la pena meterle Leaflet si un coordinador nunca la abre) ni en
-// HowriaAdminResto.jsx (ese lazy trae las 14 pestañas juntas — importar
-// desde ahí arrastraría todo Resto solo para abrir la ruta).
+// src/tabs/MapaRutas.jsx (mismo motivo — arrastraría ese chunk solo para
+// abrir la ruta).
 const RutaGuiada = React.lazy(() => import("./RutaGuiada.jsx").then((m) => ({ default: m.RutaGuiada })));
 
 // El gráfico de Inicio (recharts) también aparte — recharts es pesada y
@@ -1598,7 +1605,7 @@ export function dbToEntregaInventario(row) {
 // Inventario del coordinador (database/090_entregas_inventario.sql) — cada
 // fila es una entrega puntual con fecha, no un total que se pisa; el total
 // actual por paseador se deriva sumando en el propio componente
-// (Inventario, en HowriaAdminResto.jsx). Sin tiempo real: es una
+// (Inventario, en src/tabs/Inventario.jsx). Sin tiempo real: es una
 // herramienta de registro de baja frecuencia, no un tablero en vivo como
 // Coordinación o el chat.
 function useEntregasInventario(sessionVersion) {
