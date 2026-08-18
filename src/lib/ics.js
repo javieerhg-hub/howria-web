@@ -84,9 +84,20 @@ export function construirICS(eventos, nombreCalendario = "Howria") {
   return lineas.join("\r\n");
 }
 
-// En iPhone, navegar a una data: URI de tipo text/calendar abre directo la
-// pantalla nativa "Agregar a Calendario" — a diferencia de un blob: URL, que
-// Safari suele mostrar como texto plano en vez de entregárselo a la app Calendario.
-export function abrirICS(contenidoICS) {
-  window.location.href = `data:text/calendar;charset=utf-8,${encodeURIComponent(contenidoICS)}`;
+// Probado en iPhone: navegar a una data: URI vía location.href no funciona
+// (WebKit moderno bloquea en silencio la navegación de nivel superior a
+// data: iniciada desde JS — no pasa nada, ni siquiera un error visible, y
+// menos aún dentro de la PWA instalada, que no tiene barra de Safari donde
+// mostrar ese error). Un <a download> con un blob: URL sí dispara el flujo
+// nativo de "abrir/guardar archivo" tanto en Safari normal como en la PWA.
+export function abrirICS(contenidoICS, nombreArchivo = "mis-paseos.ics") {
+  const blob = new Blob([contenidoICS], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nombreArchivo;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
