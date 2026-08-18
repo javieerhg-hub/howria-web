@@ -1,12 +1,16 @@
 // Función serverless de Vercel: el paseador la llama (sin esperar la
 // respuesta, ver actualizarFaseDia en HowriaAdmin.jsx) apenas pasa su fase
 // del día a "En Recolección" — les avisa por push a los tutores de sus
-// clientes de hoy que la ronda empezó. No hay rastreo de ubicación de
-// ningún tipo (la geolocalización en segundo plano no funciona en un
-// navegador — ver database/049_fase_dia_paseador.sql y la memoria del
-// proyecto para el porqué se descartó "notificaciones de proximidad" GPS
-// reales); esto es un aviso único al arrancar la ronda, no una cuenta
-// regresiva por casa.
+// clientes de hoy que la ronda empezó, y de paso se autoenvía un push a sí
+// mismo con un link directo al panel de ruta (única forma real de un
+// "botón de completar" en la notificación: iOS/Safari no soporta acciones
+// interactivas dentro de un push, así que en vez de eso la notificación
+// abre la app ya parada en la ruta, lista para deslizar). No hay rastreo
+// de ubicación de ningún tipo (la geolocalización en segundo plano no
+// funciona en un navegador — ver database/049_fase_dia_paseador.sql y la
+// memoria del proyecto para el porqué se descartó "notificaciones de
+// proximidad" GPS reales); esto es un aviso único al arrancar la ronda,
+// no una cuenta regresiva por casa.
 import { createClient } from "@supabase/supabase-js";
 import { enviarNotificacionPushAEmails } from "./_lib/enviarPush.js";
 
@@ -90,14 +94,24 @@ export default async function handler(req, res) {
     (registros || []).filter((r) => r.estado === "realizado" || r.estado === "cancelado").map((r) => r.cliente_id)
   );
   const emails = clientesHoy.filter((c) => !resueltos.has(c.id)).map((c) => c.email);
+  const pendientesHoy = clientesHoy.length - resueltos.size;
 
-  if (emails.length > 0) {
-    await enviarNotificacionPushAEmails(admin, emails, {
-      titulo: "Tu paseador salió a hacer su ronda de hoy 🐾",
-      cuerpo: `${paseadorNombre} ya salió — pronto pasará a buscar a tu perro.`,
-      url: "/admin",
-    });
-  }
+  await Promise.all([
+    emails.length > 0
+      ? enviarNotificacionPushAEmails(admin, emails, {
+          titulo: "Tu paseador salió a hacer su ronda de hoy 🐾",
+          cuerpo: `${paseadorNombre} ya salió — pronto pasará a buscar a tu perro.`,
+          url: "/admin",
+        })
+      : Promise.resolve(),
+    pendientesHoy > 0
+      ? enviarNotificacionPushAEmails(admin, [userData.user.email], {
+          titulo: "Tu ruta está lista 🐾",
+          cuerpo: `${pendientesHoy} paseo${pendientesHoy === 1 ? "" : "s"} por hacer — toca para deslizar y completar cada uno.`,
+          url: "/admin?tab=mis-paseos&ruta=1",
+        })
+      : Promise.resolve(),
+  ]);
 
   res.status(200).json({ ok: true, avisados: emails.length });
 }

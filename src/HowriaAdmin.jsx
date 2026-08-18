@@ -3982,8 +3982,23 @@ export default function HowriaAdmin() {
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
   // "Volver a mi ruta" desde Inicio: manda a Mis Paseos y le avisa que
   // abra la ruta guiada apenas llegue — mismo patrón de salto que
-  // saltarAlumnoDbId/saltarClienteDbId.
+  // saltarAlumnoDbId/saltarClienteDbId. También se dispara al llegar desde
+  // el push "Tu ruta está lista" (api/avisar-inicio-ronda.js), que apunta a
+  // /admin?tab=mis-paseos&ruta=1 — iOS no soporta botones de acción dentro
+  // de una notificación push, así que esto es lo más cerca que se puede
+  // llegar a "completar desde la notificación": un toque la abre ya en el
+  // panel listo para deslizar, en vez de solo abrir la app en Inicio.
   const [abrirRutaGuiada, setAbrirRutaGuiada] = useState(false);
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("ruta") === "1") {
+        setAbrirRutaGuiada(true);
+        url.searchParams.delete("ruta");
+        window.history.replaceState(null, "", url.pathname + url.search);
+      }
+    } catch {}
+  }, []);
   const [enfoqueEmailProspecto, setEnfoqueEmailProspecto] = useState(null);
   const correosNoLeidos = correos.filter((c) => c.direccion === "entrante" && !c.leido).length;
   const cargandoEquipo = cargandoObjetivosSemanales || cargandoObjetivosMensuales || cargandoTareasEquipo;
