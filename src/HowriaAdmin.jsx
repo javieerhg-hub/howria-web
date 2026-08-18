@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp } from "./lib/pushNotificaciones.js";
-import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
+import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 
 // Todo menos Inicio/Mis paseos vive en un archivo aparte, cargado solo
@@ -2689,6 +2689,113 @@ function CarruselAvisos() {
   );
 }
 
+// "Calendario exprés" del Inicio del paseador — antes era una tira de los
+// 7 días de la semana actual, sin navegación, y el conteo de "programados"
+// incluía los paseos que el cliente había cancelado (contaba en contra del
+// paseador algo que no dependía de él). Ahora es un mes real navegable, y
+// las cancelaciones se sacan de "programados" — mismo criterio que ya usa
+// "Tu pago" en Finanzas.
+function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab }) {
+  const [mesVisto, setMesVisto] = useState(hoy.getMonth());
+  const [anioVisto, setAnioVisto] = useState(hoy.getFullYear());
+  const esMesActual = mesVisto === hoy.getMonth() && anioVisto === hoy.getFullYear();
+
+  function cambiarMes(delta) {
+    let m = mesVisto + delta, a = anioVisto;
+    if (m < 0) { m = 11; a -= 1; } else if (m > 11) { m = 0; a += 1; }
+    setMesVisto(m);
+    setAnioVisto(a);
+  }
+
+  const totalDias = diasDelMes(mesVisto, anioVisto);
+  const primerDiaSemana = (new Date(anioVisto, mesVisto, 1).getDay() + 6) % 7;
+  const resumenPorDia = {};
+  for (let d = 1; d <= totalDias; d++) {
+    const fecha = new Date(anioVisto, mesVisto, d);
+    const dow = (fecha.getDay() + 6) % 7;
+    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(dow));
+    let realizados = 0, cancelados = 0;
+    clientesDia.forEach((c) => {
+      const r = registroPaseos[`${c.id}_${fechaKey(fecha)}`];
+      if (r?.realizado) realizados++;
+      else if (r?.cancelado) cancelados++;
+    });
+    resumenPorDia[d] = { total: clientesDia.length, programados: clientesDia.length - cancelados, realizados };
+  }
+
+  const celdas = [];
+  for (let i = 0; i < primerDiaSemana; i++) celdas.push(null);
+  for (let d = 1; d <= totalDias; d++) celdas.push(d);
+
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h2 style={sectionTitle}>Calendario exprés</h2>
+        {!esMesActual && (
+          <button onClick={() => { setMesVisto(hoy.getMonth()); setAnioVisto(hoy.getFullYear()); }}
+            style={{ fontSize: 11.5, color: NAVY, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            Hoy
+          </button>
+        )}
+      </div>
+      <p style={{ ...hint, marginTop: 8 }}>Tus paseos programados este mes.</p>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "10px 0" }}>
+        <button onClick={() => cambiarMes(-1)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: NAVY, padding: "4px 10px" }}>‹</button>
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: NAVY, textTransform: "capitalize" }}>{MESES[mesVisto]} {anioVisto}</p>
+        <button onClick={() => cambiarMes(1)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: NAVY, padding: "4px 10px" }}>›</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+        {DIAS_SEMANA.map((d, i) => (
+          <div key={i} style={{ textAlign: "center", fontSize: 10, color: "#8A7E5C", fontWeight: 600 }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {celdas.map((d, i) => {
+          if (d === null) return <div key={i} />;
+          const info = resumenPorDia[d];
+          const fecha = new Date(anioVisto, mesVisto, d);
+          const esHoy = fechaKey(fecha) === fechaKey(hoy);
+          const esFuturo = fecha > hoy;
+          const sinPaseos = info.total === 0;
+          const todoCancelado = !sinPaseos && info.programados === 0;
+          const completo = !sinPaseos && !todoCancelado && !esFuturo && info.realizados >= info.programados;
+          const pendiente = !sinPaseos && !todoCancelado && !esFuturo && !completo;
+
+          let bg = "#FFFFFF", color = "#B0A587", border = "1px solid #EDE4CE";
+          if (todoCancelado) { bg = "#F1EEE4"; color = "#9A9179"; }
+          else if (completo) { bg = "#D8ECDE"; color = "#2F6A46"; border = "1px solid #2F6A46"; }
+          else if (pendiente) { bg = "#F1DCD2"; color = RUST; border = `1px solid ${RUST}`; }
+          else if (!sinPaseos && esFuturo) { bg = CREAM_SOFT; color = NAVY; }
+
+          return (
+            <div key={i} style={{
+              aspectRatio: "1", borderRadius: 6, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: bg, color, border,
+              ...(esHoy ? { boxShadow: `0 0 0 1.5px ${GOLD}` } : {}),
+            }}>
+              <span style={{ fontSize: 12, fontWeight: esHoy ? 700 : 500 }}>{d}</span>
+              {!sinPaseos && <span style={{ fontSize: 8.5, fontWeight: 600, marginTop: 1 }}>{info.realizados}/{info.programados}</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 10.5, color: "#8A7E5C" }}>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#D8ECDE", border: "1px solid #2F6A46", marginRight: 4 }} />Completo</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#F1DCD2", border: `1px solid ${RUST}`, marginRight: 4 }} />Sin marcar</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#F1EEE4", marginRight: 4 }} />Cancelado</span>
+      </div>
+
+      <button onClick={() => setTab("mis-paseos")}
+        style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <Footprints size={18} /> Ir a Mis paseos
+      </button>
+    </div>
+  );
+}
+
 function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {} }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
@@ -2844,18 +2951,6 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...prev[key], ...cambios } }));
   }
 
-  const inicioSemanaVista = inicioSemana(hoy);
-  const diasSemanaVista = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(inicioSemanaVista);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-  const resumenSemana = diasSemanaVista.map((d, i) => {
-    const clientesDia = misClientes.filter((c) => c.diasHabituales?.includes(i));
-    const realizados = clientesDia.filter((c) => registroPaseos[`${c.id}_${fechaKey(d)}`]?.realizado).length;
-    return { fecha: d, total: clientesDia.length, realizados };
-  });
-
   return (
     <div style={{ display: "grid", gap: 20 }}>
       {encabezado}
@@ -2906,25 +3001,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
         </div>
       )}
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Calendario exprés</h2>
-        <p style={{ ...hint, marginTop: 8 }}>Tus paseos programados esta semana.</p>
-        <div className="howria-week" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginTop: 10 }}>
-          {resumenSemana.map((d, i) => {
-            const esHoyCol = fechaKey(d.fecha) === fechaKey(hoy);
-            return (
-              <div key={i} style={{ textAlign: "center", padding: "8px 4px", borderRadius: 8, background: esHoyCol ? NAVY : CREAM_SOFT }}>
-                <p style={{ margin: 0, fontSize: 10.5, color: esHoyCol ? "#9BAAB8" : "#8A7E5C" }}>{DIAS_SEMANA[i]} {d.fecha.getDate()}</p>
-                <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 700, color: esHoyCol ? CREAM : NAVY }}>{d.realizados}/{d.total}</p>
-              </div>
-            );
-          })}
-        </div>
-        <button onClick={() => setTab("mis-paseos")}
-          style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <Footprints size={18} /> Ir a Mis paseos
-        </button>
-      </div>
+      <CalendarioExpres misClientes={misClientes} registroPaseos={registroPaseos} hoy={hoy} setTab={setTab} />
     </div>
   );
 }
