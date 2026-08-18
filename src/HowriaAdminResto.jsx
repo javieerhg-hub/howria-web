@@ -4483,37 +4483,38 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   const textoEstado = estado === "realizado" ? "Realizado" : estado === "cancelado" ? "Cancelado" : atrasado ? "⚠️ Atrasado" : "Pendiente";
 
   return (
-    <div style={{ padding: "10px 12px", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600, flexShrink: 0 }}>{c.horaHabitual || "—"}</span>
-          <span style={{ fontSize: 13, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} · 🐾 {c.perro}</span>
+    <div style={{ padding: "10px 11px", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{ width: 30, height: 30, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "#FFFFFF" }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
+          <p style={{ margin: 0, fontSize: 11, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.horaHabitual || "—"} · 🐾 {c.perro}</p>
         </div>
-        <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: bgEstado, color: colorEstado, flexShrink: 0 }}>{textoEstado}</span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+      <span style={{ display: "inline-block", fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: bgEstado, color: colorEstado, marginBottom: 8 }}>{textoEstado}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         <button onClick={onToggleRealizado} disabled={diaVista > hoy}
-          style={{ flex: "1 1 130px", border: `1px solid ${estado === "realizado" ? "#2F6A46" : "#C7D9CC"}`, background: estado === "realizado" ? "#2F6A46" : "#fff", color: estado === "realizado" ? "#fff" : "#2F6A46", borderRadius: 7, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: diaVista > hoy ? "not-allowed" : "pointer", opacity: diaVista > hoy ? 0.5 : 1 }}>
+          style={{ flex: "1 1 auto", border: `1px solid ${estado === "realizado" ? "#2F6A46" : "#C7D9CC"}`, background: estado === "realizado" ? "#2F6A46" : "#fff", color: estado === "realizado" ? "#fff" : "#2F6A46", borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: diaVista > hoy ? "not-allowed" : "pointer", opacity: diaVista > hoy ? 0.5 : 1 }}>
           {estado === "realizado" ? "✓ Hecho" : "Marcar hecho"}
         </button>
         <button onClick={onToggleCancelado}
-          style={{ flex: "1 1 110px", border: `1px solid ${estado === "cancelado" ? RUST : "#E7CFC2"}`, background: estado === "cancelado" ? RUST : "#fff", color: estado === "cancelado" ? "#fff" : RUST, borderRadius: 7, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          style={{ flex: "1 1 auto", border: `1px solid ${estado === "cancelado" ? RUST : "#E7CFC2"}`, background: estado === "cancelado" ? RUST : "#fff", color: estado === "cancelado" ? "#fff" : RUST, borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
           {estado === "cancelado" ? "✕ Cancelado" : "Cancelar"}
         </button>
-        <button onClick={() => setMasAbierto((v) => !v)}
-          style={{ border: "none", background: "none", color: "#8A7E5C", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "8px 4px", flexShrink: 0 }}>
-          {masAbierto ? "Menos ▲" : "Más ▾"}
-        </button>
       </div>
+      <button onClick={() => setMasAbierto((v) => !v)}
+        style={{ border: "none", background: "none", color: "#8A7E5C", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "6px 0 0", width: "100%", textAlign: "center" }}>
+        {masAbierto ? "Menos ▲" : "Más ▾"}
+      </button>
       {masAbierto && (
-        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
           <select defaultValue="" onChange={(e) => { if (e.target.value) onReasignar(e.target.value); e.target.value = ""; }}
-            style={{ fontSize: 11.5, padding: "6px 8px", borderRadius: 6, border: "1px solid #E4DBC3", flex: "1 1 140px" }}>
+            style={{ fontSize: 11.5, padding: "6px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
             <option value="">Reasignar a...</option>
             {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
           </select>
           <input defaultValue={nota} placeholder="nota..." onBlur={(e) => onGuardarNota(e.target.value)}
-            style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6, flex: "1 1 140px" }} />
+            style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
         </div>
       )}
     </div>
@@ -4522,6 +4523,10 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
 
 export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
+  // Filtro de "Todos"/un paseador puntual — vive arriba del todo de la
+  // pestaña (resumen + tarjetas de "Hoy"), separado de paseadorSel (que
+  // es solo para el editor de horario semanal, más abajo).
+  const [filtroPaseador, setFiltroPaseador] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [diaOffset, setDiaOffset] = useState(0);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -4592,10 +4597,24 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
       .sort((a, b) => a.paseador.localeCompare(b.paseador, "es"));
   }, [calendarioDia]);
 
+  // El mismo filtro de arriba también acota qué tarjetas de "Hoy" se ven
+  // (sea cual sea el día que se esté mirando con Anterior/Siguiente) — no
+  // solo los números del resumen.
+  const calendarioPorPaseadorFiltrado = filtroPaseador === "todos"
+    ? calendarioPorPaseador
+    : calendarioPorPaseador.filter((g) => g.paseador === filtroPaseador);
+
+  // Cubos del resumen: solo paseador/entrenador reales (no "Sin asignar",
+  // que no es una persona a la que filtrar) — de la lista de usuarios, no
+  // de quién tiene clientes hoy, para que el filtro siga disponible aunque
+  // se navegue a otro día donde esa persona no tenga nada.
+  const equipoPaseo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
   const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dowHoy));
-  const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
-  const canceladosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
-  const pendientesHoy = clientesHoy.length - realizadosHoy - canceladosHoy;
+  const clientesHoyFiltrados = filtroPaseador === "todos" ? clientesHoy : clientesHoy.filter((c) => (c.paseadorNombre || "Sin asignar") === filtroPaseador);
+  const realizadosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
+  const canceladosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
+  const pendientesHoy = clientesHoyFiltrados.length - realizadosHoy - canceladosHoy;
 
   const fechasSemana = Array.from({ length: 7 }, (_, i) => { const f = new Date(inicioSemana); f.setDate(f.getDate() + i); return f; });
   const resumenSemana = fechasSemana.map((fecha, i) => {
@@ -4648,8 +4667,50 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), nota } }));
   }
 
+  function estiloCuboFiltro(activo) {
+    return {
+      display: "flex", flexDirection: "column", gap: 1, minWidth: 82, padding: "8px 12px", borderRadius: 12,
+      border: activo ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4", background: activo ? NAVY : "#FFFFFF",
+      color: activo ? CREAM : INK, cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif",
+    };
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Resumen de hoy</h2>
+        <p style={hint}>Toca a alguien del equipo para ver solo lo suyo — el resumen y las tarjetas de abajo se acotan a esa persona.</p>
+        <div role="group" aria-label="Filtrar por paseador" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0 16px" }}>
+          <button type="button" onClick={() => setFiltroPaseador("todos")} aria-pressed={filtroPaseador === "todos"} style={estiloCuboFiltro(filtroPaseador === "todos")}>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Todos</span>
+            <span style={{ fontSize: 10.5, opacity: 0.75 }}>{clientesHoy.length} hoy</span>
+          </button>
+          {equipoPaseo.map((u) => {
+            const cuenta = clientesHoy.filter((c) => c.paseadorNombre === u.nombre).length;
+            return (
+              <button key={u.id} type="button" onClick={() => setFiltroPaseador(u.nombre)} aria-pressed={filtroPaseador === u.nombre} style={estiloCuboFiltro(filtroPaseador === u.nombre)}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{u.nombre}</span>
+                <span style={{ fontSize: 10.5, opacity: 0.75 }}>{cuenta} hoy</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9BAAB8" }}>Programados hoy</p>
+            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{clientesHoyFiltrados.length}</p>
+          </div>
+          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#2E5C41" }}>Realizados hoy</p>
+            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#2E5C41" }}>{realizadosHoy}</p>
+          </div>
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#8A7E5C" }}>Pendientes hoy</p>
+            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: RUST }}>{pendientesHoy}{canceladosHoy > 0 ? ` (${canceladosHoy} cancelado(s))` : ""}</p>
+          </div>
+        </div>
+      </div>
+
       <SeccionPlegable titulo="Hoy" subtitulo="Quién pasea a quién, a qué hora, y si ya se hizo." defaultAbierta>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
           <p style={{ ...hint, margin: 0 }}>
@@ -4664,11 +4725,13 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
 
         {cargandoClientes ? (
           <p style={{ ...hint, marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
-        ) : calendarioPorPaseador.length === 0 ? (
-          <p style={{ ...hint, marginTop: 12 }}>No hay paseos programados este día.</p>
+        ) : calendarioPorPaseadorFiltrado.length === 0 ? (
+          <p style={{ ...hint, marginTop: 12 }}>
+            {filtroPaseador === "todos" ? "No hay paseos programados este día." : `${filtroPaseador} no tiene paseos programados este día.`}
+          </p>
         ) : (
           <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
-            {calendarioPorPaseador.map(({ paseador, items }) => {
+            {calendarioPorPaseadorFiltrado.map(({ paseador, items }) => {
               const hechos = items.filter((i) => i.estado === "realizado").length;
               return (
                 <div key={paseador} style={{ border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, background: "#FFFFFF" }}>
@@ -4688,7 +4751,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                       <button onClick={() => irAMapa(paseador)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Ver ruta en el mapa →</button>
                     )}
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                     {items.map((item) => (
                       <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} diaVista={diaVista} hoy={hoy}
                         onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
@@ -4702,21 +4765,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             })}
           </div>
         )}
-
-        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginTop: 20 }}>
-          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9BAAB8" }}>Programados hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{clientesHoy.length}</p>
-          </div>
-          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#2E5C41" }}>Realizados hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#2E5C41" }}>{realizadosHoy}</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#8A7E5C" }}>Pendientes hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: RUST }}>{pendientesHoy}{canceladosHoy > 0 ? ` (${canceladosHoy} cancelado(s))` : ""}</p>
-          </div>
-        </div>
       </SeccionPlegable>
 
       <SeccionPlegable titulo="Semana" subtitulo="Cómo se reparte la semana y el horario fijo de cada paseador.">
