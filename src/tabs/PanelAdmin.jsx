@@ -74,19 +74,24 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   async function resetearPassword(u) {
     if (reseteandoId || !u.email) return;
     setReseteandoId(u.id);
-    const { data: { session } } = await supabase.auth.refreshSession();
-    const resp = await fetch("/api/reset-password-usuario", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ email: u.email }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    setReseteandoId(null);
-    if (!resp.ok) {
-      showToast(data.error || "No se pudo resetear la contraseña");
-      return;
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch("/api/reset-password-usuario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ email: u.email }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showToast(data.error || "No se pudo resetear la contraseña");
+        return;
+      }
+      setPasswordReseteada({ nombre: u.nombre, email: u.email, password: data.password });
+    } catch {
+      showToast("No se pudo resetear la contraseña — revisa tu conexión.");
+    } finally {
+      setReseteandoId(null);
     }
-    setPasswordReseteada({ nombre: u.nombre, email: u.email, password: data.password });
   }
 
   const filtrados = usuarios

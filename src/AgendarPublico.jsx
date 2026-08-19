@@ -56,6 +56,8 @@ export default function AgendarPublico() {
   const [fecha, setFecha] = useState("");
   const [slots, setSlots] = useState([]);
   const [cargandoSlots, setCargandoSlots] = useState(false);
+  const [errorSlots, setErrorSlots] = useState(false);
+  const [errorMapa, setErrorMapa] = useState(false);
   const [mesVisto, setMesVisto] = useState(() => { const h = new Date(); return { anio: h.getFullYear(), mesIdx: h.getMonth() }; });
   const [mapaDisponibilidad, setMapaDisponibilidad] = useState({});
   const [cargandoMapa, setCargandoMapa] = useState(false);
@@ -94,6 +96,7 @@ export default function AgendarPublico() {
 
   useEffect(() => {
     setHoraSel(null);
+    setErrorSlots(false);
     if (!adiestrador || !fecha) { setSlots([]); return; }
     let activo = true;
     setCargandoSlots(true);
@@ -102,6 +105,7 @@ export default function AgendarPublico() {
     fetch(`/api/cliente-agenda?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => { if (activo) setSlots(data.slots || []); })
+      .catch(() => { if (activo) { setSlots([]); setErrorSlots(true); } })
       .finally(() => { if (activo) setCargandoSlots(false); });
     return () => { activo = false; };
   }, [adiestrador, fecha, clienteId]);
@@ -110,6 +114,7 @@ export default function AgendarPublico() {
   // puntual) — es lo que colorea el calendario en verde/rojo antes de que
   // el tutor elija un día.
   useEffect(() => {
+    setErrorMapa(false);
     if (!adiestrador) { setMapaDisponibilidad({}); return; }
     let activo = true;
     setCargandoMapa(true);
@@ -118,6 +123,7 @@ export default function AgendarPublico() {
     fetch(`/api/cliente-agenda?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => { if (activo) setMapaDisponibilidad(data.disponibilidadFechas || {}); })
+      .catch(() => { if (activo) { setMapaDisponibilidad({}); setErrorMapa(true); } })
       .finally(() => { if (activo) setCargandoMapa(false); });
     return () => { activo = false; };
   }, [adiestrador, clienteId]);
@@ -258,7 +264,11 @@ export default function AgendarPublico() {
                   seleccionado={fecha}
                   soloDisponibleClickeable
                 />
-                {cargandoMapa && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>Cargando disponibilidad…</p>}
+                {cargandoMapa ? (
+                  <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>Cargando disponibilidad…</p>
+                ) : errorMapa ? (
+                  <p style={{ margin: "8px 0 0", fontSize: 12.5, color: RUST }}>No se pudo cargar la disponibilidad — revisa tu conexión e intenta de nuevo.</p>
+                ) : null}
               </div>
 
               {fecha && (
@@ -266,6 +276,8 @@ export default function AgendarPublico() {
                   <p style={label}>Horarios disponibles</p>
                   {cargandoSlots ? (
                     <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>Buscando horarios…</p>
+                  ) : errorSlots ? (
+                    <p style={{ margin: 0, fontSize: 13, color: RUST }}>No se pudo cargar los horarios — revisa tu conexión e intenta de nuevo.</p>
                   ) : slots.length === 0 ? (
                     <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>No quedan horarios libres ese día — prueba con otra fecha.</p>
                   ) : (

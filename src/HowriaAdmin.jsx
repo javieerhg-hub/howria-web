@@ -921,6 +921,8 @@ function useFaseDiaPaseador(sessionVersion) {
         });
         setFasesState(mapa);
         setAusenciasState(mapaAusencias);
+      } else if (error) {
+        showToast(`No se pudo cargar el estado del equipo: ${error.message}`);
       }
     })();
   }, [sessionVersion]);
@@ -1186,6 +1188,8 @@ function usePermisosRoles(sessionVersion) {
         const mapa = {};
         data.forEach((r) => { mapa[r.rol] = r.tabs || []; });
         setPermisosState(mapa);
+      } else if (error) {
+        showToast(`No se pudieron cargar los permisos por rol: ${error.message}`);
       }
     })();
   }, [sessionVersion]);
@@ -1236,6 +1240,8 @@ function useNotificacionesRoles(sessionVersion) {
         const mapa = {};
         data.forEach((r) => { mapa[r.rol] = r.eventos || []; });
         setNotificacionesState(mapa);
+      } else if (error) {
+        showToast(`No se pudieron cargar las notificaciones por rol: ${error.message}`);
       }
     })();
   }, [sessionVersion]);
@@ -1280,6 +1286,8 @@ function useConfiguracion(sessionVersion) {
         const mapa = {};
         data.forEach((r) => { mapa[r.clave] = r.valor; });
         setConfigState(mapa);
+      } else if (error) {
+        showToast(`No se pudo cargar la configuración: ${error.message}`);
       }
     })();
   }, [sessionVersion]);
@@ -1455,6 +1463,7 @@ function useTarifas(sessionVersion) {
   }, [sessionVersion]);
 
   async function actualizar(adiestrador, cambios) {
+    const existiaAntes = filas.some((f) => f.adiestrador === adiestrador);
     const actual = filas.find((f) => f.adiestrador === adiestrador)
       || { adiestrador, precioEvaluacion: 0, precioClase: 0 };
     const nueva = { ...actual, ...cambios };
@@ -1464,7 +1473,12 @@ function useTarifas(sessionVersion) {
     });
     const { error } = await supabase.from("tarifas_adiestrador")
       .upsert(tarifaToDb(nueva), { onConflict: "adiestrador" });
-    if (error) showToast(`No se pudo guardar la tarifa: ${error.message}`);
+    if (error) {
+      showToast(`No se pudo guardar la tarifa: ${error.message}`);
+      // Si no existía antes (era la fila con ceros que arma "actual" más
+      // arriba), se saca de la lista en vez de dejar la fila optimista.
+      setFilas((prev) => existiaAntes ? prev.map((f) => (f.adiestrador === adiestrador ? actual : f)) : prev.filter((f) => f.adiestrador !== adiestrador));
+    }
   }
 
   return [filas, actualizar, cargando];
@@ -1587,8 +1601,10 @@ function useLecturaChatEquipo(userEmail, sessionVersion) {
   useEffect(() => {
     if (!userEmail || sessionVersion == null) return;
     let activo = true;
-    supabase.from("mensajes_equipo_lecturas").select("ultima_lectura").eq("usuario_email", userEmail).maybeSingle().then(({ data }) => {
-      if (activo) setUltimaLectura(data?.ultima_lectura || null);
+    supabase.from("mensajes_equipo_lecturas").select("ultima_lectura").eq("usuario_email", userEmail).maybeSingle().then(({ data, error }) => {
+      if (!activo) return;
+      if (error) showToast(`No se pudo cargar la lectura del chat: ${error.message}`);
+      else setUltimaLectura(data?.ultima_lectura || null);
     });
     return () => { activo = false; };
   }, [userEmail, sessionVersion]);
