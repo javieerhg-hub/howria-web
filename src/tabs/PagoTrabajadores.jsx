@@ -37,6 +37,23 @@ function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEspe
   return n;
 }
 
+// Monto real del cliente en el rango — a diferencia de "realizados *
+// tarifa", día por día, porque un paseo puntual puede estar repartido con
+// otro paseador (Coordinación, "Compartir con...") y entonces el
+// paseador principal se queda solo con el resto del porcentaje.
+function montoRealizadoEnRango(registroPaseos, clienteId, desde, hasta, paseadorEsperado, tarifa) {
+  let monto = 0;
+  const cur = new Date(desde);
+  while (cur < hasta) {
+    const r = registroPaseos[`${clienteId}_${fechaKey(cur)}`];
+    if (r?.realizado && (!paseadorEsperado || !r.paseadorNombre || r.paseadorNombre === paseadorEsperado)) {
+      monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return monto;
+}
+
 export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
   const [periodoOffset, setPeriodoOffset] = useState(0);
@@ -122,7 +139,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       const realizadosRaw = realizadosEnRango(registroPaseos, c.id, desde, hastaEfectivo, nombre);
       const realizados = Math.min(realizadosRaw, programados || realizadosRaw);
       const tarifa = Number(c.tarifaPaseador || 0);
-      const montoCliente = realizados * tarifa;
+      const montoCliente = montoRealizadoEnRango(registroPaseos, c.id, desde, hastaEfectivo, nombre, tarifa);
 
       // ¿la boleta de este cliente para el mes actual ya está pagada?
       const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesActual] && b.anio === anioActual);
@@ -134,6 +151,29 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       mapa[nombre].realizados += realizados;
       if (asegurado) mapa[nombre].montoAsegurado += montoCliente;
       else mapa[nombre].montoProyectado += montoCliente;
+    });
+
+    // Créditos de paseos compartidos: quien ayudó a otro paseador en un
+    // paseo puntual (ver Coordinación, "Compartir con...") también debe
+    // cobrarlo acá — antes solo se veía reflejado en su "Tu pago"
+    // personal, nunca en el pago real. Recorre TODOS los clientes con
+    // paseador asignado, no solo los del beneficiario, porque justamente
+    // no es dueño de ese cliente.
+    clientes.filter((c) => c.paseadorNombre).forEach((c) => {
+      const tarifa = Number(c.tarifaPaseador || 0);
+      const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesActual] && b.anio === anioActual);
+      const asegurado = facturaMes?.estado === "pagada";
+      const cur = new Date(desde);
+      while (cur < hastaEfectivo) {
+        const r = registroPaseos[`${c.id}_${fechaKey(cur)}`];
+        if (r?.realizado && r.compartidoCon) {
+          const montoCompartido = (tarifa * (r.porcentajeCompartido ?? 50)) / 100;
+          if (!mapa[r.compartidoCon]) mapa[r.compartidoCon] = { paseador: r.compartidoCon, clientes: 0, programados: 0, realizados: 0, montoAsegurado: 0, montoProyectado: 0 };
+          if (asegurado) mapa[r.compartidoCon].montoAsegurado += montoCompartido;
+          else mapa[r.compartidoCon].montoProyectado += montoCompartido;
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
     });
 
     return Object.values(mapa)

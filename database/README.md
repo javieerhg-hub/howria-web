@@ -124,6 +124,7 @@ no un runner de migraciones.
 | 096 | `cerrar_solo_autenticados_staff.sql` | 2026-08-19 | Cierra la política heredada "solo_autenticados" (cualquier sesión autenticada, incluyendo clientes) en `objetivos_semanales`, `objetivos_mensuales`, `tareas_equipo` (pasan a solo staff) y `prospectos` (pasa a coordinador/administrador, dejando intacta la excepción de 055 para el entrenador) — hallado en la misma auditoría. |
 | 097 | `citas_agenda_entrenador_todas.sql` | 2026-08-19 | Amplía select/insert/update/delete de `citas_agenda` al rol entrenador para cualquier cita (no solo la propia) — la pestaña Agenda ya mostraba el filtro y el selector "Entrenador" sin restricción, pero la RLS solo dejaba pasar las citas propias; mismo nivel que coordinador/administrador, confirmado por Javier. |
 | 098 | `registro_paseos_reparto.sql` | 2026-08-19 | Agrega `paseador_compartido`/`porcentaje_compartido` a `registro_paseos` — permite repartir el pago de un paseo puntual entre dos paseadores (ej. uno empezó la ronda y otro la terminó), con porcentaje ajustable desde Coordinación ("Compartir con..."). |
+| 099 | `registro_paseos_reparto_seguridad.sql` | 2026-08-19 | Cierra un hueco hallado en la auditoría técnica: agrega un `check` de rango (1-99) a `porcentaje_compartido` y un trigger que bloquea escribir `paseador_compartido`/`porcentaje_compartido` a cualquiera que no sea coordinador/administrador/entrenador — antes cualquier paseador podía repartirse pago a sí mismo llamando directo a la API, sin pasar por Coordinación. |
 
 ## Nota sobre el orden 001–023
 
