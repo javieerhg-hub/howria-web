@@ -118,6 +118,8 @@ no un runner de migraciones.
 | 090 | `entregas_inventario.sql` | 2026-08-18 | Crea `entregas_inventario` (registro con fecha de qué equipo entregado a cada paseador/entrenador: collares, correas, poleras, polerones, accesorios — solo coordinación/administración). |
 | 091 | `permisos_roles_tab_inventario.sql` | 2026-08-18 | Registra la pestaña nueva "Inventario" en `permisos_roles`, solo para coordinador/administrador. |
 | 092 | `paseos_reprogramados.sql` | 2026-08-18 | Crea `paseos_reprogramados` (mover un paseo puntual a otro día, sin tocar `dias_habituales` del cliente, agregada a `supabase_realtime`) — nueva sección "Reprogramar paseos" en Coordinación. |
+| 093 | `permisos_roles_entrenador_coordinacion.sql` | 2026-08-18 | Le da acceso a la pestaña "Coordinación" al rol entrenador (Hoy, Semana y Reprogramar paseos — Coordinación no tiene permisos por sección). |
+| 094 | `registro_paseos_reprogramados_entrenador.sql` | 2026-08-18 | Amplía las políticas RLS de `registro_paseos`, `paseos_reprogramados` y `fase_dia_paseador` para que el entrenador (093) pueda ver/marcar/reprogramar el paseo de cualquier paseador, no solo el suyo — mismo nivel que coordinador/administrador. |
 
 ## Nota sobre el orden 001–023
 
