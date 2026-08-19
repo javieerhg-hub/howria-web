@@ -25,7 +25,7 @@ const UMBRAL_SOBRECARGA = 8;
 // Bloque plegable para no mostrar toda la pestaña Coordinación de una en
 // celular — "Hoy" abierto por defecto, el resto a un toque de distancia.
 
-function FilaCalendarioCliente({ item, usuarios, equipoPaseo, diaVista, hoy, onToggleRealizado, onToggleCancelado, onReasignar, onGuardarNota, onCompartir }) {
+function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizado, onToggleCancelado, onReasignar, onGuardarNota, onAbrirCompartir }) {
   const [masAbierto, setMasAbierto] = useState(false);
   const { cliente: c, estado, nota, atrasado, compartidoCon, porcentajeCompartido } = item;
   const colorEstado = estado === "realizado" ? "#2F6A46" : estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
@@ -66,24 +66,13 @@ function FilaCalendarioCliente({ item, usuarios, equipoPaseo, diaVista, hoy, onT
           <input defaultValue={nota} placeholder="nota..." onBlur={(e) => onGuardarNota(e.target.value)}
             style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
           {estado === "realizado" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <select value={compartidoCon || ""} onChange={(e) => onCompartir(e.target.value, e.target.value ? (porcentajeCompartido ?? 50) : null)}
-                style={{ flex: 1, fontSize: 11.5, padding: "6px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
-                <option value="">Compartir con...</option>
-                {equipoPaseo.filter((u) => u.nombre !== c.paseadorNombre).map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
-              </select>
-              {compartidoCon && (
-                <input type="number" min={1} max={99} value={porcentajeCompartido ?? 50}
-                  onChange={(e) => onCompartir(compartidoCon, Math.min(99, Math.max(1, Number(e.target.value) || 50)))}
-                  title="% para el paseador con quien comparte"
-                  style={{ width: 54, flex: "none", fontSize: 11.5, padding: "6px 4px", borderRadius: 6, border: "1px solid #E4DBC3", textAlign: "center" }} />
-              )}
-            </div>
-          )}
-          {compartidoCon && (
-            <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C" }}>
-              {100 - (porcentajeCompartido ?? 50)}% para {c.paseadorNombre} · {porcentajeCompartido ?? 50}% para {compartidoCon}
-            </p>
+            <button onClick={onAbrirCompartir}
+              style={{
+                border: `1px dashed ${GOLD}`, background: compartidoCon ? "#FBF3E0" : "none", color: NAVY, borderRadius: 7,
+                padding: "8px 8px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", textAlign: "center",
+              }}>
+              {compartidoCon ? `🤝 Compartido con ${compartidoCon} (${porcentajeCompartido ?? 50}%)` : "🤝 Compartir con otro paseador"}
+            </button>
           )}
         </div>
       )}
@@ -174,6 +163,45 @@ function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, onConfirmar, onC
           <button onClick={onConfirmar} disabled={cargando || !fecha} style={{ ...botonPrincipal, width: "auto", flex: 1, opacity: cargando || !fecha ? 0.6 : 1 }}>
             {cargando ? "Moviendo…" : "Confirmar"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// La tarjeta de cada cliente en "Hoy" es angosta (grilla de 2 columnas) —
+// no alcanza el espacio para un select + un número ahí adentro sin que
+// quede apretado. Mismo motivo por el que el reparto vive en un modal
+// aparte, no inline como "Reasignar a...".
+function ModalCompartirPaseo({ item, equipoPaseo, nombre, porcentaje, onNombre, onPorcentaje, onGuardar, onCerrar }) {
+  const { cliente: c } = item;
+  const otros = equipoPaseo.filter((u) => u.nombre !== c.paseadorNombre);
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Compartir paseo</h3>
+        <p style={{ ...hint, marginTop: -2 }}>{c.nombre} — 🐾 {c.perro}. Reparte el pago de hoy entre {c.paseadorNombre} y otro paseador.</p>
+        <label style={label}>Compartir con</label>
+        {otros.length === 0 ? (
+          <p style={{ ...hint, marginTop: -4 }}>No hay otro paseador/entrenador con quien compartir este paseo.</p>
+        ) : (
+          <select value={nombre} onChange={(e) => onNombre(e.target.value)} style={{ ...input, marginBottom: 16 }}>
+            <option value="">Sin compartir</option>
+            {otros.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+        )}
+        {nombre && (
+          <>
+            <label style={label}>Porcentaje para {nombre}</label>
+            <input type="number" min={1} max={99} value={porcentaje}
+              onChange={(e) => onPorcentaje(Math.min(99, Math.max(1, Number(e.target.value) || 50)))}
+              style={{ ...input, marginBottom: 6 }} />
+            <p style={{ ...hint, marginTop: 0 }}>{100 - porcentaje}% para {c.paseadorNombre} · {porcentaje}% para {nombre}</p>
+          </>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={onCerrar} style={botonSecundario}>Cancelar</button>
+          <button onClick={onGuardar} style={{ ...botonPrincipal, width: "auto", flex: 1 }}>Guardar</button>
         </div>
       </div>
     </div>
@@ -400,6 +428,20 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     }));
   }
 
+  const [compartirModal, setCompartirModal] = useState(null);
+  const [compartirNombre, setCompartirNombre] = useState("");
+  const [compartirPorcentaje, setCompartirPorcentaje] = useState(50);
+
+  function abrirCompartir(item) {
+    setCompartirNombre(item.compartidoCon || "");
+    setCompartirPorcentaje(item.porcentajeCompartido ?? 50);
+    setCompartirModal(item);
+  }
+  function confirmarCompartir() {
+    guardarCompartidoDia(compartirModal.cliente.id, diaVista, compartirNombre, compartirPorcentaje);
+    setCompartirModal(null);
+  }
+
   // Todo cliente con paseador asignado — no solo los de hoy, porque el
   // origen de un movimiento suele ser un día pasado que ya no aparece en
   // "Hoy" (ya se marcó cancelado, o quedó atrás con el navegador de días).
@@ -485,6 +527,11 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           onConfirmar={reprogramarRapido} onCerrar={() => setReprogramarModal(null)} cargando={reprogramandoRapido} />
       )}
 
+      {compartirModal && (
+        <ModalCompartirPaseo item={compartirModal} equipoPaseo={equipoPaseo} nombre={compartirNombre} porcentaje={compartirPorcentaje}
+          onNombre={setCompartirNombre} onPorcentaje={setCompartirPorcentaje} onGuardar={confirmarCompartir} onCerrar={() => setCompartirModal(null)} />
+      )}
+
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Resumen de hoy</h2>
         <p style={hint}>Toca a alguien del equipo para ver solo lo suyo — el resumen y las tarjetas de abajo se acotan a esa persona.</p>
@@ -561,12 +608,12 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                     {items.map((item) => (
-                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} equipoPaseo={equipoPaseo} diaVista={diaVista} hoy={hoy}
+                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} diaVista={diaVista} hoy={hoy}
                         onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
                         onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
                         onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
                         onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)}
-                        onCompartir={(nombre, porcentaje) => guardarCompartidoDia(item.cliente.id, diaVista, nombre, porcentaje)} />
+                        onAbrirCompartir={() => abrirCompartir(item)} />
                     ))}
                   </div>
                 </div>
