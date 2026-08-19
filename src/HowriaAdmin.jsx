@@ -2576,6 +2576,15 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const dow = (diaActivo.getDay() + 6) % 7;
   const clientesDelDia = misClientes.filter((c) => estaProgramadoEnFecha(c, diaActivo, reprogramaciones));
 
+  // Perros de OTROS paseadores que un coordinador compartió conmigo ese
+  // día (ver Coordinación, "Compartir con...") — no son mis clientes, pero
+  // ese día sí ayudé a pasearlos, así que también deben verse en mi ruta.
+  // Recorre `clientes` completo (no `misClientes`) justamente por eso.
+  const clientesCompartidosDelDia = clientes
+    .filter((c) => c.paseadorNombre !== user.nombre)
+    .map((c) => ({ cliente: c, registro: registroPaseos[`${c.id}_${fechaKey(diaActivo)}`] }))
+    .filter(({ registro }) => registro?.realizado && registro?.compartidoCon === user.nombre);
+
   function cambiarDia(delta) {
     const d = new Date(diaSel + "T00:00:00");
     d.setDate(d.getDate() + delta);
@@ -2809,6 +2818,31 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
               );
             })}
           </div>
+        )}
+
+        {clientesCompartidosDelDia.length > 0 && (
+          <>
+            <p style={{ ...label, marginTop: 18 }}>Paseos compartidos contigo este día</p>
+            <div style={{ display: "grid", gap: 10 }}>
+              {clientesCompartidosDelDia.map(({ cliente: c, registro }) => (
+                <div key={c.id} style={{ padding: "14px 16px", borderRadius: 8, border: `1.5px dashed ${GOLD}`, background: "#FBF3E0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+                      <div>
+                        <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{c.nombre}</div>
+                        <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>🐾 {c.perro}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "#F3E3B4", borderRadius: 20, padding: "5px 11px" }}>
+                      🤝 Mitad y mitad — {registro.porcentajeCompartido ?? 50}% para ti
+                    </span>
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>Su paseador habitual es {c.paseadorNombre} — ayudaste con este paseo ese día.</p>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
