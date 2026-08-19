@@ -120,6 +120,9 @@ no un runner de migraciones.
 | 092 | `paseos_reprogramados.sql` | 2026-08-18 | Crea `paseos_reprogramados` (mover un paseo puntual a otro día, sin tocar `dias_habituales` del cliente, agregada a `supabase_realtime`) — nueva sección "Reprogramar paseos" en Coordinación. |
 | 093 | `permisos_roles_entrenador_coordinacion.sql` | 2026-08-18 | Le da acceso a la pestaña "Coordinación" al rol entrenador (Hoy, Semana y Reprogramar paseos — Coordinación no tiene permisos por sección). |
 | 094 | `registro_paseos_reprogramados_entrenador.sql` | 2026-08-18 | Amplía las políticas RLS de `registro_paseos`, `paseos_reprogramados` y `fase_dia_paseador` para que el entrenador (093) pueda ver/marcar/reprogramar el paseo de cualquier paseador, no solo el suyo — mismo nivel que coordinador/administrador. |
+| 095 | `boletas_paseo_entrenador.sql` | 2026-08-19 | Amplía select/insert/update de `boletas` (boletas de paseo) al rol entrenador — la pestaña ya lo dejaba entrar a "Paseos" pero la RLS seguía en coordinador/administrador únicamente, hallado en la auditoría de permisos vs. RLS. |
+| 096 | `cerrar_solo_autenticados_staff.sql` | 2026-08-19 | Cierra la política heredada "solo_autenticados" (cualquier sesión autenticada, incluyendo clientes) en `objetivos_semanales`, `objetivos_mensuales`, `tareas_equipo` (pasan a solo staff) y `prospectos` (pasa a coordinador/administrador, dejando intacta la excepción de 055 para el entrenador) — hallado en la misma auditoría. |
+| 097 | `citas_agenda_entrenador_todas.sql` | 2026-08-19 | Amplía select/insert/update/delete de `citas_agenda` al rol entrenador para cualquier cita (no solo la propia) — la pestaña Agenda ya mostraba el filtro y el selector "Entrenador" sin restricción, pero la RLS solo dejaba pasar las citas propias; mismo nivel que coordinador/administrador, confirmado por Javier. |
 
 ## Nota sobre el orden 001–023
 
