@@ -1,7 +1,8 @@
 // Pestaña Coordinación — quién pasea a quién hoy, reparto semanal y
 // reprogramar paseos puntuales. Ver src/HowriaAdmin.jsx (React.lazy) por
 // la lista completa de pestañas y src/tabs/_compartido.jsx para lo compartido.
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { CalendarClock, CheckCircle2 } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, Spinner, BotonEliminar, fechaKey, inicioSemana, showToast,
@@ -70,6 +71,95 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
   );
 }
 
+// Fila de la sección "Paseos de hoy" — deslizar a la izquierda (arrastrar
+// con el dedo o el mouse) revela el botón "Reprogramar", mismo mecanismo
+// de puntero (pointer events, funciona con touch y mouse) que ya usa
+// DeslizarParaCompletar en RutaGuiada.jsx, pero acá el gesto revela un
+// botón fijo en vez de completar una acción al soltar.
+const ANCHO_ACCION_SWIPE = 108;
+
+function FilaSwipeReprogramar({ item, yaReprogramada, onReprogramar }) {
+  const [dx, setDx] = useState(0);
+  const [arrastrando, setArrastrando] = useState(false);
+  const inicioXRef = useRef(null);
+  const abiertoRef = useRef(false);
+
+  function iniciar(e) {
+    inicioXRef.current = e.clientX;
+    setArrastrando(true);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function mover(e) {
+    if (!arrastrando || inicioXRef.current === null) return;
+    const delta = e.clientX - inicioXRef.current;
+    const base = abiertoRef.current ? -ANCHO_ACCION_SWIPE : 0;
+    setDx(Math.min(0, Math.max(-ANCHO_ACCION_SWIPE, base + delta)));
+  }
+  function soltar() {
+    if (!arrastrando) return;
+    setArrastrando(false);
+    const abrir = dx <= -ANCHO_ACCION_SWIPE / 2;
+    abiertoRef.current = abrir;
+    setDx(abrir ? -ANCHO_ACCION_SWIPE : 0);
+  }
+
+  const { cliente: c, estado, atrasado } = item;
+  const colorEstado = estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
+  const bgEstado = estado === "cancelado" ? "#F1DCD2" : atrasado ? "#F1DCD2" : "#F3E3B4";
+  const textoEstado = estado === "cancelado" ? "Cliente canceló" : atrasado ? "⚠️ Atrasado" : "Pendiente";
+
+  return (
+    <div style={{ position: "relative", borderRadius: 10, overflow: "hidden" }}>
+      <button onClick={() => !arrastrando && onReprogramar()} disabled={yaReprogramada}
+        style={{
+          position: "absolute", top: 0, right: 0, bottom: 0, width: ANCHO_ACCION_SWIPE, border: "none",
+          background: yaReprogramada ? "#C4BCA0" : NAVY, color: CREAM, fontSize: 11.5, fontWeight: 700,
+          cursor: yaReprogramada ? "default" : "pointer", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 4,
+        }}>
+        <CalendarClock size={16} />
+        Reprogramar
+      </button>
+      <div onPointerDown={iniciar} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={soltar}
+        style={{
+          position: "relative", transform: `translateX(${dx}px)`, transition: arrastrando ? "none" : "transform .2s ease",
+          touchAction: "pan-y", userSelect: "none", background: atrasado ? "#FBEEEA" : CREAM_SOFT, borderRadius: 10,
+          padding: "10px 12px", display: "flex", alignItems: "center", gap: 10,
+        }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "#FFFFFF" }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} · 🐾 {c.perro}</p>
+          <p style={{ margin: 0, fontSize: 11, color: "#8A7E5C" }}>{c.horaHabitual || "—"}</p>
+        </div>
+        {yaReprogramada ? (
+          <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#E3E9EF", color: "#5C6B7A", flex: "none" }}>→ Reprogramado</span>
+        ) : (
+          <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: bgEstado, color: colorEstado, flex: "none" }}>{textoEstado}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, onConfirmar, onCerrar, cargando }) {
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 340, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Reprogramar paseo</h3>
+        <p style={{ ...hint, marginTop: -2 }}>{cliente.nombre} — 🐾 {cliente.perro}. Hoy no se hizo — ¿para qué día lo movemos?</p>
+        <label style={label}>Nueva fecha</label>
+        <input type="date" value={fecha} min={fechaKey(hoy)} onChange={(e) => onFecha(e.target.value)} style={{ ...input, marginBottom: 16 }} autoFocus />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onCerrar} style={botonSecundario}>Cancelar</button>
+          <button onClick={onConfirmar} disabled={cargando || !fecha} style={{ ...botonPrincipal, width: "auto", flex: 1, opacity: cargando || !fecha ? 0.6 : 1 }}>
+            {cargando ? "Moviendo…" : "Confirmar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   // Filtro de "Todos"/un paseador puntual — vive arriba del todo de la
@@ -88,6 +178,14 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [moviendoPaseo, setMoviendoPaseo] = useState(false);
   const [diaSemanaMovil, setDiaSemanaMovil] = useState(dowHoy);
   const inicioSemana = inicioSemanaActual();
+
+  // Sección "Paseos de hoy" (al inicio de la pestaña) — independiente del
+  // navegador de días de más abajo ("Hoy"/diaOffset): siempre muestra el
+  // día de hoy, sea cual sea el día que se esté mirando en el detalle.
+  const [vistaRapida, setVistaRapida] = useState("no_realizados");
+  const [reprogramarModal, setReprogramarModal] = useState(null);
+  const [fechaRapida, setFechaRapida] = useState("");
+  const [reprogramandoRapido, setReprogramandoRapido] = useState(false);
 
   const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset]);
   const dowVista = (diaVista.getDay() + 6) % 7;
@@ -121,36 +219,80 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     setTab("mapa");
   }
 
-  const calendarioDia = useMemo(() => {
+  function construirEstadoDia(fecha, esVistaHoy) {
     const ahora = new Date();
     return clientes
-      .filter((c) => estaProgramadoEnFecha(c, diaVista, reprogramaciones))
+      .filter((c) => estaProgramadoEnFecha(c, fecha, reprogramaciones))
       .map((c) => {
-        const key = `${c.id}_${fechaKey(diaVista)}`;
+        const key = `${c.id}_${fechaKey(fecha)}`;
         const registro = registroPaseos[key];
         const estado = registro?.realizado ? "realizado" : registro?.cancelado ? "cancelado" : "pendiente";
         let atrasado = false;
-        if (esHoyVista && estado === "pendiente" && c.horaHabitual) {
+        if (esVistaHoy && estado === "pendiente" && c.horaHabitual) {
           const [h, m] = c.horaHabitual.split(":").map(Number);
-          const horaProgramada = new Date(diaVista);
+          const horaProgramada = new Date(fecha);
           horaProgramada.setHours(h, m, 0, 0);
           atrasado = ahora > horaProgramada;
         }
         return { cliente: c, estado, nota: registro?.nota || "", atrasado };
       })
       .sort((a, b) => (a.cliente.horaHabitual || "99:99").localeCompare(b.cliente.horaHabitual || "99:99"));
-  }, [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
+  }
 
-  const calendarioPorPaseador = useMemo(() => {
+  function agruparPorPaseador(items) {
     const grupos = {};
-    calendarioDia.forEach((item) => {
+    items.forEach((item) => {
       const nombre = item.cliente.paseadorNombre || "Sin asignar";
       (grupos[nombre] ||= []).push(item);
     });
     return Object.entries(grupos)
       .map(([paseador, items]) => ({ paseador, items }))
       .sort((a, b) => a.paseador.localeCompare(b.paseador, "es"));
-  }, [calendarioDia]);
+  }
+
+  const calendarioDia = useMemo(() => construirEstadoDia(diaVista, esHoyVista), [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
+  const calendarioPorPaseador = useMemo(() => agruparPorPaseador(calendarioDia), [calendarioDia]);
+
+  // Sección "Paseos de hoy" — siempre el día de hoy de verdad, no diaVista.
+  const calendarioHoy = useMemo(() => construirEstadoDia(hoy, true), [clientes, registroPaseos, tickReloj, reprogramaciones]);
+  const calendarioHoyPorPaseador = useMemo(
+    // "Sin asignar" queda afuera — reprogramar necesita un paseador
+    // asignado (mismo requisito que ya tiene la sección "Reprogramar
+    // paseos" de más abajo, clientesConPaseador).
+    () => agruparPorPaseador(calendarioHoy).filter((g) => g.paseador !== "Sin asignar"),
+    [calendarioHoy]
+  );
+  const gruposVistaRapida = useMemo(() => {
+    return calendarioHoyPorPaseador
+      .map(({ paseador, items }) => ({
+        paseador,
+        items: items.filter((item) => (vistaRapida === "no_realizados" ? item.estado !== "realizado" : item.estado === "realizado")),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [calendarioHoyPorPaseador, vistaRapida]);
+  const totalNoRealizadosHoy = calendarioHoy.filter((i) => i.estado !== "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
+  const totalRealizadosHoy = calendarioHoy.filter((i) => i.estado === "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
+
+  function abrirReprogramarRapido(cliente) {
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+    setFechaRapida(fechaKey(manana));
+    setReprogramarModal(cliente);
+  }
+
+  async function reprogramarRapido() {
+    const cliente = reprogramarModal;
+    if (!cliente || !fechaRapida || reprogramandoRapido) return;
+    setReprogramandoRapido(true);
+    const fechaNuevaDate = new Date(fechaRapida + "T00:00:00");
+    const ok = await moverPaseo({ cliente, fechaOrigen: hoy, fechaNueva: fechaNuevaDate, motivo: "", creadoPor: user.nombre });
+    if (ok) {
+      actualizarRegistroDia(cliente.id, hoy, { cancelado: true, realizado: false });
+      showToast(`Paseo de ${cliente.nombre} reprogramado a ${fechaNuevaDate.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} — a ${cliente.paseadorNombre} le va a aparecer ese día.`, "exito");
+      setReprogramarModal(null);
+    }
+    setReprogramandoRapido(false);
+  }
 
   // El mismo filtro de arriba también acota qué tarjetas de "Hoy" se ven
   // (sea cual sea el día que se esté mirando con Anterior/Siguiente) — no
@@ -253,6 +395,58 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="howria-card" style={tarjeta}>
+        <h2 style={sectionTitle}>Paseos de hoy</h2>
+        <p style={hint}>Quién falta por marcar, agrupado por paseador. Desliza un paseo sin marcar hacia la izquierda para reprogramarlo al tiro.</p>
+        <div role="group" aria-label="No realizados o realizados" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button type="button" onClick={() => setVistaRapida("no_realizados")} aria-pressed={vistaRapida === "no_realizados"}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: vistaRapida === "no_realizados" ? RUST : CREAM_SOFT, color: vistaRapida === "no_realizados" ? "#FFFFFF" : INK }}>
+            No realizados ({totalNoRealizadosHoy})
+          </button>
+          <button type="button" onClick={() => setVistaRapida("realizados")} aria-pressed={vistaRapida === "realizados"}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: vistaRapida === "realizados" ? "#2F6A46" : CREAM_SOFT, color: vistaRapida === "realizados" ? "#FFFFFF" : INK }}>
+            Realizados ({totalRealizadosHoy})
+          </button>
+        </div>
+
+        {cargandoClientes ? (
+          <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+        ) : gruposVistaRapida.length === 0 ? (
+          <p style={hint}>{vistaRapida === "no_realizados" ? "Todo marcado — no queda ningún paseo pendiente hoy. 🎉" : "Todavía nadie ha sido marcado como realizado hoy."}</p>
+        ) : (
+          <div style={{ display: "grid", gap: 18 }}>
+            {gruposVistaRapida.map(({ paseador, items }) => (
+              <div key={paseador}>
+                <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 700, color: NAVY }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· {items.length}</span></p>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {items.map((item) =>
+                    vistaRapida === "no_realizados" ? (
+                      <FilaSwipeReprogramar key={item.cliente.id} item={item}
+                        yaReprogramada={reprogramaciones.some((r) => r.clienteId === item.cliente._dbId && r.fechaOrigen === fechaKey(hoy))}
+                        onReprogramar={() => abrirReprogramarRapido(item.cliente)} />
+                    ) : (
+                      <div key={item.cliente.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#D8ECDE", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", flex: "none", background: item.cliente.fotoUrl ? `url(${item.cliente.fotoUrl}) center/cover` : "#FFFFFF" }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.cliente.nombre} · 🐾 {item.cliente.perro}</p>
+                          <p style={{ margin: 0, fontSize: 11, color: "#2E5C41" }}>{item.cliente.horaHabitual || "—"}</p>
+                        </div>
+                        <CheckCircle2 size={16} color="#2F6A46" />
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {reprogramarModal && (
+        <ModalReprogramarRapido cliente={reprogramarModal} hoy={hoy} fecha={fechaRapida} onFecha={setFechaRapida}
+          onConfirmar={reprogramarRapido} onCerrar={() => setReprogramarModal(null)} cargando={reprogramandoRapido} />
+      )}
+
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Resumen de hoy</h2>
         <p style={hint}>Toca a alguien del equipo para ver solo lo suyo — el resumen y las tarjetas de abajo se acotan a esa persona.</p>
