@@ -9,6 +9,7 @@ import {
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable } from "../lib/calculosBoletas.js";
+import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
 
 function variacion(actual, anterior) {
@@ -272,7 +273,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         // Reparto entre dos paseadores para un paseo puntual (ver
         // Coordinación, "Compartir con...") — a este paseador le queda el
         // resto del porcentaje, no el 100%.
-        monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+        monto += montoPrincipal(tarifa, r);
       });
       // "faltantes": de los días netos de cancelación, los que ya deberían
       // haberse hecho (el rango nunca pasa de hoy, ver finPaseador arriba)
@@ -294,7 +295,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         const clienteIdLocal = Number(key.slice(0, idx));
         const cliente = clientesProp.find((c) => c.id === clienteIdLocal);
         if (!cliente) return null;
-        return { cliente, fecha, monto: (Number(cliente.tarifaPaseador || 0) * (r.porcentajeCompartido ?? 50)) / 100 };
+        return { cliente, fecha, monto: montoCompartido(Number(cliente.tarifaPaseador || 0), r) };
       })
       .filter(Boolean);
     const totalCompartidoPaseador = misPaseosCompartidos.reduce((acc, x) => acc + x.monto, 0);

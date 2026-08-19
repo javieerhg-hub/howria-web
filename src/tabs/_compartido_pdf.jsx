@@ -249,61 +249,6 @@ export function dibujarCalendarioBoleta(ctx, x, yTop, width, mesIdx, anio, diasM
   return 46 + filasGrid * rowH + 32;
 }
 
-// Dibuja una pequeña huella de perro (almohadilla + 4 deditos) centrada en (x, y)
-export function dibujarHuella(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-0.35);
-
-  // almohadilla central
-  ctx.beginPath();
-  ctx.ellipse(0, size * 0.35, size * 0.42, size * 0.34, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 4 deditos alrededor
-  const dedos = [
-    { dx: -size * 0.5, dy: -size * 0.25, r: size * 0.22 },
-    { dx: -size * 0.18, dy: -size * 0.48, r: size * 0.23 },
-    { dx: size * 0.18, dy: -size * 0.48, r: size * 0.23 },
-    { dx: size * 0.5, dy: -size * 0.25, r: size * 0.22 },
-  ];
-  dedos.forEach((d) => {
-    ctx.beginPath();
-    ctx.ellipse(d.dx, d.dy, d.r * 0.8, d.r, 0, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  ctx.restore();
-}
-
-export function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-export function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = text.split(" ");
-  let line = "";
-  let curY = y;
-  for (let n = 0; n < words.length; n++) {
-    const test = line + words[n] + " ";
-    if (ctx.measureText(test).width > maxWidth && line !== "") {
-      ctx.fillText(line, x, curY);
-      line = words[n] + " ";
-      curY += lineHeight;
-    } else {
-      line = test;
-    }
-  }
-  ctx.fillText(line, x, curY);
-}
-
 // ---------- Generador de boletas: formulario de paseos ----------
 
 export function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg) {

@@ -8,6 +8,7 @@ import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
+import { montoPrincipal, montoCompartido } from "./lib/reparto.js";
 
 // Cada pestaña (menos Inicio/Mis paseos) vive en su propio archivo bajo
 // ./tabs/, cargado solo cuando de verdad se entra a esa pestaña — así un
@@ -2638,7 +2639,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
       // Coordinación, "Compartir con..."), a mí me queda el resto del
       // porcentaje, no el 100% — el otro tanto aparece en "Paseos que
       // compartiste" de quien me ayudó, más abajo.
-      monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+      monto += montoPrincipal(tarifa, r);
     });
     return { cliente: c, programados: diasValidos.length, realizados, monto };
   });
@@ -2652,7 +2653,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
       const clienteIdLocal = Number(key.slice(0, key.indexOf("_")));
       const cliente = clientes.find((c) => c.id === clienteIdLocal);
       if (!cliente) return null;
-      return { cliente, fecha: key.slice(key.indexOf("_") + 1), monto: (Number(cliente.tarifaPaseador || 0) * (r.porcentajeCompartido ?? 50)) / 100 };
+      return { cliente, fecha: key.slice(key.indexOf("_") + 1), monto: montoCompartido(Number(cliente.tarifaPaseador || 0), r) };
     })
     .filter(Boolean);
   const totalCompartidoMes = misPaseosCompartidos.reduce((acc, x) => acc + x.monto, 0);

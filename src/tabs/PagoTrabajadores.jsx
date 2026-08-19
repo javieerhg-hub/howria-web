@@ -9,6 +9,7 @@ import {
   fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo,
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
+import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
 
 function programadosEnRango(cliente, desde, hasta, registroPaseos = {}) {
   let n = 0;
@@ -47,7 +48,7 @@ function montoRealizadoEnRango(registroPaseos, clienteId, desde, hasta, paseador
   while (cur < hasta) {
     const r = registroPaseos[`${clienteId}_${fechaKey(cur)}`];
     if (r?.realizado && (!paseadorEsperado || !r.paseadorNombre || r.paseadorNombre === paseadorEsperado)) {
-      monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+      monto += montoPrincipal(tarifa, r);
     }
     cur.setDate(cur.getDate() + 1);
   }
@@ -167,10 +168,9 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       while (cur < hastaEfectivo) {
         const r = registroPaseos[`${c.id}_${fechaKey(cur)}`];
         if (r?.realizado && r.compartidoCon) {
-          const montoCompartido = (tarifa * (r.porcentajeCompartido ?? 50)) / 100;
           if (!mapa[r.compartidoCon]) mapa[r.compartidoCon] = { paseador: r.compartidoCon, clientes: 0, programados: 0, realizados: 0, montoAsegurado: 0, montoProyectado: 0 };
-          if (asegurado) mapa[r.compartidoCon].montoAsegurado += montoCompartido;
-          else mapa[r.compartidoCon].montoProyectado += montoCompartido;
+          if (asegurado) mapa[r.compartidoCon].montoAsegurado += montoCompartido(tarifa, r);
+          else mapa[r.compartidoCon].montoProyectado += montoCompartido(tarifa, r);
         }
         cur.setDate(cur.getDate() + 1);
       }
