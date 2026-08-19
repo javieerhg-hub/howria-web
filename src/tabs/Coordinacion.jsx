@@ -438,7 +438,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     setCompartirModal(item);
   }
   function confirmarCompartir() {
-    guardarCompartidoDia(compartirModal.cliente.id, diaVista, compartirNombre, compartirPorcentaje);
+    const cliente = compartirModal.cliente;
+    guardarCompartidoDia(cliente.id, diaVista, compartirNombre, compartirPorcentaje);
+    // Aviso optimista — si el guardado falla de verdad (RLS, conexión),
+    // el toast de error de setRegistroPaseos también va a aparecer justo
+    // después, así que ver los dos juntos es la señal de que algo falló.
+    showToast(
+      compartirNombre
+        ? `Paseo de ${cliente.nombre} compartido con ${compartirNombre} (${compartirPorcentaje}%).`
+        : `Se quitó el reparto del paseo de ${cliente.nombre}.`,
+      "exito"
+    );
     setCompartirModal(null);
   }
 
