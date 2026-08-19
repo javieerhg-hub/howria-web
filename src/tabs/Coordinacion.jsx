@@ -25,9 +25,9 @@ const UMBRAL_SOBRECARGA = 8;
 // Bloque plegable para no mostrar toda la pestaña Coordinación de una en
 // celular — "Hoy" abierto por defecto, el resto a un toque de distancia.
 
-function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizado, onToggleCancelado, onReasignar, onGuardarNota }) {
+function FilaCalendarioCliente({ item, usuarios, equipoPaseo, diaVista, hoy, onToggleRealizado, onToggleCancelado, onReasignar, onGuardarNota, onCompartir }) {
   const [masAbierto, setMasAbierto] = useState(false);
-  const { cliente: c, estado, nota, atrasado } = item;
+  const { cliente: c, estado, nota, atrasado, compartidoCon, porcentajeCompartido } = item;
   const colorEstado = estado === "realizado" ? "#2F6A46" : estado === "cancelado" ? RUST : atrasado ? RUST : "#8A6A1E";
   const bgEstado = estado === "realizado" ? "#D8ECDE" : estado === "cancelado" ? "#F1DCD2" : atrasado ? "#F1DCD2" : "#F3E3B4";
   const textoEstado = estado === "realizado" ? "Realizado" : estado === "cancelado" ? "Cancelado" : atrasado ? "⚠️ Atrasado" : "Pendiente";
@@ -65,6 +65,26 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
           </select>
           <input defaultValue={nota} placeholder="nota..." onBlur={(e) => onGuardarNota(e.target.value)}
             style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E4DBC3", borderRadius: 6 }} />
+          {estado === "realizado" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <select value={compartidoCon || ""} onChange={(e) => onCompartir(e.target.value, e.target.value ? (porcentajeCompartido ?? 50) : null)}
+                style={{ flex: 1, fontSize: 11.5, padding: "6px 8px", borderRadius: 6, border: "1px solid #E4DBC3" }}>
+                <option value="">Compartir con...</option>
+                {equipoPaseo.filter((u) => u.nombre !== c.paseadorNombre).map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+              </select>
+              {compartidoCon && (
+                <input type="number" min={1} max={99} value={porcentajeCompartido ?? 50}
+                  onChange={(e) => onCompartir(compartidoCon, Math.min(99, Math.max(1, Number(e.target.value) || 50)))}
+                  title="% para el paseador con quien comparte"
+                  style={{ width: 54, flex: "none", fontSize: 11.5, padding: "6px 4px", borderRadius: 6, border: "1px solid #E4DBC3", textAlign: "center" }} />
+              )}
+            </div>
+          )}
+          {compartidoCon && (
+            <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C" }}>
+              {100 - (porcentajeCompartido ?? 50)}% para {c.paseadorNombre} · {porcentajeCompartido ?? 50}% para {compartidoCon}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -208,7 +228,14 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   }
   function toggleRealizadoDia(clienteId, fecha) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
-    actualizarRegistroDia(clienteId, fecha, { realizado: !registroPaseos[key]?.realizado, cancelado: false });
+    const marcandoRealizado = !registroPaseos[key]?.realizado;
+    // Al desmarcar un paseo se borra también cualquier reparto que
+    // tuviera — un paseo "no realizado" no debería seguir repartiendo
+    // pago con nadie.
+    actualizarRegistroDia(clienteId, fecha, {
+      realizado: marcandoRealizado, cancelado: false,
+      ...(marcandoRealizado ? {} : { compartidoCon: null, porcentajeCompartido: null }),
+    });
   }
   function toggleCanceladoDia(clienteId, fecha) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
@@ -360,6 +387,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   function guardarNotaDia(clienteId, fecha, nota) {
     const key = `${clienteId}_${fechaKey(fecha)}`;
     setRegistroPaseos((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), nota } }));
+  }
+
+  // Reparto de pago entre dos paseadores para un paseo puntual ya
+  // realizado — no toca cliente.paseadorNombre (eso sigue siendo "el
+  // paseador principal", quien se queda con el resto del porcentaje).
+  function guardarCompartidoDia(clienteId, fecha, compartidoCon, porcentaje) {
+    const key = `${clienteId}_${fechaKey(fecha)}`;
+    setRegistroPaseos((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), compartidoCon: compartidoCon || null, porcentajeCompartido: compartidoCon ? porcentaje : null },
+    }));
   }
 
   // Todo cliente con paseador asignado — no solo los de hoy, porque el
@@ -523,11 +561,12 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                     {items.map((item) => (
-                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} diaVista={diaVista} hoy={hoy}
+                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} equipoPaseo={equipoPaseo} diaVista={diaVista} hoy={hoy}
                         onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
                         onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
                         onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
-                        onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)} />
+                        onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)}
+                        onCompartir={(nombre, porcentaje) => guardarCompartidoDia(item.cliente.id, diaVista, nombre, porcentaje)} />
                     ))}
                   </div>
                 </div>

@@ -263,16 +263,45 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       const claves = [...new Set([...clavesHabituales, ...clavesReprogramadas])];
       const cancelados = claves.filter((k) => registroPaseos[`${c.id}_${k}`]?.cancelado).length;
       const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
-      const realizados = validas.filter((k) => registroPaseos[`${c.id}_${k}`]?.realizado).length;
+      const tarifa = Number(c.tarifaPaseador || 0);
+      let realizados = 0, monto = 0;
+      validas.forEach((k) => {
+        const r = registroPaseos[`${c.id}_${k}`];
+        if (!r?.realizado) return;
+        realizados++;
+        // Reparto entre dos paseadores para un paseo puntual (ver
+        // Coordinación, "Compartir con...") — a este paseador le queda el
+        // resto del porcentaje, no el 100%.
+        monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+      });
       // "faltantes": de los días netos de cancelación, los que ya deberían
       // haberse hecho (el rango nunca pasa de hoy, ver finPaseador arriba)
       // pero todavía no se marcaron — un paseo que se quedó sin registrar.
       const faltantes = validas.length - realizados;
-      return { cliente: c, programados: validas.length, realizados, cancelados, faltantes, monto: realizados * Number(c.tarifaPaseador || 0) };
+      return { cliente: c, programados: validas.length, realizados, cancelados, faltantes, monto };
     });
+
+    // Paseos de clientes ajenos donde este paseador quedó como el segundo
+    // de un reparto — mismo criterio que "Paseos que compartiste" en Mis
+    // Paseos (Tu pago), pero acotado al rango de fechas elegido acá.
+    const desdeKeyPaseador = fechaKey(actualDesde), hastaKeyPaseador = fechaKey(finPaseador);
+    const misPaseosCompartidos = Object.entries(registroPaseos)
+      .filter(([, r]) => r.realizado && r.compartidoCon === user.nombre)
+      .map(([key, r]) => {
+        const idx = key.indexOf("_");
+        const fecha = key.slice(idx + 1);
+        if (fecha < desdeKeyPaseador || fecha > hastaKeyPaseador) return null;
+        const clienteIdLocal = Number(key.slice(0, idx));
+        const cliente = clientesProp.find((c) => c.id === clienteIdLocal);
+        if (!cliente) return null;
+        return { cliente, fecha, monto: (Number(cliente.tarifaPaseador || 0) * (r.porcentajeCompartido ?? 50)) / 100 };
+      })
+      .filter(Boolean);
+    const totalCompartidoPaseador = misPaseosCompartidos.reduce((acc, x) => acc + x.monto, 0);
+
     const totalRealizadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.realizados, 0);
     const totalProgramadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.programados, 0);
-    const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0);
+    const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0) + totalCompartidoPaseador;
 
     function exportarCsvPaseador() {
       const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Cancelados", "Faltantes", "Monto"];
@@ -360,6 +389,27 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               </div>
             ))}
           </div>
+        )}
+
+        {misPaseosCompartidos.length > 0 && (
+          <>
+            <p style={{ ...label, marginTop: 18 }}>Paseos que compartiste</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              {misPaseosCompartidos.map((x, i) => (
+                <div key={i} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #EDE4CE", background: "#FFFFFF", minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: x.cliente.fotoUrl ? `url(${x.cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                    <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.cliente.nombre}</p>
+                  </div>
+                  <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>{new Date(x.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</p>
+                  <div style={{ display: "inline-block", background: GOLD, borderRadius: 6, padding: "5px 9px" }}>
+                    <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(x.monto)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={hint}>Ayudaste en estos — no son tus clientes, pero un coordinador repartió el pago contigo ese día.</p>
+          </>
         )}
       </div>
     );

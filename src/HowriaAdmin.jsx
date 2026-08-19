@@ -764,6 +764,8 @@ function useRegistroPaseosSincronizado(clientes) {
               cancelado: r.estado === "cancelado",
               nota: r.nota || "",
               paseadorNombre: r.paseador_nombre || null,
+              compartidoCon: r.paseador_compartido || null,
+              porcentajeCompartido: r.porcentaje_compartido ?? null,
             };
           }
         });
@@ -797,6 +799,8 @@ function useRegistroPaseosSincronizado(clientes) {
               cancelado: fila.estado === "cancelado",
               nota: fila.nota || "",
               paseadorNombre: fila.paseador_nombre || null,
+              compartidoCon: fila.paseador_compartido || null,
+              porcentajeCompartido: fila.porcentaje_compartido ?? null,
             },
           };
         });
@@ -824,7 +828,10 @@ function useRegistroPaseosSincronizado(clientes) {
             // upsert no se mandaba nunca — el estado local quedaba "hecho"
             // hasta el próximo reload, que lo revertía sin avisar.
             supabase.from("registro_paseos").upsert(
-              { cliente_id: cliente._dbId, fecha, estado, nota: r.nota || null, paseador_nombre: cliente.paseadorNombre || null },
+              {
+                cliente_id: cliente._dbId, fecha, estado, nota: r.nota || null, paseador_nombre: cliente.paseadorNombre || null,
+                paseador_compartido: r.compartidoCon || null, porcentaje_compartido: r.compartidoCon ? (r.porcentajeCompartido ?? 50) : null,
+              },
               { onConflict: "cliente_id,fecha" }
             ).then(({ error }) => {
               if (error) {
@@ -2585,22 +2592,49 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
   // resumen mensual (las cancelaciones del cliente no cuentan en contra del paseador)
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
+  const prefijoMesActual = `${anioActual}-${String(mesActual + 1).padStart(2, "0")}`;
   const resumenMensual = misClientes.map((c) => {
     const diasDelPlan = diasSegunPlan(mesActual, anioActual, c.diasHabituales || []);
     // Un paseo movido HACIA este mes (venga de donde venga) también debe
     // contar para "Tu pago" — si no, el paseador pierde la plata de un
     // paseo que sí hizo, solo porque cayó en un día no habitual.
     const diasReprogramados = reprogramaciones
-      .filter((r) => r.clienteId === c._dbId && r.fechaNueva.startsWith(`${anioActual}-${String(mesActual + 1).padStart(2, "0")}`))
+      .filter((r) => r.clienteId === c._dbId && r.fechaNueva.startsWith(prefijoMesActual))
       .map((r) => Number(r.fechaNueva.slice(8, 10)));
     const diasDelPlanConMovidos = [...new Set([...diasDelPlan, ...diasReprogramados])];
-    const diasValidos = diasDelPlanConMovidos.filter((dNum) => !registroPaseos[`${c.id}_${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`]?.cancelado);
-    const realizados = diasValidos.filter((dNum) => registroPaseos[`${c.id}_${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dNum).padStart(2, "0")}`]?.realizado).length;
-    return { cliente: c, programados: diasValidos.length, realizados, monto: realizados * Number(c.tarifaPaseador || 0) };
+    const tarifa = Number(c.tarifaPaseador || 0);
+    const diasValidos = diasDelPlanConMovidos.filter((dNum) => !registroPaseos[`${c.id}_${prefijoMesActual}-${String(dNum).padStart(2, "0")}`]?.cancelado);
+    let realizados = 0, monto = 0;
+    diasValidos.forEach((dNum) => {
+      const r = registroPaseos[`${c.id}_${prefijoMesActual}-${String(dNum).padStart(2, "0")}`];
+      if (!r?.realizado) return;
+      realizados++;
+      // Si el coordinador compartió este paseo con otro paseador (ver
+      // Coordinación, "Compartir con..."), a mí me queda el resto del
+      // porcentaje, no el 100% — el otro tanto aparece en "Paseos que
+      // compartiste" de quien me ayudó, más abajo.
+      monto += r.compartidoCon ? (tarifa * (100 - (r.porcentajeCompartido ?? 50))) / 100 : tarifa;
+    });
+    return { cliente: c, programados: diasValidos.length, realizados, monto };
   });
+
+  // Paseos de clientes que NO son míos, donde alguien me marcó como el
+  // segundo paseador de un reparto — recorre registroPaseos entero (no
+  // solo misClientes) justamente porque son clientes ajenos.
+  const misPaseosCompartidos = Object.entries(registroPaseos)
+    .filter(([key, r]) => r.realizado && r.compartidoCon === user.nombre && key.slice(key.indexOf("_") + 1).startsWith(prefijoMesActual))
+    .map(([key, r]) => {
+      const clienteIdLocal = Number(key.slice(0, key.indexOf("_")));
+      const cliente = clientes.find((c) => c.id === clienteIdLocal);
+      if (!cliente) return null;
+      return { cliente, fecha: key.slice(key.indexOf("_") + 1), monto: (Number(cliente.tarifaPaseador || 0) * (r.porcentajeCompartido ?? 50)) / 100 };
+    })
+    .filter(Boolean);
+  const totalCompartidoMes = misPaseosCompartidos.reduce((acc, x) => acc + x.monto, 0);
+
   const totalRealizadosMes = resumenMensual.reduce((acc, r) => acc + r.realizados, 0);
   const totalProgramadosMes = resumenMensual.reduce((acc, r) => acc + r.programados, 0);
-  const totalMontoMes = resumenMensual.reduce((acc, r) => acc + r.monto, 0);
+  const totalMontoMes = resumenMensual.reduce((acc, r) => acc + r.monto, 0) + totalCompartidoMes;
 
   // Clientes de hoy (siempre el día real, no el día que se esté mirando en
   // el detalle de abajo) — para el mensaje de "Mi ruta de hoy" y la ruta
@@ -2806,6 +2840,21 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
             </div>
           ))}
         </div>
+        {misPaseosCompartidos.length > 0 && (
+          <>
+            <p style={{ ...label, marginTop: 18 }}>Paseos que compartiste</p>
+            <div>
+              {misPaseosCompartidos.map((x, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                  <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.cliente.nombre} · {x.cliente.perro}</span>
+                  <span style={{ color: "#8A7E5C", flex: "none" }}>{new Date(x.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</span>
+                  <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(x.monto)}</b>
+                </div>
+              ))}
+            </div>
+            <p style={hint}>Ayudaste en estos — no son tus clientes, pero un coordinador repartió el pago contigo ese día.</p>
+          </>
+        )}
       </div>
 
       <div className="howria-card" style={tarjeta}>

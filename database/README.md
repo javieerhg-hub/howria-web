@@ -123,6 +123,7 @@ no un runner de migraciones.
 | 095 | `boletas_paseo_entrenador.sql` | 2026-08-19 | Amplía select/insert/update de `boletas` (boletas de paseo) al rol entrenador — la pestaña ya lo dejaba entrar a "Paseos" pero la RLS seguía en coordinador/administrador únicamente, hallado en la auditoría de permisos vs. RLS. |
 | 096 | `cerrar_solo_autenticados_staff.sql` | 2026-08-19 | Cierra la política heredada "solo_autenticados" (cualquier sesión autenticada, incluyendo clientes) en `objetivos_semanales`, `objetivos_mensuales`, `tareas_equipo` (pasan a solo staff) y `prospectos` (pasa a coordinador/administrador, dejando intacta la excepción de 055 para el entrenador) — hallado en la misma auditoría. |
 | 097 | `citas_agenda_entrenador_todas.sql` | 2026-08-19 | Amplía select/insert/update/delete de `citas_agenda` al rol entrenador para cualquier cita (no solo la propia) — la pestaña Agenda ya mostraba el filtro y el selector "Entrenador" sin restricción, pero la RLS solo dejaba pasar las citas propias; mismo nivel que coordinador/administrador, confirmado por Javier. |
+| 098 | `registro_paseos_reparto.sql` | 2026-08-19 | Agrega `paseador_compartido`/`porcentaje_compartido` a `registro_paseos` — permite repartir el pago de un paseo puntual entre dos paseadores (ej. uno empezó la ronda y otro la terminó), con porcentaje ajustable desde Coordinación ("Compartir con..."). |
 
 ## Nota sobre el orden 001–023
 
