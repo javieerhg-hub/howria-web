@@ -47,6 +47,10 @@ const Inventario = React.lazy(() => import("./tabs/Inventario.jsx").then((m) => 
 // abrir la ruta).
 const RutaGuiada = React.lazy(() => import("./RutaGuiada.jsx").then((m) => ({ default: m.RutaGuiada })));
 
+// Mismo criterio que RutaGuiada — solo lo abre el rol paseador, no vale la
+// pena que los demás roles paguen su peso en el bundle de Core.
+const TutorialPaseador = React.lazy(() => import("./TutorialPaseador.jsx").then((m) => ({ default: m.TutorialPaseador })));
+
 // El gráfico de Inicio (recharts) también aparte — recharts es pesada y
 // este archivo se carga siempre, hasta para la pantalla de login, que
 // nunca llega a mostrar un gráfico.
@@ -2443,6 +2447,16 @@ function claveSalidaRuta(email, hoy) {
   return `howria_ruta_salida_${email}_${fechaKey(hoy)}`;
 }
 
+// Tutorial inicial (TutorialPaseador.jsx) — por persona, sin fecha (a
+// diferencia de claveSalidaRuta): una vez visto, queda visto, no vuelve a
+// abrirse solo al día siguiente. Guardado en el teléfono, no en la base de
+// datos — a propósito, decisión explícita de Javier (más simple, sin
+// migración; si algún día cambia de teléfono lo vuelve a ver una vez, lo
+// cual no es grave).
+function claveTutorialVisto(email) {
+  return `howria_tutorial_visto_${email}`;
+}
+
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada, reprogramaciones = [] }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -2459,6 +2473,17 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   });
   const [mostrarJustificar, setMostrarJustificar] = useState(false);
   const [motivoAusencia, setMotivoAusencia] = useState("");
+
+  // Se abre solo la primera vez que este paseador entra a Mis Paseos en
+  // este teléfono — después queda disponible para volver a verlo a mano
+  // desde el link junto a "Mi capacitación".
+  const [tutorialAbierto, setTutorialAbierto] = useState(() => {
+    try { return localStorage.getItem(claveTutorialVisto(user.email)) !== "1"; } catch { return false; }
+  });
+  function cerrarTutorial() {
+    try { localStorage.setItem(claveTutorialVisto(user.email), "1"); } catch {}
+    setTutorialAbierto(false);
+  }
 
   function limpiarSalidaGuardada() {
     try { localStorage.removeItem(claveSalidaRuta(user.email, hoy)); } catch {}
@@ -2678,6 +2703,12 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
         </Suspense>
       )}
 
+      {tutorialAbierto && (
+        <Suspense fallback={<p style={hint}>Cargando el tutorial…</p>}>
+          <TutorialPaseador onCerrar={cerrarTutorial} />
+        </Suspense>
+      )}
+
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{diaActivo.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</h2>
@@ -2869,6 +2900,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                 );
               })}
             </div>
+            <button onClick={() => setTutorialAbierto(true)}
+              style={{ marginTop: 14, background: "none", border: "none", color: NAVY, fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+              Volver a ver el tutorial de la app
+            </button>
           </>
         )}
       </div>
