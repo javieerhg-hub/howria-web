@@ -150,7 +150,7 @@ function FilaSwipeReprogramar({ item, yaReprogramada, onReprogramar }) {
   );
 }
 
-function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, onConfirmar, onCerrar, cargando }) {
+function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, motivo, onMotivo, onConfirmar, onCerrar, cargando }) {
   return (
     <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 340, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
@@ -158,6 +158,8 @@ function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, onConfirmar, onC
         <p style={{ ...hint, marginTop: -2 }}>{cliente.nombre} — 🐾 {cliente.perro}. Hoy no se hizo — ¿para qué día lo movemos?</p>
         <label style={label}>Nueva fecha</label>
         <input type="date" value={fecha} min={fechaKey(hoy)} onChange={(e) => onFecha(e.target.value)} style={{ ...input, marginBottom: 16 }} autoFocus />
+        <label style={label}>Motivo (opcional)</label>
+        <input value={motivo} onChange={(e) => onMotivo(e.target.value)} placeholder="Ej: el cliente no pudo hoy" style={{ ...input, marginBottom: 16 }} />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onCerrar} style={botonSecundario}>Cancelar</button>
           <button onClick={onConfirmar} disabled={cargando || !fecha} style={{ ...botonPrincipal, width: "auto", flex: 1, opacity: cargando || !fecha ? 0.6 : 1 }}>
@@ -208,6 +210,46 @@ function ModalCompartirPaseo({ item, equipoPaseo, nombre, porcentaje, onNombre, 
   );
 }
 
+// Cuando alguien está ausente hoy, reasignar sus paseos pendientes uno
+// por uno es lento justo el día que más urge resolverlo. Reasigna TODOS
+// de una — a diferencia de "Reasignar a..." de una fila suelta, esto es
+// permanente (cambia cliente.paseadorNombre para siempre, no solo hoy),
+// así que se lo advierte explícitamente: cuando la persona ausente
+// vuelva, hay que devolvérselos a mano si corresponde.
+function ModalResolverAusencia({ paseador, pendientes, equipoPaseo, nuevoPaseador, onNuevoPaseador, onConfirmar, onCerrar, cargando }) {
+  const otros = equipoPaseo.filter((u) => u.nombre !== paseador);
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 400, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Reasignar pendientes de {paseador}</h3>
+        <p style={{ ...hint, marginTop: -2 }}>
+          {paseador} está ausente hoy y tiene {pendientes.length} paseo{pendientes.length === 1 ? "" : "s"} sin marcar. Esto los reasigna de forma <b>permanente</b> (no solo por hoy) — cuando {paseador} vuelva, tendrás que devolvérselos a mano si corresponde.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "10px 0 16px", maxHeight: 140, overflowY: "auto" }}>
+          {pendientes.map((item) => (
+            <p key={item.cliente.id} style={{ margin: 0, fontSize: 12.5, color: INK }}>🐾 {item.cliente.nombre} — {item.cliente.perro}</p>
+          ))}
+        </div>
+        <label style={label}>Reasignar a</label>
+        {otros.length === 0 ? (
+          <p style={{ ...hint, marginTop: -4 }}>No hay otro paseador/entrenador disponible.</p>
+        ) : (
+          <select value={nuevoPaseador} onChange={(e) => onNuevoPaseador(e.target.value)} style={{ ...input, marginBottom: 16 }}>
+            <option value="">Elige un paseador...</option>
+            {otros.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onCerrar} style={botonSecundario}>Cancelar</button>
+          <button onClick={onConfirmar} disabled={!nuevoPaseador || cargando} style={{ ...botonPrincipal, width: "auto", flex: 1, opacity: !nuevoPaseador || cargando ? 0.6 : 1 }}>
+            Reasignar {pendientes.length} paseo{pendientes.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user }) {
   const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
   // Filtro de "Todos"/un paseador puntual — vive arriba del todo de la
@@ -233,6 +275,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [vistaRapida, setVistaRapida] = useState("no_realizados");
   const [reprogramarModal, setReprogramarModal] = useState(null);
   const [fechaRapida, setFechaRapida] = useState("");
+  const [motivoRapido, setMotivoRapido] = useState("");
   const [reprogramandoRapido, setReprogramandoRapido] = useState(false);
 
   const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset]);
@@ -317,21 +360,27 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     () => agruparPorPaseador(calendarioHoy).filter((g) => g.paseador !== "Sin asignar"),
     [calendarioHoy]
   );
+  // Mismo filtro que ya acota "Resumen de hoy" y "Hoy" — antes "Paseos de
+  // hoy" seguía mostrando a todo el equipo aunque se hubiera filtrado a
+  // una sola persona más abajo.
   const gruposVistaRapida = useMemo(() => {
     return calendarioHoyPorPaseador
+      .filter((g) => filtroPaseador === "todos" || g.paseador === filtroPaseador)
       .map(({ paseador, items }) => ({
         paseador,
         items: items.filter((item) => (vistaRapida === "no_realizados" ? item.estado !== "realizado" : item.estado === "realizado")),
       }))
       .filter((g) => g.items.length > 0);
-  }, [calendarioHoyPorPaseador, vistaRapida]);
-  const totalNoRealizadosHoy = calendarioHoy.filter((i) => i.estado !== "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
-  const totalRealizadosHoy = calendarioHoy.filter((i) => i.estado === "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
+  }, [calendarioHoyPorPaseador, vistaRapida, filtroPaseador]);
+  const calendarioHoyFiltrado = filtroPaseador === "todos" ? calendarioHoy : calendarioHoy.filter((i) => (i.cliente.paseadorNombre || "Sin asignar") === filtroPaseador);
+  const totalNoRealizadosHoy = calendarioHoyFiltrado.filter((i) => i.estado !== "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
+  const totalRealizadosHoy = calendarioHoyFiltrado.filter((i) => i.estado === "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
 
   function abrirReprogramarRapido(cliente) {
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
     setFechaRapida(fechaKey(manana));
+    setMotivoRapido("");
     setReprogramarModal(cliente);
   }
 
@@ -340,7 +389,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     if (!cliente || !fechaRapida || reprogramandoRapido) return;
     setReprogramandoRapido(true);
     const fechaNuevaDate = new Date(fechaRapida + "T00:00:00");
-    const ok = await moverPaseo({ cliente, fechaOrigen: hoy, fechaNueva: fechaNuevaDate, motivo: "", creadoPor: user.nombre });
+    const ok = await moverPaseo({ cliente, fechaOrigen: hoy, fechaNueva: fechaNuevaDate, motivo: motivoRapido.trim(), creadoPor: user.nombre });
     if (ok) {
       actualizarRegistroDia(cliente.id, hoy, { cancelado: true, realizado: false });
       showToast(`Paseo de ${cliente.nombre} reprogramado a ${fechaNuevaDate.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} — a ${cliente.paseadorNombre} le va a aparecer ese día.`, "exito");
@@ -410,6 +459,25 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
 
   function asignarPaseadorRapido(clienteId, nombre) {
     setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, paseadorNombre: nombre } : c)));
+  }
+
+  const [ausenciaModal, setAusenciaModal] = useState(null);
+  const [ausenciaNuevoPaseador, setAusenciaNuevoPaseador] = useState("");
+  const [reasignandoAusencia, setReasignandoAusencia] = useState(false);
+
+  function abrirResolverAusencia(paseador, items) {
+    setAusenciaNuevoPaseador("");
+    setAusenciaModal({ paseador, pendientes: items.filter((i) => i.estado === "pendiente") });
+  }
+
+  function confirmarReasignoMasivo() {
+    if (!ausenciaModal || !ausenciaNuevoPaseador || reasignandoAusencia) return;
+    setReasignandoAusencia(true);
+    const ids = new Set(ausenciaModal.pendientes.map((item) => item.cliente.id));
+    setClientes((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, paseadorNombre: ausenciaNuevoPaseador } : c)));
+    showToast(`${ids.size} paseo${ids.size === 1 ? "" : "s"} de ${ausenciaModal.paseador} reasignado${ids.size === 1 ? "" : "s"} a ${ausenciaNuevoPaseador}.`, "exito");
+    setAusenciaModal(null);
+    setReasignandoAusencia(false);
   }
 
   function guardarNotaDia(clienteId, fecha, nota) {
@@ -505,9 +573,19 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           <p style={hint}>{vistaRapida === "no_realizados" ? "Todo marcado — no queda ningún paseo pendiente hoy. 🎉" : "Todavía nadie ha sido marcado como realizado hoy."}</p>
         ) : (
           <div style={{ display: "grid", gap: 18 }}>
-            {gruposVistaRapida.map(({ paseador, items }) => (
+            {gruposVistaRapida.map(({ paseador, items }) => {
+              const motivoAusente = ausenciasPaseador[paseador];
+              const faseHoy = FASES_PASEADOR.find((x) => x.id === (faseDiaPaseador[paseador] || "pendiente"));
+              return (
               <div key={paseador}>
-                <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 700, color: NAVY }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· {items.length}</span></p>
+                <p style={{ margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: NAVY }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· {items.length}</span></span>
+                  {motivoAusente ? (
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivoAusente}</span>
+                  ) : (
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: faseHoy.bg, color: faseHoy.color }}>{faseHoy.nombre}</span>
+                  )}
+                </p>
                 <div style={{ display: "grid", gap: 8 }}>
                   {items.map((item) =>
                     vistaRapida === "no_realizados" ? (
@@ -527,19 +605,26 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       {reprogramarModal && (
-        <ModalReprogramarRapido cliente={reprogramarModal} hoy={hoy} fecha={fechaRapida} onFecha={setFechaRapida}
+        <ModalReprogramarRapido cliente={reprogramarModal} hoy={hoy} fecha={fechaRapida} onFecha={setFechaRapida} motivo={motivoRapido} onMotivo={setMotivoRapido}
           onConfirmar={reprogramarRapido} onCerrar={() => setReprogramarModal(null)} cargando={reprogramandoRapido} />
       )}
 
       {compartirModal && (
         <ModalCompartirPaseo item={compartirModal} equipoPaseo={equipoPaseo} nombre={compartirNombre} porcentaje={compartirPorcentaje}
           onNombre={setCompartirNombre} onPorcentaje={setCompartirPorcentaje} onGuardar={confirmarCompartir} onCerrar={() => setCompartirModal(null)} />
+      )}
+
+      {ausenciaModal && (
+        <ModalResolverAusencia paseador={ausenciaModal.paseador} pendientes={ausenciaModal.pendientes} equipoPaseo={equipoPaseo}
+          nuevoPaseador={ausenciaNuevoPaseador} onNuevoPaseador={setAusenciaNuevoPaseador}
+          onConfirmar={confirmarReasignoMasivo} onCerrar={() => setAusenciaModal(null)} cargando={reasignandoAusencia} />
       )}
 
       <div className="howria-card" style={tarjeta}>
@@ -552,10 +637,11 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           </button>
           {equipoPaseo.map((u) => {
             const cuenta = clientesHoy.filter((c) => c.paseadorNombre === u.nombre).length;
+            const ausente = ausenciasPaseador[u.nombre];
             return (
-              <button key={u.id} type="button" onClick={() => setFiltroPaseador(u.nombre)} aria-pressed={filtroPaseador === u.nombre} style={estiloCuboFiltro(filtroPaseador === u.nombre)}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{u.nombre}</span>
-                <span style={{ fontSize: 10.5, opacity: 0.75 }}>{cuenta} hoy</span>
+              <button key={u.id} type="button" onClick={() => setFiltroPaseador(u.nombre)} aria-pressed={filtroPaseador === u.nombre} style={estiloCuboFiltro(filtroPaseador === u.nombre)} title={ausente ? `Ausente: ${ausente}` : undefined}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{ausente ? "⚠️ " : ""}{u.nombre}</span>
+                <span style={{ fontSize: 10.5, opacity: 0.75 }}>{ausente ? "Ausente hoy" : `${cuenta} hoy`}</span>
               </button>
             );
           })}
@@ -606,7 +692,18 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                       {esHoyVista && paseador !== "Sin asignar" && (() => {
                         const motivo = ausenciasPaseador[paseador];
                         if (motivo) {
-                          return <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivo}</span>;
+                          const pendientesAusente = items.filter((i) => i.estado === "pendiente");
+                          return (
+                            <>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivo}</span>
+                              {pendientesAusente.length > 0 && (
+                                <button onClick={() => abrirResolverAusencia(paseador, items)}
+                                  style={{ border: `1px dashed ${RUST}`, background: "none", color: RUST, borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                                  Reasignar {pendientesAusente.length} pendiente{pendientesAusente.length === 1 ? "" : "s"}
+                                </button>
+                              )}
+                            </>
+                          );
                         }
                         const f = FASES_PASEADOR.find((x) => x.id === (faseDiaPaseador[paseador] || "pendiente"));
                         return <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: f.bg, color: f.color }}>{f.nombre}</span>;
@@ -633,7 +730,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         )}
       </SeccionPlegable>
 
-      <SeccionPlegable titulo="Semana" subtitulo="Cómo se reparte la semana y el horario fijo de cada paseador.">
+      <SeccionPlegable titulo="Semana" subtitulo="Paseos programados y carga de cada paseador esta semana.">
         {/* flex:1 1 0 (no overflow-x:auto) — una fila con overflow-x fue la
             causa real, ya documentada, de que Safari achicara toda la
             página al entrar a Mis Paseos; una fila de N botones que debe
@@ -665,7 +762,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
 
         <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 8px" }}>Carga semanal por paseador (total de paseos/semana)</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {cargaPorPaseador.map((p) => (
             <div key={p.nombre} style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12.5, color: INK, width: 130, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nombre}</span>
@@ -676,9 +773,24 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             </div>
           ))}
         </div>
+      </SeccionPlegable>
 
-        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Horario semanal por paseador</h3>
-        <p style={{ fontSize: 13, color: "#6B6248", marginTop: -6, marginBottom: 14 }}>
+      <SeccionPlegable titulo="Horario por paseador" subtitulo="Edita a mano los días y clientes de cada paseador.">
+        <div className="howria-dia-selector-movil" style={{ display: "none", gap: 6, marginBottom: 16 }}>
+          {DIAS_LARGOS.map((dia, dow) => (
+            <button key={dow} onClick={() => setDiaSemanaMovil(dow)}
+              style={{
+                flex: "1 1 0", minWidth: 0, padding: "8px 4px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                border: dow === diaSemanaMovil ? "none" : "1px solid #E4DBC3",
+                background: dow === diaSemanaMovil ? NAVY : "#fff",
+                color: dow === diaSemanaMovil ? CREAM : INK,
+              }}>
+              {dia.slice(0, 3)}{dow === dowHoy ? " ·" : ""}
+            </button>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 13, color: "#6B6248", marginTop: 0, marginBottom: 14 }}>
           Elige un paseador para ver y editar su horario. Agrega un cliente a un día con el selector, quítalo con la "×", o déjale una nota rápida.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
