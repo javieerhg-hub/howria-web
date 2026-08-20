@@ -7,6 +7,7 @@
 // El dibujo de boletas en canvas + jsPDF vive aparte, en
 // _compartido_pdf.jsx (ver ese archivo por qué).
 import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST,
   MESES, ESTADOS_FACTURA,
@@ -259,9 +260,17 @@ export function aceptarBoleta(setBoletas, dbId, autor) {
   setBoletas((prev) => prev.map((b) => (b._dbId === dbId ? { ...b, ...conUltimaAccion({ estado: "pendiente_pago" }, autor) } : b)));
 }
 
-export function eliminarBoleta(setBoletas, dbId) {
-  if (!dbId) return;
-  setBoletas((prev) => prev.filter((b) => b._dbId !== dbId));
+// Antes de sacarla del estado local (lo que dispara el delete real en
+// Supabase, ver useSyncedTable/sincronizar en HowriaAdmin.jsx), se guarda
+// una copia completa en boletas_eliminadas — así queda un rastro de quién
+// borró qué y cuándo, cosa que antes no existía (a diferencia de
+// "Deshacer pago" en Pago Trabajadores, que sí registra autor y fecha).
+export function eliminarBoleta(setBoletas, boleta, tipo, nombreUsuario) {
+  if (!boleta?._dbId) return;
+  supabase.from("boletas_eliminadas").insert({ tipo, datos: boleta, eliminada_por: nombreUsuario || null }).then(({ error }) => {
+    if (error) showToast(`No se pudo registrar la eliminación: ${error.message}`);
+  });
+  setBoletas((prev) => prev.filter((b) => b._dbId !== boleta._dbId));
 }
 
 export function eliminarCita(setCitas, dbId) {
@@ -409,9 +418,9 @@ export function FilaBoletaVenta({ boleta, tipo, setBoletasEmitidas, setBoletasAd
       {confirmandoEliminar && (
         <ModalConfirmacion
           titulo={`¿Eliminar la boleta N°${String(boleta.numero).padStart(3, "0")}?`}
-          mensaje={`Se borra para siempre esta boleta por ${fmtCLP(boleta.total)} — no queda ningún registro de que existió.`}
+          mensaje={`Se borra para siempre esta boleta por ${fmtCLP(boleta.total)} — queda un registro de la eliminación, pero no se puede deshacer.`}
           textoConfirmar="Eliminar boleta"
-          onConfirmar={() => { eliminarBoleta(setBoletas, boleta._dbId); setConfirmandoEliminar(false); }}
+          onConfirmar={() => { eliminarBoleta(setBoletas, boleta, tipo, nombreUsuario); setConfirmandoEliminar(false); }}
           onCancelar={() => setConfirmandoEliminar(false)}
         />
       )}

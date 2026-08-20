@@ -65,8 +65,8 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     clientes: clientesElegidosNuevo.filter((c) => c.diasHabituales?.includes(dow)),
   }));
   const paseosSemanaNuevo = clientesElegidosNuevo.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
-  const gananciaSemanalNuevo = clientesElegidosNuevo.reduce((acc, c) => acc + (c.diasHabituales?.length || 0) * Number(c.tarifaPaseador || 0), 0);
-  const gananciaMensualNuevo = clientesElegidosNuevo.reduce((acc, c) => {
+  const pagoSemanalNuevo = clientesElegidosNuevo.reduce((acc, c) => acc + (c.diasHabituales?.length || 0) * Number(c.tarifaPaseador || 0), 0);
+  const pagoMensualNuevo = clientesElegidosNuevo.reduce((acc, c) => {
     const paseosMes = diasSegunPlan(mesActualNuevo, anioActualNuevo, c.diasHabituales || []).length;
     return acc + paseosMes * Number(c.tarifaPaseador || 0);
   }, 0);
@@ -552,12 +552,12 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
                 <p style={{ margin: 0, fontWeight: 700, color: NAVY, fontSize: 19 }}>{paseosSemanaNuevo}</p>
               </div>
               <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia semanal estimada</p>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaSemanalNuevo)}</p>
+                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Pago semanal estimado</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(pagoSemanalNuevo)}</p>
               </div>
               <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Ganancia mensual estimada</p>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(gananciaMensualNuevo)}</p>
+                <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase" }}>Pago mensual estimado</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 19, fontFamily: "Georgia, serif" }}>{fmtCLP(pagoMensualNuevo)}</p>
               </div>
             </div>
           </div>

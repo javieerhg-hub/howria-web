@@ -141,9 +141,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     [pagosRegistrados, actualDesde, actualHasta]);
   // Plata pagada a responsables de cuenta en boletas de adiestramiento —
   // costo real para Howria, igual que el pago a paseadores, así que
-  // también se resta de la utilidad general.
+  // también se resta de la utilidad general. Solo boletas YA marcadas
+  // pagadoAResponsable (ver Pago Trabajadores) — antes se restaba el
+  // costo de cualquier boleta vendida del período, incluso pendiente de
+  // cobro y sin pagarle nada todavía al responsable, mismo criterio de
+  // "costo real" que ya usa costosPeriodo (pago a paseadores) más arriba.
   const costoResponsablesAdiestramiento = useMemo(() =>
-    filtradas.filter((b) => b._tipo === "adiestramiento").reduce((acc, b) => acc + montoParaResponsable(b), 0),
+    filtradas.filter((b) => b._tipo === "adiestramiento" && b.pagadoAResponsable).reduce((acc, b) => acc + montoParaResponsable(b), 0),
     [filtradas]);
   // "Tu parte" — lo que efectivamente le corresponde al responsable
   // después del reparto con Howria en adiestramiento (los paseos no

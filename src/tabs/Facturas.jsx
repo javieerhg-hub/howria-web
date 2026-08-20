@@ -563,9 +563,9 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
       {eliminandoBoleta && (
         <ModalConfirmacion
           titulo={`¿Eliminar la boleta N°${String(eliminandoBoleta.numero).padStart(3, "0")}?`}
-          mensaje={`Se borra para siempre la boleta de ${eliminandoBoleta.cliente} por ${fmtCLP(eliminandoBoleta.total)} — no queda ningún registro de que existió.`}
+          mensaje={`Se borra para siempre la boleta de ${eliminandoBoleta.cliente} por ${fmtCLP(eliminandoBoleta.total)} — queda un registro de la eliminación, pero no se puede deshacer.`}
           textoConfirmar="Eliminar boleta"
-          onConfirmar={() => { eliminarBoleta(setterDe(eliminandoBoleta._tipo), eliminandoBoleta._dbId); setEliminandoBoleta(null); }}
+          onConfirmar={() => { eliminarBoleta(setterDe(eliminandoBoleta._tipo), eliminandoBoleta, eliminandoBoleta._tipo, nombreUsuario); setEliminandoBoleta(null); }}
           onCancelar={() => setEliminandoBoleta(null)}
         />
       )}

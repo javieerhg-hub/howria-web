@@ -66,7 +66,12 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     return d;
   }, [periodo, periodoOffset]);
   const { desde, hasta, etiqueta } = rangoPeriodo(periodo, fechaRef);
-  const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
+  // Mes/año de la boleta a revisar para "Asegurado"/"Proyectado" — del
+  // PERÍODO que se está mirando (fechaRef), no siempre de hoy. Antes
+  // quedaba fijo al mes calendario actual sin importar qué semana/mes
+  // navegado se estuviera viendo, así que un período pasado de otro mes
+  // igual comparaba contra la boleta de este mes.
+  const mesFactura = fechaRef.getMonth(), anioFactura = fechaRef.getFullYear();
   // "Cumplimiento" solo tiene sentido contra los días que YA pasaron —
   // contar toda la semana/mes completo (incluidos días futuros, todavía
   // sin marcar) hacía que a mitad de período se viera un % bajo sin
@@ -142,8 +147,8 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       const tarifa = Number(c.tarifaPaseador || 0);
       const montoCliente = montoRealizadoEnRango(registroPaseos, c.id, desde, hastaEfectivo, nombre, tarifa);
 
-      // ¿la boleta de este cliente para el mes actual ya está pagada?
-      const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesActual] && b.anio === anioActual);
+      // ¿la boleta de este cliente para el mes del período que se está viendo ya está pagada?
+      const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesFactura] && b.anio === anioFactura);
       const asegurado = facturaMes?.estado === "pagada";
 
       if (!mapa[nombre]) mapa[nombre] = { paseador: nombre, clientes: 0, programados: 0, realizados: 0, montoAsegurado: 0, montoProyectado: 0 };
@@ -162,7 +167,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     // no es dueño de ese cliente.
     clientes.filter((c) => c.paseadorNombre).forEach((c) => {
       const tarifa = Number(c.tarifaPaseador || 0);
-      const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesActual] && b.anio === anioActual);
+      const facturaMes = boletasEmitidas.find((b) => esBoletaDeCliente(b, c) && b.mes === MESES[mesFactura] && b.anio === anioFactura);
       const asegurado = facturaMes?.estado === "pagada";
       const cur = new Date(desde);
       while (cur < hastaEfectivo) {
@@ -182,7 +187,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
         return { ...r, ajuste, monto: r.montoAsegurado + r.montoProyectado + ajuste, cumplimiento: r.programados ? Math.round((r.realizados / r.programados) * 100) : 0 };
       })
       .sort((a, b) => b.monto - a.monto);
-  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesActual, anioActual, ajustesPorClave, periodo, etiqueta]);
+  }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesFactura, anioFactura, ajustesPorClave, periodo, etiqueta]);
 
   const totalAsegurado = resumenPorPaseador.reduce((acc, r) => acc + r.montoAsegurado, 0);
   const totalProyectado = resumenPorPaseador.reduce((acc, r) => acc + r.montoProyectado, 0);

@@ -125,6 +125,7 @@ no un runner de migraciones.
 | 097 | `citas_agenda_entrenador_todas.sql` | 2026-08-19 | Amplía select/insert/update/delete de `citas_agenda` al rol entrenador para cualquier cita (no solo la propia) — la pestaña Agenda ya mostraba el filtro y el selector "Entrenador" sin restricción, pero la RLS solo dejaba pasar las citas propias; mismo nivel que coordinador/administrador, confirmado por Javier. |
 | 098 | `registro_paseos_reparto.sql` | 2026-08-19 | Agrega `paseador_compartido`/`porcentaje_compartido` a `registro_paseos` — permite repartir el pago de un paseo puntual entre dos paseadores (ej. uno empezó la ronda y otro la terminó), con porcentaje ajustable desde Coordinación ("Compartir con..."). |
 | 099 | `registro_paseos_reparto_seguridad.sql` | 2026-08-19 | Cierra un hueco hallado en la auditoría técnica: agrega un `check` de rango (1-99) a `porcentaje_compartido` y un trigger que bloquea escribir `paseador_compartido`/`porcentaje_compartido` a cualquiera que no sea coordinador/administrador/entrenador — antes cualquier paseador podía repartirse pago a sí mismo llamando directo a la API, sin pasar por Coordinación. |
+| 100 | `boletas_eliminadas.sql` | 2026-08-19 | Crea `boletas_eliminadas` (bitácora de solo-lectura: copia completa de cada boleta justo antes de borrarla, con quién y cuándo) — hallado en la revisión de lógica financiera: "Eliminar boleta" no dejaba ningún rastro, a diferencia de "Deshacer pago" en Pago Trabajadores. |
 
 ## Nota sobre el orden 001–023
 
