@@ -55,6 +55,31 @@ function montoRealizadoEnRango(registroPaseos, clienteId, desde, hasta, paseador
   return monto;
 }
 
+// El ajuste vive en un modal, no inline en la tabla/tarjeta — no hay
+// espacio real ahí para un monto Y un motivo (mismo motivo por el que
+// "Compartir con..." en Coordinación se movió a un modal).
+function ModalAjustePago({ paseador, monto, motivo, onMonto, onMotivo, onGuardar, onCerrar }) {
+  const requiereMotivo = monto !== 0;
+  const invalido = requiereMotivo && !motivo.trim();
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Ajuste de pago — {paseador}</h3>
+        <p style={{ ...hint, marginTop: -2 }}>Monto positivo para un bono, negativo para un descuento.</p>
+        <label style={label}>Monto</label>
+        <input type="number" value={monto || ""} placeholder="0" onChange={(e) => onMonto(Number(e.target.value) || 0)} style={{ ...input, marginBottom: 14 }} autoFocus />
+        <label style={label}>Motivo{requiereMotivo ? "" : " (opcional)"}</label>
+        <input value={motivo} onChange={(e) => onMotivo(e.target.value)} placeholder="Ej: bono por buen desempeño, descuento por atraso reiterado..." style={{ ...input, marginBottom: 6 }} />
+        {invalido && <p style={{ margin: "0 0 10px", fontSize: 12, color: RUST }}>Escribe un motivo para guardar el ajuste.</p>}
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={onCerrar} style={botonSecundario}>Cancelar</button>
+          <button onClick={onGuardar} disabled={invalido} style={{ ...botonPrincipal, width: "auto", flex: 1, opacity: invalido ? 0.6 : 1 }}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
   const [periodoOffset, setPeriodoOffset] = useState(0);
@@ -91,23 +116,42 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
   // pago, con riesgo real de pagar el monto equivocado.
   const ajustesPorClave = useMemo(() => {
     const mapa = {};
-    ajustesPago.forEach((a) => { mapa[`${a.paseador}|${a.periodo}|${a.etiqueta}`] = a.monto; });
+    ajustesPago.forEach((a) => { mapa[`${a.paseador}|${a.periodo}|${a.etiqueta}`] = { monto: a.monto, motivo: a.motivo || "" }; });
     return mapa;
   }, [ajustesPago]);
 
-  function actualizarAjuste(paseador, valor) {
+  // motivo es obligatorio cuando hay un monto (ver database/101) — un
+  // ajuste quedaba con quién y cuándo, pero nunca por qué.
+  function actualizarAjuste(paseador, valor, motivo) {
     const monto = Number(valor) || 0;
     setAjustesPago((prev) => {
       const idx = prev.findIndex((a) => a.paseador === paseador && a.periodo === periodo && a.etiqueta === etiqueta);
       const ahora = new Date().toISOString();
+      if (monto === 0) {
+        // sin monto no hay nada que ajustar — se quita el borrador si existía
+        return idx === -1 ? prev : prev.filter((_, i) => i !== idx);
+      }
       if (idx === -1) {
-        if (monto === 0) return prev;
-        return [...prev, { id: Date.now() + Math.random(), paseador, periodo, etiqueta, monto, actualizadoPor: nombreUsuario, actualizadoEn: ahora }];
+        return [...prev, { id: Date.now() + Math.random(), paseador, periodo, etiqueta, monto, motivo, actualizadoPor: nombreUsuario, actualizadoEn: ahora }];
       }
       const copia = [...prev];
-      copia[idx] = { ...copia[idx], monto, actualizadoPor: nombreUsuario, actualizadoEn: ahora };
+      copia[idx] = { ...copia[idx], monto, motivo, actualizadoPor: nombreUsuario, actualizadoEn: ahora };
       return copia;
     });
+  }
+
+  const [ajusteModal, setAjusteModal] = useState(null);
+  const [ajusteMontoForm, setAjusteMontoForm] = useState(0);
+  const [ajusteMotivoForm, setAjusteMotivoForm] = useState("");
+
+  function abrirAjuste(fila) {
+    setAjusteMontoForm(fila.ajuste || 0);
+    setAjusteMotivoForm(fila.ajusteMotivo || "");
+    setAjusteModal(fila.paseador);
+  }
+  function guardarAjusteModal() {
+    actualizarAjuste(ajusteModal, ajusteMontoForm, ajusteMotivoForm.trim());
+    setAjusteModal(null);
   }
 
   function descargarResumen(fila) {
@@ -118,7 +162,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       `Paseos realizados: ${fila.realizados} / ${fila.programados} (${fila.cumplimiento}%)\n\n` +
       `Monto asegurado (cliente ya pagó): ${fmtCLP(fila.montoAsegurado)}\n` +
       `Monto proyectado (pendiente de cobro): ${fmtCLP(fila.montoProyectado)}\n` +
-      `Ajuste manual (bono/descuento): ${fmtCLP(fila.ajuste)}\n` +
+      `Ajuste manual (bono/descuento): ${fmtCLP(fila.ajuste)}${fila.ajuste && fila.ajusteMotivo ? ` — ${fila.ajusteMotivo}` : ""}\n` +
       `TOTAL A PAGAR: ${fmtCLP(fila.monto)}\n`;
     const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
     const link = document.createElement("a");
@@ -183,8 +227,12 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
 
     return Object.values(mapa)
       .map((r) => {
-        const ajuste = ajustesPorClave[claveAjuste(r.paseador)] || 0;
-        return { ...r, ajuste, monto: r.montoAsegurado + r.montoProyectado + ajuste, cumplimiento: r.programados ? Math.round((r.realizados / r.programados) * 100) : 0 };
+        const ajusteInfo = ajustesPorClave[claveAjuste(r.paseador)] || { monto: 0, motivo: "" };
+        return {
+          ...r, ajuste: ajusteInfo.monto, ajusteMotivo: ajusteInfo.motivo,
+          monto: r.montoAsegurado + r.montoProyectado + ajusteInfo.monto,
+          cumplimiento: r.programados ? Math.round((r.realizados / r.programados) * 100) : 0,
+        };
       })
       .sort((a, b) => b.monto - a.monto);
   }, [clientes, usuarios, registroPaseos, boletasEmitidas, desde, hastaEfectivo, mesFactura, anioFactura, ajustesPorClave, periodo, etiqueta]);
@@ -239,6 +287,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       id: Date.now() + Math.random(),
       paseador: fila.paseador, periodo, etiqueta, monto: fila.monto, paseos: fila.realizados, clientes: fila.clientes,
       ajuste: fila.ajuste || 0,
+      ajusteMotivo: fila.ajuste ? (fila.ajusteMotivo || null) : null,
       fechaPagoISO: fechaKey(new Date()),
       fechaPago: new Date().toLocaleDateString("es-CL"),
       // Inicio del período de TRABAJO que cubre este pago (no el día en
@@ -264,6 +313,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
   const historial = [...pagosRegistrados].sort((a, b) => b.id - a.id);
 
   return (
+    <>
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>Pago a trabajadores</h2>
       <p style={hint}>Calculado desde los paseos que cada paseador marcó como realizados en "Mis paseos" (no desde lo facturado), con su tarifa por paseo.</p>
@@ -321,8 +371,10 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                   <td style={{ padding: "10px", textAlign: "right", fontWeight: 600, color: "#2F6A46" }}>{fmtCLP(r.montoAsegurado)}</td>
                   <td style={{ padding: "10px", textAlign: "right", fontWeight: 600, color: "#8A6A1E" }}>{fmtCLP(r.montoProyectado)}</td>
                   <td style={{ padding: "10px" }}>
-                    <input type="number" value={r.ajuste || ""} placeholder="0" onChange={(e) => actualizarAjuste(r.paseador, e.target.value)}
-                      style={{ ...input, marginBottom: 0, width: 100, padding: "6px 8px", fontSize: 12.5 }} />
+                    <button onClick={() => abrirAjuste(r)} title={r.ajusteMotivo || ""}
+                      style={{ border: `1px dashed ${GOLD}`, background: r.ajuste ? "#FBF3E0" : "none", color: NAVY, borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      {r.ajuste ? fmtCLP(r.ajuste) : "+ Ajuste"}
+                    </button>
                   </td>
                   <td style={{ padding: "10px", textAlign: "right", fontWeight: 700, color: NAVY }}>{fmtCLP(r.monto)}</td>
                   <td style={{ padding: "10px", textAlign: "right" }}>
@@ -373,8 +425,10 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>Bono/descuento</label>
-                <input type="number" value={r.ajuste || ""} placeholder="0" onChange={(e) => actualizarAjuste(r.paseador, e.target.value)}
-                  style={{ ...input, marginBottom: 0, width: "100%" }} />
+                <button onClick={() => abrirAjuste(r)}
+                  style={{ width: "100%", textAlign: "left", border: `1px dashed ${GOLD}`, background: r.ajuste ? "#FBF3E0" : "none", color: NAVY, borderRadius: 7, padding: "9px 10px", fontSize: 13, cursor: "pointer" }}>
+                  {r.ajuste ? `${fmtCLP(r.ajuste)}${r.ajusteMotivo ? ` — ${r.ajusteMotivo}` : ""}` : "+ Agregar ajuste"}
+                </button>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: 13, color: "#8A7E5C" }}>Total</span>
@@ -468,5 +522,10 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
         </div>
       )}
     </div>
+    {ajusteModal && (
+      <ModalAjustePago paseador={ajusteModal} monto={ajusteMontoForm} motivo={ajusteMotivoForm}
+        onMonto={setAjusteMontoForm} onMotivo={setAjusteMotivoForm} onGuardar={guardarAjusteModal} onCerrar={() => setAjusteModal(null)} />
+    )}
+    </>
   );
 }

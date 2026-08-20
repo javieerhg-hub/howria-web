@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Dog } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, TIPOS_SERVICIO,
-  tarjeta, sectionTitle, hint, label, input, botonSecundario, FilaLista,
+  tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, FilaLista, BotonEliminar,
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable } from "../lib/calculosBoletas.js";
@@ -17,11 +17,25 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], user, onVerPagos }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, nombreUsuario, user, onVerPagos }) {
   const [periodo, setPeriodo] = useState("semana");
   const [rangoDesde, setRangoDesde] = useState("");
   const [rangoHasta, setRangoHasta] = useState("");
   const hoy = new Date();
+
+  const [mostrarFormCosto, setMostrarFormCosto] = useState(false);
+  const [descCosto, setDescCosto] = useState("");
+  const [montoCosto, setMontoCosto] = useState("");
+  const [fechaCosto, setFechaCosto] = useState(() => fechaKey(new Date()));
+
+  function agregarCosto() {
+    if (!descCosto.trim() || !Number(montoCosto)) return;
+    setCostosNegocio((prev) => [...prev, { id: Date.now() + Math.random(), descripcion: descCosto.trim(), monto: Number(montoCosto), fecha: fechaCosto, creadoPor: nombreUsuario }]);
+    setDescCosto(""); setMontoCosto(""); setFechaCosto(fechaKey(new Date())); setMostrarFormCosto(false);
+  }
+  function eliminarCosto(costo) {
+    setCostosNegocio((prev) => prev.filter((c) => c.id !== costo.id));
+  }
 
   // Un paseador o entrenador no debe ver las finanzas generales de
   // Howria — solo lo que tiene que ver con los clientes que se le
@@ -154,7 +168,14 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // tienen reparto, van completos). Solo tiene sentido en la vista
   // personal de un responsable de cuenta.
   const tuParte = useMemo(() => filtradas.reduce((acc, b) => acc + montoParaResponsable(b), 0), [filtradas]);
-  const utilidad = actual.ingresos - costosPeriodo - costoResponsablesAdiestramiento;
+  // Costos generales del negocio (arriendo, insumos, marketing, etc.) —
+  // database/102_costos_negocio.sql. Antes "Ganancia" solo restaba pago a
+  // trabajadores, así que no era la utilidad real.
+  const costosGeneralesFiltrados = useMemo(() =>
+    costosNegocio.filter((c) => { const f = new Date(c.fecha + "T00:00:00"); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
+    [costosNegocio, actualDesde, actualHasta]);
+  const costosGeneralesPeriodo = costosGeneralesFiltrados.reduce((acc, c) => acc + Number(c.monto || 0), 0);
+  const utilidad = actual.ingresos - costosPeriodo - costoResponsablesAdiestramiento - costosGeneralesPeriodo;
   const promedioBoleta = actual.cantidad ? actual.ingresos / actual.cantidad : 0;
   const varIngresos = variacion(actual.ingresos, anterior.ingresos);
 
@@ -469,7 +490,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </div>
       )}
 
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 6}, 1fr)`, gap: 14, marginBottom: 26 }}>
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 7}, 1fr)`, gap: 14, marginBottom: 26 }}>
         <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
@@ -503,6 +524,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </div>
         )}
         {!vistaPersonal && (
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Otros costos</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosGeneralesPeriodo)}</p>
+          </div>
+        )}
+        {!vistaPersonal && (
           <div style={{ background: utilidad >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2F6A46" : RUST, textTransform: "uppercase", letterSpacing: 0.5 }}>Ganancia de Howria</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
@@ -513,8 +540,52 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       </div>
       {!vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          Es lo que le queda a Howria después de los pagos a paseadores ya registrados como pagados en esta app, y de lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto — no incluye otros gastos del negocio.
+          Es lo que le queda a Howria después de los pagos a paseadores ya registrados como pagados en esta app, de lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto, y de los otros costos cargados abajo.
         </p>
+      )}
+
+      {!vistaPersonal && (
+        <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <p style={{ ...label, marginBottom: 2 }}>Otros costos del negocio {etiquetaPeriodo}</p>
+              <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>Arriendo, insumos, marketing — lo que no es pago a trabajadores.</p>
+            </div>
+            <button onClick={() => setMostrarFormCosto((v) => !v)} style={{ ...botonSecundario, width: "auto", padding: "8px 16px" }}>
+              {mostrarFormCosto ? "Cancelar" : "+ Agregar costo"}
+            </button>
+          </div>
+          {mostrarFormCosto && (
+            <>
+              <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+                <input placeholder="Descripción (ej: arriendo agosto)" value={descCosto} onChange={(e) => setDescCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+                <input type="number" placeholder="Monto" min="0" value={montoCosto} onChange={(e) => setMontoCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+                <input type="date" value={fechaCosto} onChange={(e) => setFechaCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              </div>
+              <button onClick={agregarCosto} disabled={!descCosto.trim() || !Number(montoCosto)}
+                style={{ ...botonPrincipal, width: "auto", marginTop: 12, padding: "10px 20px", opacity: !descCosto.trim() || !Number(montoCosto) ? 0.6 : 1 }}>
+                Guardar costo
+              </button>
+            </>
+          )}
+          {costosGeneralesFiltrados.length > 0 && (
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+              {costosGeneralesFiltrados.map((c) => (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid #E4DBC3" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, color: NAVY, fontWeight: 600 }}>{c.descripcion}</p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>{new Date(c.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
+                    <b style={{ color: RUST, fontSize: 13.5 }}>{fmtCLP(c.monto)}</b>
+                    <BotonEliminar onConfirm={() => eliminarCosto(c)} label="×" title="Eliminar costo"
+                      style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 15, padding: 0 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       {vistaPersonal && (
         <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>

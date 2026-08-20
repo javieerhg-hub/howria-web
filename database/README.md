@@ -126,6 +126,8 @@ no un runner de migraciones.
 | 098 | `registro_paseos_reparto.sql` | 2026-08-19 | Agrega `paseador_compartido`/`porcentaje_compartido` a `registro_paseos` — permite repartir el pago de un paseo puntual entre dos paseadores (ej. uno empezó la ronda y otro la terminó), con porcentaje ajustable desde Coordinación ("Compartir con..."). |
 | 099 | `registro_paseos_reparto_seguridad.sql` | 2026-08-19 | Cierra un hueco hallado en la auditoría técnica: agrega un `check` de rango (1-99) a `porcentaje_compartido` y un trigger que bloquea escribir `paseador_compartido`/`porcentaje_compartido` a cualquiera que no sea coordinador/administrador/entrenador — antes cualquier paseador podía repartirse pago a sí mismo llamando directo a la API, sin pasar por Coordinación. |
 | 100 | `boletas_eliminadas.sql` | 2026-08-19 | Crea `boletas_eliminadas` (bitácora de solo-lectura: copia completa de cada boleta justo antes de borrarla, con quién y cuándo) — hallado en la revisión de lógica financiera: "Eliminar boleta" no dejaba ningún rastro, a diferencia de "Deshacer pago" en Pago Trabajadores. |
+| 101 | `ajustes_pago_motivo.sql` | 2026-08-19 | Agrega `motivo` a `ajustes_pago_pendientes` y `ajuste_motivo` a `pagos_trabajadores` — un bono/descuento quedaba con quién y cuándo, pero nunca por qué; pedido explícito de Javier tras la revisión de lógica financiera. |
+| 102 | `costos_negocio.sql` | 2026-08-19 | Crea `costos_negocio` (costo puntual con descripción/monto/fecha — arriendo, insumos, marketing) — "Ganancia de Howria" en Finanzas solo restaba pago a trabajadores; pedido explícito de Javier para que la ganancia mostrada sea la utilidad real. |
 
 ## Nota sobre el orden 001–023
 

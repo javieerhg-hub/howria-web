@@ -408,6 +408,7 @@ function pagoToDb(p) {
     paseos: p.paseos,
     clientes: p.clientes,
     ajuste: p.ajuste || 0,
+    ajuste_motivo: p.ajusteMotivo || null,
     fecha_pago: p.fechaPagoISO || fechaKey(new Date()),
     periodo_desde: p.periodoDesdeISO || null,
     marcado_por: p.marcadoPor || null,
@@ -424,10 +425,10 @@ function dbToAvisoDescartado(row) {
 }
 
 function ajustePagoToDb(a) {
-  return { paseador_nombre: a.paseador, periodo: a.periodo, etiqueta: a.etiqueta, monto: a.monto, actualizado_por: a.actualizadoPor || null, actualizado_en: a.actualizadoEn || new Date().toISOString() };
+  return { paseador_nombre: a.paseador, periodo: a.periodo, etiqueta: a.etiqueta, monto: a.monto, motivo: a.motivo || null, actualizado_por: a.actualizadoPor || null, actualizado_en: a.actualizadoEn || new Date().toISOString() };
 }
 function dbToAjustePago(row) {
-  return { paseador: row.paseador_nombre, periodo: row.periodo, etiqueta: row.etiqueta, monto: row.monto, actualizadoPor: row.actualizado_por, actualizadoEn: row.actualizado_en };
+  return { paseador: row.paseador_nombre, periodo: row.periodo, etiqueta: row.etiqueta, monto: row.monto, motivo: row.motivo || "", actualizadoPor: row.actualizado_por, actualizadoEn: row.actualizado_en };
 }
 
 function dbToPago(row) {
@@ -439,6 +440,7 @@ function dbToPago(row) {
     paseos: row.paseos,
     clientes: row.clientes,
     ajuste: row.ajuste,
+    ajusteMotivo: row.ajuste_motivo || undefined,
     fechaPagoISO: row.fecha_pago,
     fechaPago: new Date(row.fecha_pago + "T00:00:00").toLocaleDateString("es-CL"),
     // Fecha de inicio del período de TRABAJO que cubre el pago (no el
@@ -449,6 +451,13 @@ function dbToPago(row) {
     deshechoPor: row.deshecho_por || undefined,
     deshechoEn: row.deshecho_en || undefined,
   };
+}
+
+function costoNegocioToDb(c) {
+  return { descripcion: c.descripcion, monto: c.monto, fecha: c.fecha, creado_por: c.creadoPor || null };
+}
+function dbToCostoNegocio(row) {
+  return { descripcion: row.descripcion, monto: row.monto, fecha: row.fecha, creadoPor: row.creado_por, creadoEn: row.creado_en };
 }
 
 function objetivoSemanalToDb(o) {
@@ -4462,6 +4471,7 @@ export default function HowriaAdmin() {
   const [mostrarCambiarPassword, setMostrarCambiarPassword] = useState(false);
 
   const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
+  const [costosNegocio, setCostosNegocio] = useSyncedTable("costos_negocio", costoNegocioToDb, dbToCostoNegocio, "fecha", sessionVersion);
   const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
@@ -4774,7 +4784,7 @@ export default function HowriaAdmin() {
         )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
-        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
+        {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
