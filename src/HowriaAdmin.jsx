@@ -651,9 +651,20 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
     let activo = true;
     setCargando(true);
     (async () => {
-      let query = supabase.from(selectFrom).select("*");
-      if (orderBy) query = query.order(orderBy);
-      const { data, error } = await query;
+      // Reintenta un par de veces antes de rendirse — fallos como un JWT
+      // recién emitido (desfase de reloj del dispositivo) o un corte de red
+      // breve suelen resolverse solos en un par de segundos. Sin esto, un
+      // fallo pasajero al cargar dejaba la pestaña con datos vacíos hasta
+      // que alguien recargaba la página a mano (ej. "0 clientes" en
+      // Coordinación con paseos reales ocultos detrás).
+      let data, error;
+      for (let intento = 0; intento < 3; intento++) {
+        let query = supabase.from(selectFrom).select("*");
+        if (orderBy) query = query.order(orderBy);
+        ({ data, error } = await query);
+        if (!error) break;
+        if (intento < 2) await new Promise((r) => setTimeout(r, 800 * (intento + 1)));
+      }
       if (!activo) return;
       if (error) {
         showToast(`No se pudo cargar ${tableName}: ${error.message}`);
@@ -761,10 +772,25 @@ function useRegistroPaseosSincronizado(clientes) {
 
   useEffect(() => {
     if (clientes.length === 0 || cargadoRef.current) return;
-    cargadoRef.current = true;
+    let activo = true;
     (async () => {
-      const { data, error } = await supabase.from("registro_paseos").select("*");
-      if (!error && data) {
+      // Mismo reintento que useSyncedTable — antes, si esta carga fallaba
+      // una vez (ver ahí el motivo), cargadoRef ya quedaba en true y esta
+      // pestaña se quedaba con los paseos vacíos por el resto de la sesión,
+      // sin ningún aviso ni forma de reintentar sin recargar la página.
+      let data, error;
+      for (let intento = 0; intento < 3; intento++) {
+        ({ data, error } = await supabase.from("registro_paseos").select("*"));
+        if (!error) break;
+        if (intento < 2) await new Promise((r) => setTimeout(r, 800 * (intento + 1)));
+      }
+      if (!activo) return;
+      if (error) {
+        showToast(`No se pudieron cargar los paseos registrados: ${error.message}`);
+        return;
+      }
+      cargadoRef.current = true;
+      if (data) {
         const mapa = {};
         data.forEach((r) => {
           const cliente = clientes.find((c) => c._dbId === r.cliente_id);
@@ -782,6 +808,7 @@ function useRegistroPaseosSincronizado(clientes) {
         setRegistroState(mapa);
       }
     })();
+    return () => { activo = false; };
   }, [clientes]);
 
   // Tiempo real: si un paseador marca un paseo desde su celular mientras
