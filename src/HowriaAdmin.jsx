@@ -3897,8 +3897,8 @@ export function ModalConfirmacion({ titulo, mensaje, textoConfirmar = "Eliminar"
     return () => window.removeEventListener("keydown", alEscape);
   }, [onCancelar]);
   return (
-    <div onClick={onCancelar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-confirmacion-titulo"
+    <div onClick={onCancelar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-confirmacion-titulo" className="howria-modal-caja"
         style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
         <h3 id="modal-confirmacion-titulo" style={{ margin: "0 0 10px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{titulo}</h3>
         <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "#6B6248", lineHeight: 1.55 }}>{mensaje}</p>
@@ -3952,8 +3952,8 @@ export function ModalCambiarPassword({ onCerrar }) {
   }
 
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-password-titulo"
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-password-titulo" className="howria-modal-caja"
         style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
         <h3 id="modal-password-titulo" style={{ margin: "0 0 10px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>Cambiar tu contraseña</h3>
         <p style={{ margin: "0 0 18px", fontSize: 13, color: "#6B6248", lineHeight: 1.5 }}>Elige una contraseña nueva para tu cuenta — la vas a usar la próxima vez que inicies sesión.</p>
@@ -3994,6 +3994,10 @@ export function ToastHost() {
   useEffect(() => {
     const listener = (t) => {
       setToasts((prev) => [...prev, t]);
+      // Se marca "saliendo" un poco antes de sacarlo de verdad, para que
+      // la transición de salida (ver <style> global, .howria-toast-saliendo)
+      // alcance a jugar en vez de desaparecer de golpe.
+      setTimeout(() => setToasts((prev) => prev.map((x) => (x.id === t.id ? { ...x, saliendo: true } : x))), 4700);
       setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 5000);
     };
     toastListeners.push(listener);
@@ -4006,7 +4010,8 @@ export function ToastHost() {
     // ruta guiada esté abierta a pantalla completa.
     <div className="howria-toast-host" style={{ position: "fixed", bottom: 20, right: 20, zIndex: 10030, display: "flex", flexDirection: "column", gap: 8 }}>
       {toasts.map((t) => (
-        <div key={t.id} style={{ background: t.tipo === "error" ? RUST : NAVY, color: "#fff", padding: "12px 18px", borderRadius: 8, fontSize: 13.5, boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: 320 }}>
+        <div key={t.id} className={`howria-toast-item${t.saliendo ? " howria-toast-saliendo" : ""}`}
+          style={{ background: t.tipo === "error" ? RUST : t.tipo === "exito" ? "#2F6A46" : NAVY, color: "#fff", padding: "12px 18px", borderRadius: 8, fontSize: 13.5, boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: 320 }}>
           {t.mensaje}
         </div>
       ))}
@@ -4605,8 +4610,27 @@ export default function HowriaAdmin() {
           outline: none; border-color: ${NAVY} !important; box-shadow: 0 0 0 3px rgba(18,42,64,0.15);
         }
         h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; }
+
+        /* Movimiento base — modales, cambio de pestaña y toasts aparecían
+           de golpe. Solo entrada/salida, nunca lógica: se aplican como
+           clases sueltas encima de cada componente ya existente. */
+        @keyframes howria-modal-fondo-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes howria-modal-caja-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+        .howria-modal-fondo { animation: howria-modal-fondo-in .15s ease; }
+        .howria-modal-caja { animation: howria-modal-caja-in .18s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        @keyframes howria-tab-entrada-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .howria-tab-entrada { animation: howria-tab-entrada-in .18s ease; }
+
+        @keyframes howria-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .howria-toast-item { animation: howria-toast-in .2s ease; transition: opacity .18s ease, transform .18s ease; }
+        .howria-toast-saliendo { opacity: 0; transform: translateY(-6px); }
+
         @media (prefers-reduced-motion: reduce) {
           .howria-card, button:not(:disabled) { transition: none !important; }
+          .howria-modal-fondo, .howria-modal-caja, .howria-tab-entrada, .howria-toast-item {
+            animation: none !important; transition: none !important;
+          }
         }
         .howria-shell { display: flex; }
         .howria-sidebar { display: none; }
@@ -4804,7 +4828,8 @@ export default function HowriaAdmin() {
               espacio en vez de forzar scroll horizontal antes de tiempo. */}
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
-      <LimiteDeError key={tab} onVolver={() => setTab("inicio")}>
+      <div key={tab} className="howria-tab-entrada">
+      <LimiteDeError onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
@@ -4832,6 +4857,7 @@ export default function HowriaAdmin() {
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} setTareasEquipo={setTareasEquipo} setObjetivosSemanales={setObjetivosSemanales} setObjetivosMensuales={setObjetivosMensuales} setProspectos={setProspectos} setCitasAgenda={setCitasAgenda} />}
       </LimiteDeError>
+      </div>
       </Suspense>
           </div>
         </div>

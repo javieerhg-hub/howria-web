@@ -191,8 +191,8 @@ function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas,
   }, [onCerrar]);
 
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 280, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-itinerario-titulo"
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 280, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-itinerario-titulo" className="howria-modal-caja"
         style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 640, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
           <h3 id="modal-itinerario-titulo" style={{ margin: 0, textTransform: "capitalize", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{fechaLabel}</h3>

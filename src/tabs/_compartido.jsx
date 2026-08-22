@@ -133,8 +133,8 @@ export function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
   const puedeEliminar = onEliminar && cita._dbId && ["cancelada", "rechazada", "realizada"].includes(cita.estado);
 
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-detalle-cita-titulo"
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="modal-detalle-cita-titulo" className="howria-modal-caja"
         style={{ background: "#FFFFFF", borderRadius: 14, padding: 26, maxWidth: 420, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
           <h3 id="modal-detalle-cita-titulo" style={{ margin: "0 0 4px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{cita.clienteNombre}</h3>

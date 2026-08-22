@@ -62,8 +62,8 @@ function ModalAjustePago({ paseador, monto, motivo, onMonto, onMotivo, onGuardar
   const requiereMotivo = monto !== 0;
   const invalido = requiereMotivo && !motivo.trim();
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
         <h3 style={{ ...sectionTitle, fontSize: 16 }}>Ajuste de pago — {paseador}</h3>
         <p style={{ ...hint, marginTop: -2 }}>Monto positivo para un bono, negativo para un descuento.</p>
         <label style={label}>Monto</label>
@@ -128,8 +128,8 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
   }, [clientes, paseador, mes, anio, diasEnMes, registroPaseos]);
 
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <h3 style={{ ...sectionTitle, fontSize: 16, margin: 0 }}>Detalle del mes — {paseador}</h3>
           <button onClick={onCerrar} style={{ border: "none", background: "none", fontSize: 20, color: "#8A7E5C", cursor: "pointer", lineHeight: 1 }}>×</button>

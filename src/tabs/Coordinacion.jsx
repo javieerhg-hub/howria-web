@@ -42,16 +42,28 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
         </div>
       </div>
       <span style={{ display: "inline-block", fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: bgEstado, color: colorEstado, marginBottom: 8 }}>{textoEstado}</span>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <button onClick={onToggleRealizado} disabled={diaVista > hoy}
-          style={{ flex: "1 1 auto", border: `1px solid ${estado === "realizado" ? "#2F6A46" : "#C7D9CC"}`, background: estado === "realizado" ? "#2F6A46" : "#fff", color: estado === "realizado" ? "#fff" : "#2F6A46", borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: diaVista > hoy ? "not-allowed" : "pointer", opacity: diaVista > hoy ? 0.5 : 1 }}>
-          {estado === "realizado" ? "✓ Hecho" : "Marcar hecho"}
-        </button>
-        <button onClick={onToggleCancelado}
-          style={{ flex: "1 1 auto", border: `1px solid ${estado === "cancelado" ? RUST : "#E7CFC2"}`, background: estado === "cancelado" ? RUST : "#fff", color: estado === "cancelado" ? "#fff" : RUST, borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-          {estado === "cancelado" ? "✕ Cancelado" : "Cancelar"}
-        </button>
-      </div>
+      {estado === "realizado" ? (
+        // Ya está marcado — los dos botones grandes de antes se sentían
+        // "todavía pendiente de hacer algo" aunque ya no quedaba nada por
+        // hacer. Un link chico de deshacer alcanza (acción barata y 100%
+        // reversible, no amerita un confirm de por medio).
+        <div style={{ textAlign: "right" }}>
+          <button onClick={onToggleRealizado} style={{ border: "none", background: "none", color: "#8A7E5C", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+            Deshacer
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <button onClick={onToggleRealizado} disabled={diaVista > hoy}
+            style={{ flex: "1 1 auto", border: "1px solid #C7D9CC", background: "#fff", color: "#2F6A46", borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: diaVista > hoy ? "not-allowed" : "pointer", opacity: diaVista > hoy ? 0.5 : 1 }}>
+            Marcar hecho
+          </button>
+          <button onClick={onToggleCancelado}
+            style={{ flex: "1 1 auto", border: `1px solid ${estado === "cancelado" ? RUST : "#E7CFC2"}`, background: estado === "cancelado" ? RUST : "#fff", color: estado === "cancelado" ? "#fff" : RUST, borderRadius: 7, padding: "6px 6px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            {estado === "cancelado" ? "✕ Cancelado" : "Cancelar"}
+          </button>
+        </div>
+      )}
       <button onClick={() => setMasAbierto((v) => !v)}
         style={{ border: "none", background: "none", color: "#8A7E5C", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "6px 0 0", width: "100%", textAlign: "center" }}>
         {masAbierto ? "Menos ▲" : "Más ▾"}
@@ -152,8 +164,8 @@ function FilaSwipeReprogramar({ item, yaReprogramada, onReprogramar }) {
 
 function ModalReprogramarRapido({ cliente, hoy, fecha, onFecha, motivo, onMotivo, onConfirmar, onCerrar, cargando }) {
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 340, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 340, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
         <h3 style={{ ...sectionTitle, fontSize: 16 }}>Reprogramar paseo</h3>
         <p style={{ ...hint, marginTop: -2 }}>{cliente.nombre} — 🐾 {cliente.perro}. Hoy no se hizo — ¿para qué día lo movemos?</p>
         <label style={label}>Nueva fecha</label>
@@ -179,8 +191,8 @@ function ModalCompartirPaseo({ item, equipoPaseo, nombre, porcentaje, onNombre, 
   const { cliente: c } = item;
   const otros = equipoPaseo.filter((u) => u.nombre !== c.paseadorNombre);
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 380, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
         <h3 style={{ ...sectionTitle, fontSize: 16 }}>Compartir paseo</h3>
         <p style={{ ...hint, marginTop: -2 }}>{c.nombre} — 🐾 {c.perro}. Reparte el pago de hoy entre {c.paseadorNombre} y otro paseador.</p>
         <label style={label}>Compartir con</label>
@@ -219,8 +231,8 @@ function ModalCompartirPaseo({ item, equipoPaseo, nombre, porcentaje, onNombre, 
 function ModalResolverAusencia({ paseador, pendientes, equipoPaseo, nuevoPaseador, onNuevoPaseador, onConfirmar, onCerrar, cargando }) {
   const otros = equipoPaseo.filter((u) => u.nombre !== paseador);
   return (
-    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 400, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 400, boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
         <h3 style={{ ...sectionTitle, fontSize: 16 }}>Reasignar pendientes de {paseador}</h3>
         <p style={{ ...hint, marginTop: -2 }}>
           {paseador} está ausente hoy y tiene {pendientes.length} paseo{pendientes.length === 1 ? "" : "s"} sin marcar. Esto los reasigna de forma <b>permanente</b> (no solo por hoy) — cuando {paseador} vuelva, tendrás que devolvérselos a mano si corresponde.
