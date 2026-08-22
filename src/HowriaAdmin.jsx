@@ -1753,6 +1753,12 @@ function useReprogramaciones(sessionVersion) {
 // "cancelado" ese día en registroPaseos (mismo mecanismo que cualquier
 // otra cancelación, ver salirDeRuta/moverPaseo).
 export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
+  // Un cliente que es solo de adiestramiento/clases/evaluación (tipoServicio
+  // sin "paseos") nunca tiene un paseo que marcar, aunque le haya quedado
+  // guardado algún día habitual de cuando se cargó su ficha — mismo criterio
+  // de "sin tipoServicio guardado se trata como paseos" que ya usa el aviso
+  // de "sin paseador" en Inicio (ver arriba, sinPaseador).
+  if (cliente.tipoServicio?.length && !cliente.tipoServicio.includes("paseos")) return false;
   const dow = (fecha.getDay() + 6) % 7;
   if (cliente.diasHabituales?.includes(dow)) return true;
   const clave = fechaKey(fecha);

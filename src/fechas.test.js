@@ -46,4 +46,19 @@ describe("estaProgramadoEnFecha", () => {
     const reprogramaciones = [{ clienteId: "abc", fechaNueva: "2026-08-20" }];
     expect(estaProgramadoEnFecha(cliente, miercoles, reprogramaciones)).toBe(false);
   });
+
+  it("false para un cliente solo de adiestramiento (tipoServicio sin 'paseos'), aunque tenga diasHabituales guardados", () => {
+    const cliente = { _dbId: "abc", diasHabituales: [2], tipoServicio: ["clases"] };
+    expect(estaProgramadoEnFecha(cliente, miercoles, [])).toBe(false);
+  });
+
+  it("true para un cliente que SÍ incluye 'paseos' en tipoServicio, junto con otros servicios", () => {
+    const cliente = { _dbId: "abc", diasHabituales: [2], tipoServicio: ["paseos", "clases"] };
+    expect(estaProgramadoEnFecha(cliente, miercoles, [])).toBe(true);
+  });
+
+  it("true para un cliente sin tipoServicio guardado (compatibilidad hacia atrás, se trata como paseos)", () => {
+    const cliente = { _dbId: "abc", diasHabituales: [2], tipoServicio: [] };
+    expect(estaProgramadoEnFecha(cliente, miercoles, [])).toBe(true);
+  });
 });
