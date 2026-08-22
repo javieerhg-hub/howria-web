@@ -144,7 +144,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
         <input placeholder="Tarifa a pagar al paseador por paseo" type="number" min="0" value={form.tarifaPaseador} onChange={(e) => setForm({ ...form, tarifaPaseador: e.target.value })} style={{ ...input, marginBottom: 0 }} />
       </div>
       <p style={{ ...hint, marginTop: -10 }}>Esta tarifa es lo que se le paga al paseador por cada paseo de este cliente — puede ser distinta al valor cobrado al cliente.</p>
-      {Number(form.valorPaseoRef) > 0 && Number(form.tarifaPaseador) > Number(form.valorPaseoRef) && (
+      {Number(form.tarifaPaseador) > 0 && Number(form.tarifaPaseador) > Number(form.valorPaseoRef || 0) && (
         <p style={{ ...hint, marginTop: -10, color: RUST, fontWeight: 600 }}>
           ⚠️ La tarifa del paseador ({fmtCLP(Number(form.tarifaPaseador))}) es mayor al valor cobrado al cliente ({fmtCLP(Number(form.valorPaseoRef))}) — Howria pierde plata en cada paseo de este cliente.
         </p>
@@ -707,7 +707,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
       {mostrarForm && (
         <FormularioCliente
           inicial={editandoId ? clientes.find((c) => c.id === editandoId) : null}
-          paseadores={usuarios}
+          paseadores={usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador")}
           entrenadores={usuarios.filter((u) => u.rol === "entrenador")}
           responsables={usuarios}
           onGuardar={guardar}

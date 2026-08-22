@@ -251,7 +251,14 @@ function ModalResolverAusencia({ paseador, pendientes, equipoPaseo, nuevoPaseado
 }
 
 export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user }) {
-  const [paseadorSel, setPaseadorSel] = useState(usuarios[0]?.nombre || "");
+  // Solo paseador/entrenador reales (no "Sin asignar", ni cuentas de
+  // coordinador/administrador que nunca van a tener un horario de
+  // paseos) — de la lista de usuarios, no de quién tiene clientes hoy,
+  // para que el filtro/selector siga disponible aunque se navegue a otro
+  // día o no tenga clientes todavía.
+  const equipoPaseo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  const [paseadorSel, setPaseadorSel] = useState(equipoPaseo[0]?.nombre || "");
   // Filtro de "Todos"/un paseador puntual — vive arriba del todo de la
   // pestaña (resumen + tarjetas de "Hoy"), separado de paseadorSel (que
   // es solo para el editor de horario semanal, más abajo).
@@ -414,12 +421,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     ? calendarioPorPaseador
     : calendarioPorPaseador.filter((g) => g.paseador === filtroPaseador);
 
-  // Cubos del resumen: solo paseador/entrenador reales (no "Sin asignar",
-  // que no es una persona a la que filtrar) — de la lista de usuarios, no
-  // de quién tiene clientes hoy, para que el filtro siga disponible aunque
-  // se navegue a otro día donde esa persona no tenga nada.
-  const equipoPaseo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-
   const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const clientesHoyFiltrados = filtroPaseador === "todos" ? clientesHoy : clientesHoy.filter((c) => (c.paseadorNombre || "Sin asignar") === filtroPaseador);
   const realizadosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
@@ -437,7 +438,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   // cargado de su semana), no con el total semanal, para que un
   // paseador no aparezca sobrecargado acá y no en el detalle por día (o
   // al revés).
-  const cargaPorPaseador = usuarios.map((u) => {
+  const cargaPorPaseador = equipoPaseo.map((u) => {
     const clientesDe = clientes.filter((c) => c.paseadorNombre === u.nombre);
     const total = clientesDe.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
     const picoDiario = Math.max(0, ...Array.from({ length: 7 }, (_, dow) => clientesDe.filter((c) => c.diasHabituales?.includes(dow)).length));
@@ -759,7 +760,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                     {items.map((item) => (
-                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={usuarios} diaVista={diaVista} hoy={hoy}
+                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={equipoPaseo} diaVista={diaVista} hoy={hoy}
                         onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
                         onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
                         onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
@@ -839,7 +840,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
           <select value={paseadorSel} onChange={(e) => setPaseadorSel(e.target.value)} style={{ ...input, maxWidth: 280, marginBottom: 0 }}>
-            {usuarios.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+            {equipoPaseo.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
           </select>
           <input placeholder="Buscar cliente para agregar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ ...input, maxWidth: 240, marginBottom: 0 }} />
         </div>
