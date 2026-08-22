@@ -80,6 +80,110 @@ function ModalAjustePago({ paseador, monto, motivo, onMonto, onMotivo, onGuardar
   );
 }
 
+const ESTILO_DIA_MES = {
+  hecho: { background: "#2F6A46", color: "#fff", border: "1px solid #2F6A46" },
+  falta: { background: "#FFFFFF", color: RUST, border: `1px dashed ${RUST}` },
+  cancelado: { background: "#EDE4CE", color: "#9A9179", border: "1px solid #EDE4CE" },
+  futuro: { background: "#FFFFFF", color: "#C9BF9E", border: "1px solid #EDE4CE" },
+  libre: { background: "transparent", color: "transparent", border: "1px solid transparent" },
+};
+const ETIQUETA_ESTADO_DIA = { hecho: "Realizado", falta: "Programado, falta marcar", cancelado: "Cancelado", futuro: "Programado, aún no llega", libre: "" };
+
+function CeldaDiaMes({ dia, estado, mes }) {
+  return (
+    <span title={estado === "libre" ? "" : `${dia}/${mes + 1}: ${ETIQUETA_ESTADO_DIA[estado]}`}
+      style={{ width: 20, height: 20, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 700, flexShrink: 0, ...ESTILO_DIA_MES[estado] }}>
+      {estado === "libre" ? "" : dia}
+    </span>
+  );
+}
+
+// Verificación visual rápida antes de pagar: por cada cliente del
+// paseador, una fila con un cuadradito por cada día del mes (realizado/
+// falta marcar/cancelado/aún no llega), en vez de tener que revisar
+// cliente por cliente en Mis Paseos. Incluye también clientes de OTRO
+// paseador donde este ayudó puntualmente ("Compartir con...", Coordinación).
+function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioInicial, onCerrar }) {
+  const [mes, setMes] = useState(mesInicial);
+  const [anio, setAnio] = useState(anioInicial);
+  function cambiarMes(delta) {
+    let m = mes + delta, a = anio;
+    if (m < 0) { m = 11; a -= 1; } else if (m > 11) { m = 0; a += 1; }
+    setMes(m); setAnio(a);
+  }
+  const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+  const hoyMedianoche = new Date(); hoyMedianoche.setHours(0, 0, 0, 0);
+
+  const filas = useMemo(() => {
+    const propias = clientes.filter((c) => c.paseadorNombre === paseador).map((c) => ({ cliente: c, compartido: false }));
+    const compartidas = [];
+    clientes.forEach((c) => {
+      if (c.paseadorNombre === paseador) return;
+      for (let d = 1; d <= diasEnMes; d++) {
+        const r = registroPaseos[`${c.id}_${fechaKey(new Date(anio, mes, d))}`];
+        if (r?.realizado && r.compartidoCon === paseador) { compartidas.push({ cliente: c, compartido: true }); break; }
+      }
+    });
+    return [...propias, ...compartidas];
+  }, [clientes, paseador, mes, anio, diasEnMes, registroPaseos]);
+
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h3 style={{ ...sectionTitle, fontSize: 16, margin: 0 }}>Detalle del mes — {paseador}</h3>
+          <button onClick={onCerrar} style={{ border: "none", background: "none", fontSize: 20, color: "#8A7E5C", cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 14px" }}>
+          <button onClick={() => cambiarMes(-1)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>← Mes anterior</button>
+          <span style={{ fontWeight: 600, color: NAVY, fontSize: 13.5 }}>{MESES[mes]} {anio}</span>
+          <button onClick={() => cambiarMes(1)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Mes siguiente →</button>
+        </div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: "#8A7E5C", marginBottom: 16 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: "#2F6A46", display: "inline-block" }} /> Realizado</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, border: `1px dashed ${RUST}`, display: "inline-block" }} /> Falta marcar</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: "#EDE4CE", display: "inline-block" }} /> Cancelado</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, border: "1px solid #EDE4CE", display: "inline-block" }} /> Aún no llega</span>
+        </div>
+
+        {filas.length === 0 && <p style={{ ...hint, textAlign: "center" }}>Sin clientes ni paseos compartidos este mes.</p>}
+
+        {filas.map(({ cliente, compartido }) => {
+          const tarifa = Number(cliente.tarifaPaseador || 0);
+          let realizados = 0, monto = 0;
+          const dias = [];
+          for (let d = 1; d <= diasEnMes; d++) {
+            const fecha = new Date(anio, mes, d);
+            const r = registroPaseos[`${cliente.id}_${fechaKey(fecha)}`];
+            let estado = "libre";
+            if (compartido) {
+              if (r?.realizado && r.compartidoCon === paseador) { estado = "hecho"; realizados++; monto += montoCompartido(tarifa, r); }
+            } else {
+              const esDeEste = r?.realizado && (!r.paseadorNombre || r.paseadorNombre === paseador);
+              const dow = (fecha.getDay() + 6) % 7;
+              const programado = cliente.diasHabituales?.includes(dow);
+              if (esDeEste) { estado = "hecho"; realizados++; monto += montoPrincipal(tarifa, r); }
+              else if (r?.cancelado) estado = "cancelado";
+              else if (programado && fecha < hoyMedianoche) estado = "falta";
+              else if (programado) estado = "futuro";
+            }
+            dias.push(<CeldaDiaMes key={d} dia={d} estado={estado} mes={mes} />);
+          }
+          return (
+            <div key={cliente.id} style={{ padding: "10px 0", borderBottom: "1px solid #EDE4CE" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>{cliente.nombre}{compartido ? " 🤝" : ""}</span>
+                <span style={{ fontSize: 12, color: "#8A7E5C", whiteSpace: "nowrap" }}>{realizados} paseo(s) · {fmtCLP(monto)}</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{dias}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
   const [periodoOffset, setPeriodoOffset] = useState(0);
@@ -143,6 +247,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
   const [ajusteModal, setAjusteModal] = useState(null);
   const [ajusteMontoForm, setAjusteMontoForm] = useState(0);
   const [ajusteMotivoForm, setAjusteMotivoForm] = useState("");
+  const [detalleAbierto, setDetalleAbierto] = useState(null);
 
   function abrirAjuste(fila) {
     setAjusteMontoForm(fila.ajuste || 0);
@@ -379,6 +484,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                   <td style={{ padding: "10px", textAlign: "right", fontWeight: 700, color: NAVY }}>{fmtCLP(r.monto)}</td>
                   <td style={{ padding: "10px", textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      <button onClick={() => setDetalleAbierto(r.paseador)} style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12 }}>Detalle del mes</button>
                       <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12 }}>Descargar</button>
                       {pagado ? (
                         <>
@@ -435,6 +541,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                 <span style={{ fontSize: 19, fontWeight: 700, color: NAVY }}>{fmtCLP(r.monto)}</span>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => setDetalleAbierto(r.paseador)} style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5 }}>Detalle del mes</button>
                 <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5 }}>Descargar</button>
                 {pagado ? (
                   <>
@@ -525,6 +632,10 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     {ajusteModal && (
       <ModalAjustePago paseador={ajusteModal} monto={ajusteMontoForm} motivo={ajusteMotivoForm}
         onMonto={setAjusteMontoForm} onMotivo={setAjusteMotivoForm} onGuardar={guardarAjusteModal} onCerrar={() => setAjusteModal(null)} />
+    )}
+    {detalleAbierto && (
+      <ModalDetalleMes paseador={detalleAbierto} clientes={clientes} registroPaseos={registroPaseos}
+        mesInicial={mesFactura} anioInicial={anioFactura} onCerrar={() => setDetalleAbierto(null)} />
     )}
     </>
   );
