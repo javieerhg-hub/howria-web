@@ -266,6 +266,15 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [fechaNuevaSel, setFechaNuevaSel] = useState(() => fechaKey(hoy));
   const [motivoMover, setMotivoMover] = useState("");
   const [moviendoPaseo, setMoviendoPaseo] = useState(false);
+
+  // "Agregar paseo anterior" — a diferencia de Reprogramar (mueve un
+  // paseo que ya estaba programado), esto crea uno que nunca estuvo
+  // programado — ej. una capacitación con un cliente que no es suyo.
+  const [clienteAgregarSel, setClienteAgregarSel] = useState("");
+  const [fechaAgregarSel, setFechaAgregarSel] = useState(() => fechaKey(ayer));
+  const [paseadorAgregarSel, setPaseadorAgregarSel] = useState("");
+  const [notaAgregar, setNotaAgregar] = useState("");
+  const [agregandoPaseo, setAgregandoPaseo] = useState(false);
   const [diaSemanaMovil, setDiaSemanaMovil] = useState(dowHoy);
   const inicioSemana = inicioSemanaActual();
 
@@ -541,6 +550,41 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
       setClienteMoverSel(""); setMotivoMover("");
     }
     setMoviendoPaseo(false);
+  }
+
+  // Registro existente para el cliente+fecha elegidos en "Agregar paseo
+  // anterior" — si ya hay algo guardado ahí, se avisa antes de pisarlo.
+  const registroExistenteAgregar = clienteAgregarSel && fechaAgregarSel ? registroPaseos[`${clienteAgregarSel}_${fechaAgregarSel}`] : null;
+
+  function elegirClienteAgregar(idStr) {
+    setClienteAgregarSel(idStr);
+    const cliente = clientesConPaseador.find((c) => c.id === Number(idStr));
+    // Por defecto asume que lo hizo el paseador de siempre del cliente —
+    // el caso de "otro paseador" (ej. una practicante) se cambia a mano.
+    setPaseadorAgregarSel(cliente?.paseadorNombre || "");
+  }
+
+  async function agregarPaseoAnterior() {
+    const cliente = clientesConPaseador.find((c) => c.id === Number(clienteAgregarSel));
+    if (!cliente || !fechaAgregarSel || !paseadorAgregarSel || agregandoPaseo) return;
+    setAgregandoPaseo(true);
+    const fecha = new Date(fechaAgregarSel + "T00:00:00");
+    // Si lo hizo alguien distinto al paseador asignado del cliente (el
+    // caso de la practicante), se reusa el mismo reparto de Coordinación
+    // "Hoy" — 100% para quien lo hizo de verdad, 0% para el asignado —
+    // así el pago llega bien a Mis Paseos/Finanzas/Pago Trabajadores sin
+    // ningún cálculo nuevo.
+    const esOtroPaseador = paseadorAgregarSel !== cliente.paseadorNombre;
+    const cambios = {
+      realizado: true, cancelado: false,
+      compartidoCon: esOtroPaseador ? paseadorAgregarSel : null,
+      porcentajeCompartido: esOtroPaseador ? 100 : null,
+    };
+    if (notaAgregar.trim()) cambios.nota = notaAgregar.trim();
+    actualizarRegistroDia(cliente.id, fecha, cambios);
+    showToast(`Paseo de ${cliente.nombre} el ${fecha.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} agregado para ${paseadorAgregarSel}.`, "exito");
+    setClienteAgregarSel(""); setPaseadorAgregarSel(""); setNotaAgregar("");
+    setAgregandoPaseo(false);
   }
 
   function estiloCuboFiltro(activo) {
@@ -903,6 +947,43 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             </div>
           </div>
         )}
+      </SeccionPlegable>
+
+      <SeccionPlegable titulo="Agregar paseo anterior" subtitulo="Para paseos que se hicieron pero nunca quedaron programados — por ejemplo, una capacitación.">
+        <p style={{ ...hint, marginTop: -4 }}>
+          Por ejemplo: una paseadora nueva hizo paseos de práctica con clientes que no son suyos durante su capacitación — acá se registran para que le cuenten en su pago, sin tocar al paseador asignado del cliente.
+        </p>
+        <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr", gap: 12, marginTop: 14 }}>
+          <div>
+            <label style={label}>Cliente</label>
+            <select value={clienteAgregarSel} onChange={(e) => elegirClienteAgregar(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+              <option value="">Selecciona un cliente…</option>
+              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro} ({c.paseadorNombre})</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={label}>Fecha</label>
+            <input type="date" value={fechaAgregarSel} max={fechaKey(hoy)} onChange={(e) => setFechaAgregarSel(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+          </div>
+          <div>
+            <label style={label}>Quién lo hizo de verdad</label>
+            <select value={paseadorAgregarSel} onChange={(e) => setPaseadorAgregarSel(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+              <option value="">Selecciona un paseador…</option>
+              {equipoPaseo.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <label style={{ ...label, marginTop: 14 }}>Nota (opcional)</label>
+        <input value={notaAgregar} onChange={(e) => setNotaAgregar(e.target.value)} placeholder="Ej: paseo de práctica durante su capacitación" style={input} />
+        {registroExistenteAgregar && (
+          <p style={{ ...hint, color: RUST, marginTop: -6 }}>
+            ⚠️ Ya hay un registro para este cliente en esta fecha ({registroExistenteAgregar.realizado ? "realizado" : registroExistenteAgregar.cancelado ? "cancelado" : "sin marcar"}) — guardar acá lo va a reemplazar.
+          </p>
+        )}
+        <button onClick={agregarPaseoAnterior} disabled={!clienteAgregarSel || !paseadorAgregarSel || agregandoPaseo}
+          style={{ ...botonPrincipal, width: "auto", padding: "12px 24px", opacity: !clienteAgregarSel || !paseadorAgregarSel || agregandoPaseo ? 0.6 : 1, cursor: !clienteAgregarSel || !paseadorAgregarSel || agregandoPaseo ? "default" : "pointer" }}>
+          {agregandoPaseo ? "Agregando…" : "Agregar paseo"}
+        </button>
       </SeccionPlegable>
     </div>
   );
