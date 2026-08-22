@@ -542,7 +542,15 @@ function renderFilaAlumno(a, onAbrir) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 14, alignItems: "center", fontSize: 12.5, flex: "none" }}>
-        <span style={{ color: "#8A7E5C" }}>{a.ultimaClase?.temas?.[0] ? nombreTema(a.ultimaClase.temas[0]) : a.total > 0 ? "Sin clases aún" : "Sin plan"}</span>
+        <span style={{ color: "#8A7E5C" }}>
+          {a.ultimaClase?.temas?.[0]
+            ? nombreTema(a.ultimaClase.temas[0])
+            : a.total === 0
+            ? "Sin plan"
+            : a.hechas === 0
+            ? "Sin clases aún"
+            : "Sin temas registrados"}
+        </span>
         {a.total > 0 && (
           <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 46 }}><BarraProgreso pct={a.pct} /></span>

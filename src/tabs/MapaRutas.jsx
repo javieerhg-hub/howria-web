@@ -98,7 +98,10 @@ function ColumnaManada({ id, titulo, clientes, vacio, idsClientesEnConflicto, on
 
 export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseadorIdProp, setPaseadorId, mascotas = [], mascotaIncompatibilidades = [],
   incluidos, setIncluidos, ruta, setRuta, velocidad, setVelocidad, duracionParada, setDuracionParada }) {
-  const paseadores = usuarios;
+  // Solo cuentas que de verdad salen a caminar clientes — antes entraban
+  // también coordinador/administrador/otras cuentas del equipo, mismo
+  // hallazgo que en Clientes/Coordinación.
+  const paseadores = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
   const paseadorId = paseadorIdProp || paseadores[0]?.nombre || "";
   const [geocodificando, setGeocodificando] = useState(null);
   const [errorGeo, setErrorGeo] = useState("");
