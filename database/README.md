@@ -128,6 +128,7 @@ no un runner de migraciones.
 | 100 | `boletas_eliminadas.sql` | 2026-08-19 | Crea `boletas_eliminadas` (bitácora de solo-lectura: copia completa de cada boleta justo antes de borrarla, con quién y cuándo) — hallado en la revisión de lógica financiera: "Eliminar boleta" no dejaba ningún rastro, a diferencia de "Deshacer pago" en Pago Trabajadores. |
 | 101 | `ajustes_pago_motivo.sql` | 2026-08-19 | Agrega `motivo` a `ajustes_pago_pendientes` y `ajuste_motivo` a `pagos_trabajadores` — un bono/descuento quedaba con quién y cuándo, pero nunca por qué; pedido explícito de Javier tras la revisión de lógica financiera. |
 | 102 | `costos_negocio.sql` | 2026-08-19 | Crea `costos_negocio` (costo puntual con descripción/monto/fecha — arriendo, insumos, marketing) — "Ganancia de Howria" en Finanzas solo restaba pago a trabajadores; pedido explícito de Javier para que la ganancia mostrada sea la utilidad real. |
+| 103 | `tarifa_javier_arniaz.sql` | 2026-08-22 | Migración de datos (no de esquema): iguala `tarifa_paseador` a `valor_paseo_ref` en todos los clientes de Javier Arniaz — hallado en la revisión en vivo (25 paseos realizados, $0 de pago calculado, porque nunca se le cargó tarifa). Javier confirmó: a él se le paga el 100% de lo que se le cobra al cliente. |
 
 ## Nota sobre el orden 001–023
 
