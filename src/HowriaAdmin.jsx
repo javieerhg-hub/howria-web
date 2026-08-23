@@ -2428,6 +2428,30 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
     avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
   }
 
+  // Un cliente con paseador asignado y tarifa en $0 le suma paseos al
+  // paseador que después valen nada al momento de pagarle, y hasta ahora
+  // nada lo decía: Javier Arniaz llegó a 25 paseos realizados con $0 de
+  // pago calculado, y solo se descubrió mirando "Pago trabajadores" a
+  // mano. Solo avisa si YA hay paseos hechos este mes — un cliente recién
+  // cargado, todavía sin tarifa y sin paseos, no es un problema.
+  const conPaseosSinTarifa = clientes.filter((c) => {
+    if (!c.paseadorNombre || Number(c.tarifaPaseador || 0) > 0) return false;
+    const cur = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    while (cur <= hoy) {
+      if (registroPaseos[`${c.id}_${fechaKey(cur)}`]?.realizado) return true;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return false;
+  });
+  if (conPaseosSinTarifa.length > 0) {
+    avisos.push({
+      tipo: "tarifa-cero", icono: "💸",
+      texto: `${conPaseosSinTarifa.length} cliente(s) con paseos hechos este mes y tarifa del paseador en $0`,
+      detalle: conPaseosSinTarifa.map((c) => `${c.nombre} (${c.paseadorNombre})`).join(", "),
+      clave: `tarifa-cero-${hoy.getMonth()}-${conPaseosSinTarifa.length}`, tab: "clientes",
+    });
+  }
+
   // Mismo criterio exacto que "Clientes sin boleta este mes" en Finanzas
   // (esBoletaDeCliente + mes/año calendario actual) — para que el número
   // que aparece acá arriba nunca desentone con el que ya se ve ahí. Antes
