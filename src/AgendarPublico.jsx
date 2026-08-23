@@ -268,7 +268,22 @@ export default function AgendarPublico() {
                   <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>Cargando disponibilidad…</p>
                 ) : errorMapa ? (
                   <p style={{ margin: "8px 0 0", fontSize: 12.5, color: RUST }}>No se pudo cargar la disponibilidad — revisa tu conexión e intenta de nuevo.</p>
-                ) : null}
+                ) : (
+                  // Sin esto, un tutor ve cuadraditos verdes y rojos sin saber
+                  // qué significan — y los rojos además no responden al tocarlos
+                  // (soloDisponibleClickeable), lo que se siente como que la
+                  // página está fallando. Los colores están copiados de
+                  // lib/CalendarioMes.jsx, que es compartido con el editor de
+                  // disponibilidad del adiestrador y por eso no se toca ahí.
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 14, margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: "#D8ECDE", border: "1.5px solid #2F6A46" }} /> Con horas libres
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: "#F1DCD2", border: `1px solid ${RUST}` }} /> Sin horas ese día
+                    </span>
+                  </div>
+                )}
               </div>
 
               {fecha && (
