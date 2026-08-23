@@ -90,4 +90,17 @@ describe("montoRealizadoEnRango", () => {
     };
     expect(montoRealizadoEnRango(registro, 7, LUNES, LUNES_SIGUIENTE, "Ana", 8000)).toBe(8000);
   });
+
+  // Caso encontrado comparando la pestaña Paseadores contra la tabla de
+  // Pago trabajadores: un paseo cuyo reparto apunta al MISMO paseador
+  // dueño del cliente. Pasa al usar "Agregar paseo anterior" (que reparte
+  // al 100%) y después dejar al cliente asignado a esa misma persona.
+  // Esta función devuelve SOLO la parte principal — quien la use tiene que
+  // sumar aparte montoCompartido cuando `compartidoCon` es esa persona,
+  // porque hizo el paseo entero. Es lo que hace la tabla de Pago
+  // trabajadores (dos pasadas) y lo que le faltaba a detalleMesCliente.
+  it("con el reparto apuntando al mismo paseador, devuelve solo la parte principal", () => {
+    const registro = { "7_2026-08-17": { realizado: true, compartidoCon: "Ana", porcentajeCompartido: 50 } };
+    expect(montoRealizadoEnRango(registro, 7, LUNES, LUNES_SIGUIENTE, "Ana", 8000)).toBe(4000);
+  });
 });
