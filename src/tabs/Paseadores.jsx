@@ -12,6 +12,91 @@ import {
 import { CeldaDiaMes, filasDetalleMes, detalleMesCliente } from "./_compartido.jsx";
 
 const VERDE = "#2F6A46";
+const DIAS_CORTOS = ["L", "M", "X", "J", "V", "S", "D"];
+const DIAS_LARGOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
+// Calendario de un perro en particular: el mes completo en grilla de
+// semanas (no la tira corrida de la ficha), para trabajar sobre un
+// cliente puntual. Permite dos cosas distintas, separadas a propósito:
+// marcar/desmarcar un día concreto (arriba) y cambiar qué días le tocan
+// de aquí en adelante (abajo) — lo segundo afecta todas las semanas
+// futuras, así que va aparte y advertido.
+function CalendarioPerro({ cliente, paseador, registroPaseos, dias, anio, mes, hoy, realizados, monto, compartido, onToggleDia, onToggleDiaHabitual, onCerrar, onCambiarMes }) {
+  // Relleno inicial para que el día 1 caiga en su columna real (0 = lunes).
+  const offsetInicial = (new Date(anio, mes, 1).getDay() + 6) % 7;
+  const habituales = cliente.diasHabituales || [];
+
+  return (
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="howria-modal-caja" style={{ background: "#FFFFFF", borderRadius: 14, padding: 22, width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(20,33,61,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", flex: "none", background: cliente.fotoUrl ? `url(${cliente.fotoUrl}) center/cover` : CREAM_SOFT, border: "2px solid #EDE4CE" }} />
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ ...sectionTitle, fontSize: 17, margin: 0 }}>🐾 {cliente.perro || "Sin nombre"}</h3>
+              <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#8A7E5C" }}>{cliente.nombre}{compartido ? " · paseo compartido" : ""}</p>
+            </div>
+          </div>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ border: "none", background: "none", fontSize: 20, color: "#8A7E5C", cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "16px 0 10px" }}>
+          <button onClick={() => onCambiarMes(-1)} style={{ ...botonSecundario, padding: "6px 11px", fontSize: 12, flex: "none" }}>←</button>
+          <span style={{ fontWeight: 600, color: NAVY, fontSize: 13.5, textTransform: "capitalize" }}>{MESES[mes]} {anio}</span>
+          <button onClick={() => onCambiarMes(1)} style={{ ...botonSecundario, padding: "6px 11px", fontSize: 12, flex: "none" }}>→</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
+          {DIAS_CORTOS.map((d, i) => (
+            <span key={i} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#B0A587" }}>{d}</span>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {Array.from({ length: offsetInicial }).map((_, i) => <span key={`v${i}`} />)}
+          {dias.map((d) => {
+            const editable = !compartido && d.estado !== "libre" && d.fecha <= hoy;
+            return (
+              <span key={d.dia} style={{ display: "flex", justifyContent: "center" }}>
+                <CeldaDiaMes dia={d.dia} estado={d.estado} mes={mes}
+                  onClick={editable ? () => onToggleDia(d.fecha) : undefined}
+                  titulo={d.estado === "libre" ? `${d.dia}/${mes + 1}: no le toca este día` : d.fecha > hoy ? `${d.dia}/${mes + 1}: aún no llega` : undefined} />
+              </span>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, padding: "10px 12px", background: CREAM_SOFT, borderRadius: 9, fontSize: 12.5 }}>
+          <span style={{ color: "#8A7E5C" }}>{realizados} paseo(s) este mes</span>
+          <b style={{ color: NAVY }}>{fmtCLP(monto)}</b>
+        </div>
+
+        <p style={{ ...label, marginTop: 22, marginBottom: 4 }}>Días que le tocan</p>
+        <p style={{ ...hint, marginTop: 0 }}>
+          Esto cambia su horario <b>de aquí en adelante</b>, no solo este mes — los paseos ya marcados no se tocan.
+        </p>
+        {compartido ? (
+          <p style={{ ...hint, marginTop: 6 }}>Este cliente es de otro paseador; su horario se edita desde el perfil de esa persona.</p>
+        ) : (
+          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {DIAS_CORTOS.map((d, dow) => {
+              const activo = habituales.includes(dow);
+              return (
+                <button key={dow} onClick={() => onToggleDiaHabitual(dow)} title={DIAS_LARGOS[dow]}
+                  style={{
+                    width: 38, height: 38, borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 700,
+                    border: activo ? `1.5px solid ${GOLD}` : "1px solid #DCD2B4",
+                    background: activo ? NAVY : "#FFFFFF", color: activo ? "#F3ECDC" : "#B0A587",
+                  }}>
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function BarraMeta({ monto, meta }) {
   if (!meta) return <p style={{ ...hint, margin: 0, fontSize: 11.5 }}>Sin meta fijada</p>;
@@ -48,11 +133,12 @@ function totalesDelMes(clientes, paseador, registroPaseos, anio, mes, diasEnMes,
   return { porCliente, realizados, monto, sinMarcar, cancelados };
 }
 
-export function Paseadores({ clientes, usuarios, registroPaseos, setRegistroPaseos, cargandoClientes }) {
+export function Paseadores({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, cargandoClientes }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const [mes, setMes] = useState(hoy.getMonth());
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [perfil, setPerfil] = useState(null); // nombre del paseador abierto
+  const [perroAbierto, setPerroAbierto] = useState(null); // id local del cliente
 
   const diasEnMes = new Date(anio, mes + 1, 0).getDate();
   // Solo cuentas que de verdad salen a pasear — mismo filtro que ya usan
@@ -88,6 +174,17 @@ export function Paseadores({ clientes, usuarios, registroPaseos, setRegistroPase
         ...(prev[key] || {}), realizado: marcando, cancelado: false,
         ...(marcando ? {} : { compartidoCon: null, porcentajeCompartido: null }),
       },
+    }));
+  }
+
+  // Cambia el horario del cliente de aquí en adelante — mismo mecanismo
+  // que "Horario por paseador" en Coordinación (toggleDiaCliente).
+  function toggleDiaHabitual(clienteId, dow) {
+    setClientes((prev) => prev.map((c) => {
+      if (c.id !== clienteId) return c;
+      const dias = c.diasHabituales || [];
+      const tiene = dias.includes(dow);
+      return { ...c, diasHabituales: tiene ? dias.filter((d) => d !== dow) : [...dias, dow].sort((a, b) => a - b) };
     }));
   }
 
@@ -148,10 +245,15 @@ export function Paseadores({ clientes, usuarios, registroPaseos, setRegistroPase
           {porCliente.map(({ cliente, compartido, tarifa, realizados: rc, monto: mc, dias }) => (
             <div key={cliente.id} style={{ padding: "12px 0", borderBottom: "1px solid #EDE4CE" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: NAVY }}>
+                {/* Abre el calendario del perro: el mes en grilla, para
+                    trabajar sobre este cliente puntual sin perderse entre
+                    la tira de cuadraditos de todos. */}
+                <button onClick={() => setPerroAbierto(cliente.id)}
+                  style={{ border: "none", background: "none", padding: 0, font: "inherit", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 600, color: NAVY }}>
                   {cliente.nombre}{compartido ? " 🤝" : ""}
-                  <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12 }}> · {tarifa > 0 ? `${fmtCLP(tarifa)} por paseo` : "sin tarifa cargada"}</span>
-                </span>
+                  <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12 }}> · 🐾 {cliente.perro || "sin nombre"} · {tarifa > 0 ? `${fmtCLP(tarifa)} por paseo` : "sin tarifa cargada"}</span>
+                  <span style={{ color: GOLD, fontSize: 11.5, marginLeft: 6 }}>ver calendario →</span>
+                </button>
                 <span style={{ fontSize: 12.5, color: "#8A7E5C", whiteSpace: "nowrap" }}>{rc} paseo(s) · <b style={{ color: NAVY }}>{fmtCLP(mc)}</b></span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -169,6 +271,23 @@ export function Paseadores({ clientes, usuarios, registroPaseos, setRegistroPase
             </div>
           ))}
         </div>
+
+        {(() => {
+          if (perroAbierto == null) return null;
+          const fila = porCliente.find((f) => f.cliente.id === perroAbierto);
+          if (!fila) return null;
+          return (
+            <CalendarioPerro
+              cliente={fila.cliente} paseador={u.nombre} compartido={fila.compartido}
+              registroPaseos={registroPaseos} dias={fila.dias} anio={anio} mes={mes} hoy={hoy}
+              realizados={fila.realizados} monto={fila.monto}
+              onToggleDia={(fecha) => toggleRealizado(fila.cliente.id, fecha)}
+              onToggleDiaHabitual={(dow) => toggleDiaHabitual(fila.cliente.id, dow)}
+              onCambiarMes={cambiarMes}
+              onCerrar={() => setPerroAbierto(null)}
+            />
+          );
+        })()}
       </>
     );
   }
