@@ -5,7 +5,7 @@ import { useState, useMemo, Fragment } from "react";
 import { Search } from "lucide-react";
 import {
   NAVY, CREAM, GOLD, INK, RUST, ESTADOS_FACTURA, tarjeta, sectionTitle, hint, label, input,
-  botonPrincipal, botonSecundario, Spinner, BotonEliminar, BotonConfirmable, ModalConfirmacion,
+  botonPrincipal, botonSecundario, Spinner, SkeletonLista, BotonEliminar, BotonConfirmable, ModalConfirmacion,
   fmtCLP, fechaKey, esBoletaDeCliente, showToast,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta, esPorCobrar, montoParaResponsable } from "../lib/calculosBoletas.js";
@@ -453,9 +453,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
       <p style={hint}>Todas las boletas generadas por el sistema, con quién es cada una y en qué estado de pago se encuentra.</p>
 
       {cargandoBoletas ? (
-        <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
-          <Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando facturas…
-        </p>
+        <div style={{ marginTop: 18 }}><SkeletonLista filas={5} alto={38} /></div>
       ) : (
         <>
           <div style={{ position: "relative", marginTop: 18 }}>

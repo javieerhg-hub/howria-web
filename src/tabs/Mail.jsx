@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM_SOFT, GOLD, RUST, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
-  botonSecundario, Spinner, BotonConfirmable, showToast, dbToCorreo,
+  botonSecundario, Spinner, Skeleton, SkeletonLista, BotonConfirmable, showToast, dbToCorreo,
 } from "../HowriaAdmin.jsx";
 
 function fmtFechaCorreo(iso) {
@@ -210,7 +210,13 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   }
 
   if (cargando) {
-    return <div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando correo…</p></div>;
+    return (
+      <div className="howria-card" style={tarjeta}>
+        <Skeleton ancho="32%" alto={20} />
+        <Skeleton ancho="60%" alto={12} style={{ marginTop: 10 }} />
+        <div style={{ marginTop: 22 }}><SkeletonLista filas={4} alto={40} /></div>
+      </div>
+    );
   }
 
   return (

@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
-  input, botonPrincipal, botonSecundario, Spinner, BotonEliminar, fechaKey, inicioSemana, showToast,
+  input, botonPrincipal, botonSecundario, Spinner, SkeletonLista, BotonEliminar, fechaKey, inicioSemana, showToast,
   estaProgramadoEnFecha,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";
@@ -625,7 +625,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
 
         {cargandoClientes ? (
-          <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+          <SkeletonLista filas={3} alto={44} gap={8} />
         ) : gruposVistaRapida.length === 0 ? (
           <p style={hint}>{vistaRapida === "no_realizados" ? "Todo marcado — no queda ningún paseo pendiente hoy. 🎉" : "Todavía nadie ha sido marcado como realizado hoy."}</p>
         ) : (
@@ -732,7 +732,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
 
         {cargandoClientes ? (
-          <p style={{ ...hint, marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+          <div style={{ marginTop: 12 }}><SkeletonLista filas={3} alto={72} gap={10} /></div>
         ) : calendarioPorPaseadorFiltrado.length === 0 ? (
           <p style={{ ...hint, marginTop: 12 }}>
             {filtroPaseador === "todos" ? "No hay paseos programados este día." : `${filtroPaseador} no tiene paseos programados este día.`}

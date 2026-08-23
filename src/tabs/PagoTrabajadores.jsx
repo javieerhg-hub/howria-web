@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 import { Banknote } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, tarjeta, sectionTitle, hint, label, input,
-  botonPrincipal, botonSecundario, Spinner, FilaLista, BotonEliminar, BotonConfirmable,
+  botonPrincipal, botonSecundario, Spinner, SkeletonLista, FilaLista, BotonEliminar, BotonConfirmable,
   fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo,
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
@@ -564,7 +564,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
 
       <p style={label}>Historial de pagos realizados</p>
       {cargandoPagos ? (
-        <p style={{ ...hint, marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando historial de pagos…</p>
+        <div style={{ marginTop: 10 }}><SkeletonLista filas={3} alto={34} /></div>
       ) : historial.length === 0 ? (
         <p style={{ ...hint, marginTop: 8 }}>Todavía no se ha marcado ningún pago.</p>
       ) : (

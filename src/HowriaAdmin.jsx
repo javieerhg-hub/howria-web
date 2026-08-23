@@ -3963,6 +3963,47 @@ export function BotonEliminar({ onConfirm, label = "Eliminar", style, disabled =
   return <BotonConfirmable onConfirm={onConfirm} label={label} colorConfirmar={RUST} style={style} disabled={disabled} title={title} />;
 }
 
+// ---------- Placeholders de carga (skeletons) ----------
+// Un bloque gris con la forma aproximada del contenido que viene, en vez
+// de un spinner sobre una pantalla vacía: la página no "salta" cuando
+// llegan los datos y se percibe más rápida aunque tarde lo mismo. El
+// brillo que recorre el bloque vive en el <style> global
+// (.howria-skeleton), así que respeta prefers-reduced-motion.
+export function Skeleton({ ancho = "100%", alto = 12, radio = 6, style }) {
+  return <span className="howria-skeleton" style={{ display: "block", width: ancho, height: alto, borderRadius: radio, ...style }} />;
+}
+
+// Calca la tarjeta real de Clientes (foto redonda 46px + nombre + perro +
+// tres líneas de datos), así el relleno no se mueve al llegar los datos.
+export function SkeletonTarjetaCliente() {
+  return (
+    <div style={{ background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 14, padding: 16 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <Skeleton ancho={46} alto={46} radio="50%" style={{ flex: "none" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Skeleton ancho="60%" alto={13} />
+          <Skeleton ancho="85%" alto={11} style={{ marginTop: 7 }} />
+        </div>
+      </div>
+      <Skeleton ancho="45%" alto={10} style={{ marginTop: 14 }} />
+      <Skeleton ancho="70%" alto={10} style={{ marginTop: 7 }} />
+      <Skeleton ancho="55%" alto={10} style={{ marginTop: 7 }} />
+    </div>
+  );
+}
+
+// Lista genérica de renglones — sirve para tablas e historiales donde no
+// vale la pena calcar la forma exacta de cada fila.
+export function SkeletonLista({ filas = 3, alto = 14, gap = 10 }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap }}>
+      {Array.from({ length: filas }).map((_, i) => (
+        <Skeleton key={i} alto={alto} ancho={`${100 - i * 7}%`} />
+      ))}
+    </div>
+  );
+}
+
 // Modal real (overlay + tarjeta centrada) para las acciones irreversibles
 // más delicadas — eliminar un usuario o un cliente. El resto de los
 // borrados (boletas, tareas, objetivos) se quedan con BotonEliminar, el
@@ -4732,9 +4773,20 @@ export default function HowriaAdmin() {
            vuelta) — vuelve sola a 1 al soltar el dedo. */
         button.howria-navitem:not(:disabled):active { transform: scale(0.88); transition: transform .28s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
+        /* Skeletons — un brillo que recorre el bloque de izquierda a
+           derecha. El degradado es 200% del ancho y se mueve con
+           background-position (no con un pseudo-elemento posicionado),
+           así funciona igual en un círculo que en una barra. */
+        @keyframes howria-skeleton-brillo { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        .howria-skeleton {
+          background: linear-gradient(90deg, #EDE4CE 25%, #F6F0E1 50%, #EDE4CE 75%);
+          background-size: 200% 100%;
+          animation: howria-skeleton-brillo 1.4s ease-in-out infinite;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .howria-card, button:not(:disabled) { transition: none !important; }
-          .howria-modal-fondo, .howria-modal-caja, .howria-tab-entrada, .howria-toast-item, .howria-navitem {
+          .howria-modal-fondo, .howria-modal-caja, .howria-tab-entrada, .howria-toast-item, .howria-navitem, .howria-skeleton {
             animation: none !important; transition: none !important;
           }
         }
@@ -4933,7 +4985,17 @@ export default function HowriaAdmin() {
               ancho fijo de 1040px del resto de la app — mejor aprovechar el
               espacio en vez de forzar scroll horizontal antes de tiempo. */}
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
-      <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
+      {/* Este fallback aparece en CADA cambio de pestaña (mientras baja su
+          chunk), así que es el estado de carga más visto de la app — un
+          esqueleto con la forma genérica de una pestaña (título, bajada y
+          unos renglones) se siente menos "vacío" que un spinner suelto. */}
+      <Suspense fallback={
+        <div className="howria-card" style={tarjeta}>
+          <Skeleton ancho="38%" alto={20} />
+          <Skeleton ancho="65%" alto={12} style={{ marginTop: 10 }} />
+          <div style={{ marginTop: 22 }}><SkeletonLista filas={4} alto={16} /></div>
+        </div>
+      }>
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}

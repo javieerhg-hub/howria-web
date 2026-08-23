@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, TAGS_TEMPERAMENTO, TEMARIO_ADIESTRAMIENTO,
-  tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, Spinner,
+  tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, Spinner, SkeletonLista,
   ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, fechaISOaInputLocal } from "./_compartido.jsx";
@@ -670,7 +670,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
 
       <div style={{ marginTop: 18 }}>
         {(cargandoClasesRealizadas || cargandoPlanesClases) ? (
-          <p style={{ ...hint, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando…</p>
+          <SkeletonLista filas={3} alto={58} gap={8} />
         ) : alumnosConProgreso.length === 0 ? (
           <p style={hint}>No hay alumnos todavía — usa "+ Nuevo alumno" para cargar el primero.</p>
         ) : (

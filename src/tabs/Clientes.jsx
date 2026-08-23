@@ -6,7 +6,7 @@ import { Search, ArrowUpDown } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
-  botonSecundario, Spinner, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
+  botonSecundario, Spinner, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
   comprimirImagen,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
@@ -770,7 +770,9 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14, marginTop: 14 }}>
         {cargandoClientes ? (
-          <p style={{ ...hint, gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}><Spinner size={13} color={GOLD} pista="#E4DBC3" /> Cargando clientes…</p>
+          // 8 tarjetas fantasma — llenan la grilla visible sin fingir un
+          // total (el número real recién se sabe al llegar los datos).
+          Array.from({ length: 8 }).map((_, i) => <SkeletonTarjetaCliente key={i} />)
         ) : (
           <>
             {filtrados.map((c) => {
