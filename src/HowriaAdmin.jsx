@@ -766,9 +766,24 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
 // Hook para el registro de paseos (mapa clienteIdLocal_fecha -> {realizado, cancelado, nota}).
 // El resto de la app usa el "id" local (numérico) del cliente para armar la clave;
 // aquí se traduce hacia/desde el id real (uuid) que usa Supabase.
-function useRegistroPaseosSincronizado(clientes) {
+function useRegistroPaseosSincronizado(clientes, sessionVersion) {
   const [registro, setRegistroState] = useState({});
   const cargadoRef = useRef(false);
+
+  // Al refrescar los datos (pull-to-refresh) hay que rehacer este mapa sí o
+  // sí, no solo volver a pedir `clientes`: las claves son
+  // `${cliente.id}_${fecha}` con el id LOCAL, que useSyncedTable asigna por
+  // posición (idx + 1) sobre el orden alfabético. Si entre una carga y otra
+  // alguien agregó/borró/renombró un cliente, esas posiciones se corren y
+  // el mapa viejo pasaría a atribuirle los paseos al cliente equivocado.
+  // Se vacía además de invalidar el ref: mostrar "sin paseos" un instante
+  // es preferible a mostrar los paseos de otra persona.
+  const primeraVezRef = useRef(true);
+  useEffect(() => {
+    if (primeraVezRef.current) { primeraVezRef.current = false; return; }
+    cargadoRef.current = false;
+    setRegistroState({});
+  }, [sessionVersion]);
 
   useEffect(() => {
     if (clientes.length === 0 || cargadoRef.current) return;
@@ -4211,9 +4226,29 @@ function tieneTouchActionPropio(el) {
   return false;
 }
 
+// PullToRefresh se monta en main.jsx, fuera de <App>, así que no puede
+// tocar sessionVersion directo. Mismo patrón de bus que ya usan los
+// toasts (toastListeners): App se suscribe y, al recibir el aviso,
+// vuelve a pedir los datos. Si NADIE está suscrito (pantalla de login,
+// portal del cliente, o un error que desmontó App) se cae a recargar la
+// página entera, que es lo que hacía antes en todos los casos.
+let refrescoListeners = [];
+// Pasar null (en vez de la función) desactiva la suscripción — así, antes
+// del login, PullToRefresh no encuentra a nadie escuchando y cae a
+// recargar la página, que ahí sí es lo correcto: no hay datos que volver
+// a pedir todavía.
+export function useSuscripcionRefresco(alRefrescar) {
+  useEffect(() => {
+    if (!alRefrescar) return;
+    refrescoListeners.push(alRefrescar);
+    return () => { refrescoListeners = refrescoListeners.filter((f) => f !== alRefrescar); };
+  }, [alRefrescar]);
+}
+
 export function PullToRefresh() {
   const [distancia, setDistancia] = useState(0);
   const [arrastrando, setArrastrando] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
   const estadoRef = useRef({ activo: false, inicioY: 0, inicioX: 0 });
 
   useEffect(() => {
@@ -4240,7 +4275,19 @@ export function PullToRefresh() {
       estadoRef.current.activo = false;
       setArrastrando(false);
       setDistancia((actual) => {
-        if (actual >= UMBRAL_PULL_REFRESH) window.location.reload();
+        if (actual >= UMBRAL_PULL_REFRESH) {
+          if (refrescoListeners.length > 0) {
+            refrescoListeners.forEach((fn) => fn());
+            // No hay forma barata de saber cuándo terminaron TODAS las
+            // consultas (son ~20 hooks distintos), así que el aviso se
+            // muestra un momento fijo. Es solo el indicador: los datos
+            // van entrando solos a medida que llegan, no espera a esto.
+            setRefrescando(true);
+            setTimeout(() => setRefrescando(false), 1200);
+          } else {
+            window.location.reload();
+          }
+        }
         return 0;
       });
     }
@@ -4256,19 +4303,22 @@ export function PullToRefresh() {
     };
   }, []);
 
-  if (distancia <= 0) return null;
+  if (distancia <= 0 && !refrescando) return null;
   const listo = distancia >= UMBRAL_PULL_REFRESH;
   return (
     <div style={{
       position: "fixed", top: 0, left: 0, right: 0, zIndex: 10001, pointerEvents: "none",
       display: "flex", justifyContent: "center", alignItems: "flex-end",
-      height: distancia, transition: arrastrando ? "none" : "height .2s",
+      height: refrescando ? 52 : distancia, transition: arrastrando ? "none" : "height .2s",
     }}>
       <div style={{
         marginBottom: 8, padding: "6px 14px", borderRadius: 20, background: NAVY, color: CREAM,
-        fontSize: 12.5, fontWeight: 600, opacity: Math.min(distancia / 40, 1),
+        fontSize: 12.5, fontWeight: 600, opacity: refrescando ? 1 : Math.min(distancia / 40, 1),
+        display: "flex", alignItems: "center", gap: 7,
       }}>
-        {listo ? "Soltá para recargar ↻" : "Deslizá para recargar"}
+        {refrescando
+          ? <><Spinner size={12} color={CREAM} pista="rgba(255,255,255,0.3)" /> Actualizando…</>
+          : listo ? "Soltá para actualizar ↻" : "Deslizá para actualizar"}
       </div>
     </div>
   );
@@ -4577,11 +4627,23 @@ export default function HowriaAdmin() {
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
   const [mascotas, setMascotas, cargandoMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
   const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
-  const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes);
+  const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes, sessionVersion);
   const [faseDiaPaseador, actualizarFaseDia, ausenciasPaseador, justificarAusencia, deshacerAusencia] = useFaseDiaPaseador(sessionVersion);
   const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
   const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
   const [configuracion, actualizarConfiguracion] = useConfiguracion(sessionVersion);
+
+  // Pull-to-refresh: volver a pedir los datos en vez de recargar la página
+  // entera (que además vuelve a bajar todo el bundle y pierde el scroll).
+  // Bumpear sessionVersion es justo lo que ya hace el login, así que todos
+  // los hooks de datos lo entienden sin cambios. Sirve además para salir
+  // del caso en que fallan los 3 reintentos de carga y la pantalla queda
+  // vacía, que antes solo se resolvía recargando a mano.
+  const refrescarDatos = useMemo(
+    () => (sessionVersion == null ? null : () => setSessionVersion((v) => v + 1)),
+    [sessionVersion == null],
+  );
+  useSuscripcionRefresco(refrescarDatos);
 
   useEffect(() => {
     if (!user || !permisosRoles) return;
