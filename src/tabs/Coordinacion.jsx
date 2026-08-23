@@ -279,7 +279,13 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [diaOffset, setDiaOffset] = useState(0);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dowHoy = (hoy.getDay() + 6) % 7;
-  const ayer = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() - 1); return d; }, []);
+  // Clave del día de hoy — sirve de dependencia estable para los useMemo
+  // que derivan de `hoy`. Sin esto quedaban con una copia vieja: si la
+  // pestaña se deja abierta y pasa la medianoche (pasa seguido, es la
+  // pantalla que el coordinador tiene todo el día), "Hoy" seguía
+  // mostrando el día anterior aunque el reloj ya hubiera cambiado.
+  const hoyKey = fechaKey(hoy);
+  const ayer = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() - 1); return d; }, [hoyKey]);
   const [clienteMoverSel, setClienteMoverSel] = useState("");
   const [fechaOrigenSel, setFechaOrigenSel] = useState(() => fechaKey(ayer));
   const [fechaNuevaSel, setFechaNuevaSel] = useState(() => fechaKey(hoy));
@@ -306,7 +312,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const [motivoRapido, setMotivoRapido] = useState("");
   const [reprogramandoRapido, setReprogramandoRapido] = useState(false);
 
-  const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset]);
+  const diaVista = useMemo(() => { const d = new Date(hoy); d.setDate(d.getDate() + diaOffset); return d; }, [diaOffset, hoyKey]);
   const dowVista = (diaVista.getDay() + 6) % 7;
   const esHoyVista = diaOffset === 0;
 
@@ -722,12 +728,39 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
       <SeccionPlegable titulo="Hoy" subtitulo="Quién pasea a quién, a qué hora, y si ya se hizo." defaultAbierta>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
           <p style={{ ...hint, margin: 0 }}>
-            <b style={{ color: NAVY }}>{DIAS_LARGOS[dowVista]} {diaVista.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}</b>
+            {/* El año solo aparece si NO es el año en curso — navegando unos
+                meses hacia adelante se cruza a enero y "24 de enero" a secas
+                no dejaba claro que era del año siguiente. */}
+            <b style={{ color: NAVY }}>
+              {DIAS_LARGOS[dowVista]} {diaVista.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}
+              {diaVista.getFullYear() !== hoy.getFullYear() ? ` de ${diaVista.getFullYear()}` : ""}
+            </b>
+            {diaOffset !== 0 && (
+              <span style={{ marginLeft: 8, fontSize: 11.5, color: diaOffset > 0 ? "#8A6A1E" : "#8A7E5C" }}>
+                {diaOffset > 0
+                  ? `· en ${diaOffset} día${diaOffset === 1 ? "" : "s"} más`
+                  : `· hace ${-diaOffset} día${diaOffset === -1 ? "" : "s"}`}
+              </span>
+            )}
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => setDiaOffset((d) => d - 1)} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5 }}>← Anterior</button>
             <button onClick={() => setDiaOffset(0)} disabled={diaOffset === 0} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5, opacity: diaOffset === 0 ? 0.5 : 1 }}>Hoy</button>
             <button onClick={() => setDiaOffset((d) => d + 1)} style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12.5 }}>Siguiente →</button>
+            {/* Ir día por día servía para mirar ayer o mañana, pero para
+                llegar al mes siguiente había que tocar "Siguiente" treinta
+                veces. Sin `max`: acá sí tiene sentido mirar hacia adelante
+                (quién tiene paseos la otra semana), a diferencia de Mis
+                paseos, donde solo se marca lo ya ocurrido. */}
+            <input type="date" value={fechaKey(diaVista)} title="Ir a una fecha"
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [a, m, d] = e.target.value.split("-").map(Number);
+                const destino = new Date(a, m - 1, d);
+                destino.setHours(0, 0, 0, 0);
+                setDiaOffset(Math.round((destino - hoy) / 86400000));
+              }}
+              style={{ ...input, margin: 0, width: 150, padding: "7px 10px", fontSize: 12.5 }} />
           </div>
         </div>
 
