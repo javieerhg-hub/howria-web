@@ -11,6 +11,7 @@ import {
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
 import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
+import { CeldaDiaMes, filasDetalleMes, detalleMesCliente } from "./_compartido.jsx";
 
 
 // El ajuste vive en un modal, no inline en la tabla/tarjeta — no hay
@@ -38,29 +39,13 @@ function ModalAjustePago({ paseador, monto, motivo, onMonto, onMotivo, onGuardar
   );
 }
 
-const ESTILO_DIA_MES = {
-  hecho: { background: "#2F6A46", color: "#fff", border: "1px solid #2F6A46" },
-  falta: { background: "#FFFFFF", color: RUST, border: `1px dashed ${RUST}` },
-  cancelado: { background: "#EDE4CE", color: "#9A9179", border: "1px solid #EDE4CE" },
-  futuro: { background: "#FFFFFF", color: "#C9BF9E", border: "1px solid #EDE4CE" },
-  libre: { background: "transparent", color: "transparent", border: "1px solid transparent" },
-};
-const ETIQUETA_ESTADO_DIA = { hecho: "Realizado", falta: "Programado, falta marcar", cancelado: "Cancelado", futuro: "Programado, aún no llega", libre: "" };
-
-function CeldaDiaMes({ dia, estado, mes }) {
-  return (
-    <span title={estado === "libre" ? "" : `${dia}/${mes + 1}: ${ETIQUETA_ESTADO_DIA[estado]}`}
-      style={{ width: 20, height: 20, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 700, flexShrink: 0, ...ESTILO_DIA_MES[estado] }}>
-      {estado === "libre" ? "" : dia}
-    </span>
-  );
-}
-
 // Verificación visual rápida antes de pagar: por cada cliente del
 // paseador, una fila con un cuadradito por cada día del mes (realizado/
 // falta marcar/cancelado/aún no llega), en vez de tener que revisar
 // cliente por cliente en Mis Paseos. Incluye también clientes de OTRO
 // paseador donde este ayudó puntualmente ("Compartir con...", Coordinación).
+// El dibujo y el cálculo viven en _compartido.jsx porque la pestaña
+// Paseadores usa lo mismo, ahí sí editable.
 function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioInicial, onCerrar }) {
   const [mes, setMes] = useState(mesInicial);
   const [anio, setAnio] = useState(anioInicial);
@@ -72,18 +57,10 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
   const diasEnMes = new Date(anio, mes + 1, 0).getDate();
   const hoyMedianoche = new Date(); hoyMedianoche.setHours(0, 0, 0, 0);
 
-  const filas = useMemo(() => {
-    const propias = clientes.filter((c) => c.paseadorNombre === paseador).map((c) => ({ cliente: c, compartido: false }));
-    const compartidas = [];
-    clientes.forEach((c) => {
-      if (c.paseadorNombre === paseador) return;
-      for (let d = 1; d <= diasEnMes; d++) {
-        const r = registroPaseos[`${c.id}_${fechaKey(new Date(anio, mes, d))}`];
-        if (r?.realizado && r.compartidoCon === paseador) { compartidas.push({ cliente: c, compartido: true }); break; }
-      }
-    });
-    return [...propias, ...compartidas];
-  }, [clientes, paseador, mes, anio, diasEnMes, registroPaseos]);
+  const filas = useMemo(
+    () => filasDetalleMes(clientes, paseador, registroPaseos, anio, mes, diasEnMes),
+    [clientes, paseador, mes, anio, diasEnMes, registroPaseos],
+  );
 
   return (
     <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, zIndex: 10015, background: "rgba(18,42,64,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -107,33 +84,16 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
         {filas.length === 0 && <p style={{ ...hint, textAlign: "center" }}>Sin clientes ni paseos compartidos este mes.</p>}
 
         {filas.map(({ cliente, compartido }) => {
-          const tarifa = Number(cliente.tarifaPaseador || 0);
-          let realizados = 0, monto = 0;
-          const dias = [];
-          for (let d = 1; d <= diasEnMes; d++) {
-            const fecha = new Date(anio, mes, d);
-            const r = registroPaseos[`${cliente.id}_${fechaKey(fecha)}`];
-            let estado = "libre";
-            if (compartido) {
-              if (r?.realizado && r.compartidoCon === paseador) { estado = "hecho"; realizados++; monto += montoCompartido(tarifa, r); }
-            } else {
-              const esDeEste = r?.realizado && (!r.paseadorNombre || r.paseadorNombre === paseador);
-              const dow = (fecha.getDay() + 6) % 7;
-              const programado = cliente.diasHabituales?.includes(dow);
-              if (esDeEste) { estado = "hecho"; realizados++; monto += montoPrincipal(tarifa, r); }
-              else if (r?.cancelado) estado = "cancelado";
-              else if (programado && fecha < hoyMedianoche) estado = "falta";
-              else if (programado) estado = "futuro";
-            }
-            dias.push(<CeldaDiaMes key={d} dia={d} estado={estado} mes={mes} />);
-          }
+          const { realizados, monto, dias } = detalleMesCliente({ cliente, compartido, paseador, registroPaseos, anio, mes, diasEnMes, hoyMedianoche });
           return (
             <div key={cliente.id} style={{ padding: "10px 0", borderBottom: "1px solid #EDE4CE" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>{cliente.nombre}{compartido ? " 🤝" : ""}</span>
                 <span style={{ fontSize: 12, color: "#8A7E5C", whiteSpace: "nowrap" }}>{realizados} paseo(s) · {fmtCLP(monto)}</span>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{dias}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                {dias.map((d) => <CeldaDiaMes key={d.dia} dia={d.dia} estado={d.estado} mes={mes} />)}
+              </div>
             </div>
           );
         })}

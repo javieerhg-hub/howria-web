@@ -15,6 +15,77 @@ import {
   BotonEliminar, ModalConfirmacion, fmtCLP, fechaKey, showToast,
 } from "../HowriaAdmin.jsx";
 import { descargarPdfBoleta } from "./_compartido_pdf.jsx";
+import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
+
+// ---------- Detalle del mes por paseador ----------
+// Un cuadradito por día del mes, por cliente. Lo usan "Detalle del mes"
+// de Pago trabajadores (solo lectura) y el perfil de Paseadores (donde
+// además se puede marcar/desmarcar cada día).
+export const ESTILO_DIA_MES = {
+  hecho: { background: "#2F6A46", color: "#fff", border: "1px solid #2F6A46" },
+  falta: { background: "#FFFFFF", color: RUST, border: `1px dashed ${RUST}` },
+  cancelado: { background: "#EDE4CE", color: "#9A9179", border: "1px solid #EDE4CE" },
+  futuro: { background: "#FFFFFF", color: "#C9BF9E", border: "1px solid #EDE4CE" },
+  libre: { background: "transparent", color: "transparent", border: "1px solid transparent" },
+};
+export const ETIQUETA_ESTADO_DIA = { hecho: "Realizado", falta: "Programado, falta marcar", cancelado: "Cancelado", futuro: "Programado, aún no llega", libre: "" };
+
+// `onClick` es opcional: sin él se dibuja como un <span> inerte (Pago
+// trabajadores), con él como un <button> que alterna ese día.
+export function CeldaDiaMes({ dia, estado, mes, onClick, titulo }) {
+  const base = {
+    width: 20, height: 20, borderRadius: 5, display: "inline-flex", alignItems: "center",
+    justifyContent: "center", fontSize: 9.5, fontWeight: 700, flexShrink: 0, ...ESTILO_DIA_MES[estado],
+  };
+  const title = titulo ?? (estado === "libre" ? "" : `${dia}/${mes + 1}: ${ETIQUETA_ESTADO_DIA[estado]}`);
+  if (!onClick || estado === "libre") {
+    return <span title={title} style={base}>{estado === "libre" ? "" : dia}</span>;
+  }
+  return <button onClick={onClick} title={title} style={{ ...base, padding: 0, cursor: "pointer", font: "inherit", fontSize: 9.5, fontWeight: 700 }}>{dia}</button>;
+}
+
+// Qué clientes mostrar en el detalle de un paseador: los suyos, más
+// aquellos de OTRO paseador donde él recibió parte de algún paseo del mes
+// vía "Compartir con..." (Coordinación).
+export function filasDetalleMes(clientes, paseador, registroPaseos, anio, mes, diasEnMes) {
+  const propias = clientes.filter((c) => c.paseadorNombre === paseador).map((c) => ({ cliente: c, compartido: false }));
+  const compartidas = [];
+  clientes.forEach((c) => {
+    if (c.paseadorNombre === paseador) return;
+    for (let d = 1; d <= diasEnMes; d++) {
+      const r = registroPaseos[`${c.id}_${fechaKey(new Date(anio, mes, d))}`];
+      if (r?.realizado && r.compartidoCon === paseador) { compartidas.push({ cliente: c, compartido: true }); break; }
+    }
+  });
+  return [...propias, ...compartidas];
+}
+
+// Estado de cada día del mes para un cliente, más sus totales. Separado
+// del dibujo para poder reusarlo en el resumen (que solo necesita los
+// números) sin construir JSX.
+export function detalleMesCliente({ cliente, compartido, paseador, registroPaseos, anio, mes, diasEnMes, hoyMedianoche }) {
+  const tarifa = Number(cliente.tarifaPaseador || 0);
+  let realizados = 0, monto = 0, sinMarcar = 0, cancelados = 0;
+  const dias = [];
+  for (let d = 1; d <= diasEnMes; d++) {
+    const fecha = new Date(anio, mes, d);
+    const r = registroPaseos[`${cliente.id}_${fechaKey(fecha)}`];
+    let estado = "libre";
+    if (compartido) {
+      if (r?.realizado && r.compartidoCon === paseador) { estado = "hecho"; realizados++; monto += montoCompartido(tarifa, r); }
+    } else {
+      const esDeEste = r?.realizado && (!r.paseadorNombre || r.paseadorNombre === paseador);
+      const dow = (fecha.getDay() + 6) % 7;
+      const programado = cliente.diasHabituales?.includes(dow);
+      if (esDeEste) { estado = "hecho"; realizados++; monto += montoPrincipal(tarifa, r); }
+      else if (r?.cancelado) { estado = "cancelado"; cancelados++; }
+      else if (programado && fecha < hoyMedianoche) { estado = "falta"; sinMarcar++; }
+      else if (programado) estado = "futuro";
+    }
+    dias.push({ dia: d, fecha, estado });
+  }
+  return { tarifa, realizados, monto, sinMarcar, cancelados, dias };
+}
 
 export function distanciaKm(a, b) {
   const R = 6371;
