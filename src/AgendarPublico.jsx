@@ -172,8 +172,53 @@ export default function AgendarPublico() {
 
   return (
     <div style={{ minHeight: "100vh", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif", padding: "24px 0" }}>
-      <div style={{ width: "100%", maxWidth: 420, padding: "0 24px" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
+      {/* En celular (de donde viene casi todo el tráfico de un link
+          compartido) queda exactamente como antes: logo arriba, formulario
+          abajo. Recién en pantalla ancha pasa a dos columnas — antes el
+          formulario quedaba como una tira angosta perdida en un fondo azul
+          enorme. La columna de la izquierda solo dice cosas que el propio
+          flujo ya cumple (ver el mensaje de "¡Listo!" al enviar), no
+          promesas nuevas. Va en un <style> porque este archivo es
+          independiente del panel: no comparte el CSS global de
+          HowriaAdmin.jsx a propósito, para no arrastrar ese bundle. */}
+      <style>{`
+        .howria-agendar-shell {
+          width: 100%; max-width: 420px; padding: 0 24px; box-sizing: border-box;
+          display: grid; grid-template-columns: 1fr;
+        }
+        .howria-agendar-intro { display: none; }
+        .howria-agendar-logo-movil { display: flex; justify-content: center; margin-bottom: 28px; }
+        @media (min-width: 900px) {
+          .howria-agendar-shell {
+            max-width: 920px; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center;
+          }
+          .howria-agendar-intro { display: block; }
+          .howria-agendar-logo-movil { display: none; }
+        }
+      `}</style>
+      <div className="howria-agendar-shell">
+        <div className="howria-agendar-intro">
+          <img src="/logo-howria.png" alt="Howria" style={{ height: 96, marginBottom: 26 }} />
+          <h2 style={{ margin: "0 0 14px", fontSize: 30, lineHeight: 1.25, color: CREAM, fontFamily: "Georgia, serif", fontWeight: 700 }}>
+            Agenda tu evaluación o clase
+          </h2>
+          <p style={{ margin: "0 0 22px", fontSize: 14.5, lineHeight: 1.65, color: "#9BAAB8" }}>
+            Completa el formulario y elige el día y la hora que te acomoden.
+          </p>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+            {[
+              "Solo puedes elegir horas que el adiestrador tenga libres.",
+              "El adiestrador revisa y confirma tu solicitud.",
+              "Te llega un correo con la fecha y hora confirmadas.",
+            ].map((t) => (
+              <li key={t} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13.5, color: "#C9CEDA", lineHeight: 1.5 }}>
+                <span style={{ color: "#C9A24B", flex: "none", fontWeight: 700 }}>·</span>{t}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="howria-agendar-logo-movil">
           <img src="/logo-howria.png" alt="Howria" style={{ height: 90 }} />
         </div>
 
