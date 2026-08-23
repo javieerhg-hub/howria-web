@@ -10,50 +10,8 @@ import {
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
+import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
 
-function programadosEnRango(cliente, desde, hasta, registroPaseos = {}) {
-  let n = 0;
-  const cur = new Date(desde);
-  while (cur < hasta) {
-    const dow = (cur.getDay() + 6) % 7;
-    const cancelado = registroPaseos[`${cliente.id}_${fechaKey(cur)}`]?.cancelado;
-    if (cliente.diasHabituales?.includes(dow) && !cancelado) n++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return n;
-}
-
-function realizadosEnRango(registroPaseos, clienteId, desde, hasta, paseadorEsperado = null) {
-  let n = 0;
-  const cur = new Date(desde);
-  while (cur < hasta) {
-    const r = registroPaseos[`${clienteId}_${fechaKey(cur)}`];
-    if (r?.realizado) {
-      // si el registro tiene guardado quién era el paseador ese día, solo cuenta
-      // para ese paseador (así, si el cliente cambió de paseador, el pago queda bien atribuido)
-      if (!paseadorEsperado || !r.paseadorNombre || r.paseadorNombre === paseadorEsperado) n++;
-    }
-    cur.setDate(cur.getDate() + 1);
-  }
-  return n;
-}
-
-// Monto real del cliente en el rango — a diferencia de "realizados *
-// tarifa", día por día, porque un paseo puntual puede estar repartido con
-// otro paseador (Coordinación, "Compartir con...") y entonces el
-// paseador principal se queda solo con el resto del porcentaje.
-function montoRealizadoEnRango(registroPaseos, clienteId, desde, hasta, paseadorEsperado, tarifa) {
-  let monto = 0;
-  const cur = new Date(desde);
-  while (cur < hasta) {
-    const r = registroPaseos[`${clienteId}_${fechaKey(cur)}`];
-    if (r?.realizado && (!paseadorEsperado || !r.paseadorNombre || r.paseadorNombre === paseadorEsperado)) {
-      monto += montoPrincipal(tarifa, r);
-    }
-    cur.setDate(cur.getDate() + 1);
-  }
-  return monto;
-}
 
 // El ajuste vive en un modal, no inline en la tabla/tarjeta — no hay
 // espacio real ahí para un monto Y un motivo (mismo motivo por el que
