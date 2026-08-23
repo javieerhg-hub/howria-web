@@ -3,8 +3,8 @@
 import { useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import {
-  NAVY, CREAM_SOFT, GOLD, RUST, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
-  botonSecundario, Spinner, Skeleton, SkeletonLista, BotonConfirmable, showToast, dbToCorreo,
+  NAVY, CREAM_SOFT, RUST, tarjeta, sectionTitle, hint, input, botonPrincipal,
+  botonSecundario, Skeleton, SkeletonLista, BotonConfirmable, showToast, dbToCorreo,
 } from "../HowriaAdmin.jsx";
 
 function fmtFechaCorreo(iso) {

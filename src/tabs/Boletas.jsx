@@ -725,7 +725,7 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
     ? { nombre: nombreManual.trim(), perro: perroManual.trim(), telefono: "", _dbId: null }
     : clientesAdiestramiento.find((c) => c.id === Number(clienteId));
 
-  const { subtotalClases, montoDescuentoPct, montoDescuento, montoEvaluacion, total } = calcularBoletaAdiestramiento({
+  const { subtotalClases, montoDescuento, montoEvaluacion, total } = calcularBoletaAdiestramiento({
     numClases, precioClase, descuentoPackPct, descuentoPackMonto, evaluacion, precioEvaluacion, transporte,
   });
 

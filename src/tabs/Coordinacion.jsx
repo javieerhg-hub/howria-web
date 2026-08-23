@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
-  input, botonPrincipal, botonSecundario, Spinner, SkeletonLista, BotonEliminar, fechaKey, inicioSemana, showToast,
+  input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
   estaProgramadoEnFecha,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";

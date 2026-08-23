@@ -8,7 +8,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import {
-  NAVY, CREAM_SOFT, GOLD, INK, tarjeta, sectionTitle, hint, label, input, botonSecundario,
+  NAVY, CREAM_SOFT, GOLD, INK, tarjeta, sectionTitle, hint, input, botonSecundario,
   fechaKey, showToast,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, ModalDetalleCita, eliminarCita, ordenarRutaCercanoMasProximo } from "./_compartido.jsx";

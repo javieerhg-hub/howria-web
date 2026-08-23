@@ -2,7 +2,6 @@
 // rol, solicitudes de registro pendientes. Ver src/HowriaAdmin.jsx
 // (React.lazy) por la lista completa de pestañas.
 import { useState } from "react";
-import { Users } from "lucide-react";
 import { supabase, crearCuentaAcceso } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, DIAS_SEMANA_LARGO, ROLES_APP, TODOS_LOS_TABS,

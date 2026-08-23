@@ -12,7 +12,6 @@ import { CalendarioMes } from "./lib/CalendarioMes.jsx";
 
 const NAVY = "#122A40";
 const CREAM = "#F3ECDC";
-const CREAM_SOFT = "#EAE0C6";
 const RUST = "#A85C3B";
 const INK = "#332E22";
 

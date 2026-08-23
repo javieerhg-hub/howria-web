@@ -5,11 +5,11 @@ import { useState, useMemo } from "react";
 import { Banknote } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, tarjeta, sectionTitle, hint, label, input,
-  botonPrincipal, botonSecundario, Spinner, SkeletonLista, FilaLista, BotonEliminar, BotonConfirmable,
+  botonPrincipal, botonSecundario, SkeletonLista, FilaLista, BotonEliminar, BotonConfirmable,
   fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo,
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
-import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
+import { montoCompartido } from "../lib/reparto.js";
 import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
 import { CeldaDiaMes, filasDetalleMes, detalleMesCliente } from "./_compartido.jsx";
 

@@ -6,7 +6,7 @@ import { Search, ArrowUpDown } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
-  botonSecundario, Spinner, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
+  botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
   comprimirImagen,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";

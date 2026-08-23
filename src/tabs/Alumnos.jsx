@@ -3,8 +3,8 @@
 // la lista completa de pestañas y src/tabs/_compartido.jsx para lo compartido.
 import { useState, useMemo, useEffect } from "react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, TAGS_TEMPERAMENTO, TEMARIO_ADIESTRAMIENTO,
-  tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, Spinner, SkeletonLista,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, TEMARIO_ADIESTRAMIENTO,
+  tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, SkeletonLista,
   ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, fechaISOaInputLocal } from "./_compartido.jsx";

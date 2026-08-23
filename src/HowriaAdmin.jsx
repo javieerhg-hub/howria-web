@@ -1067,12 +1067,6 @@ export const RUST = "#A85C3B";
 export const NAVY_LOGO = "#102A41"; // mismo color de fondo que el logo, usado en el encabezado de las boletas (canvas)
 export const PANEL_BG = "#F1EFE9"; // fondo del panel del staff — más claro y neutro que CREAM, para que las tarjetas blancas resalten más y se sienta más liviano
 
-const CLIENTES_INICIAL = [
-  { id: 1, nombre: "María José Reyes", perro: "Toby", telefono: "+56 9 1234 5678", valorPaseoRef: 8000, raza: "Golden Retriever", pesoKg: 28, fotoUrl: null, diasHabituales: [0,1,2,3,4], planHabitual: "LV", objetivos: "Bajar nivel de energía y mejorar caminata con correa.", paseadorNombre: "Pedro Vidal", tarifaPaseador: 5000, direccion: "Av. Providencia 1650, Providencia", lat: -33.4260, lng: -70.6100, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "2026-03-01" },
-  { id: 2, nombre: "Javier Ocares", perro: "Luna", telefono: "+56 9 8765 4321", valorPaseoRef: 9000, raza: "Staffordshire", pesoKg: 22, fotoUrl: null, diasHabituales: [0,2,4], planHabitual: "LMV", objetivos: "Socialización con otros perros durante el paseo.", paseadorNombre: "Pedro Vidal", tarifaPaseador: 5500, direccion: "Av. Apoquindo 4900, Las Condes", lat: -33.4085, lng: -70.5730, tipoServicio: ["paseos", "clases"], estadoCliente: "activo", fechaInicio: "2026-05-15" },
-  { id: 3, nombre: "Daniela Aliaga", perro: "Rocco", telefono: "+56 9 2222 3333", valorPaseoRef: 8500, raza: "Mestizo", pesoKg: 15, fotoUrl: null, diasHabituales: [1,3], planHabitual: "MJ", objetivos: "Reducir ansiedad por separación.", paseadorNombre: "Ignacio Muñoz", tarifaPaseador: 5000, direccion: "Irarrázaval 3200, Ñuñoa", lat: -33.4560, lng: -70.5980, tipoServicio: ["paseos", "evaluacion"], estadoCliente: "activo", fechaInicio: "2026-06-10" },
-];
-
 export const ESTADOS_CLIENTE = [
   { id: "activo", nombre: "Activo", color: "#2F6A46", bg: "#D8ECDE" },
   { id: "pausado", nombre: "Pausado", color: "#8A6A1E", bg: "#F3E3B4" },
@@ -1833,24 +1827,6 @@ function useSolicitudesRegistro(sessionVersion) {
   return [solicitudes, setSolicitudes, cargando];
 }
 
-function boletaDemo(diasAtras, numero, cliente, perro, cantidad, valorPaseo, estado = "no_enviada") {
-  const f = new Date();
-  f.setDate(f.getDate() - diasAtras);
-  return {
-    numero, cliente, perro, valorPaseo, cantidad, dias: [], mes: MESES[f.getMonth()], anio: f.getFullYear(),
-    planNombre: "Lunes a viernes", paseosCancelados: 0, descuento: 0, total: cantidad * valorPaseo,
-    fecha: f.toLocaleDateString("es-CL"), fechaISO: f.toISOString(), estado,
-  };
-}
-
-const BOLETAS_INICIAL = [
-  boletaDemo(2, 101, "María José Reyes", "Toby", 5, 8000, "pendiente_pago"),
-  boletaDemo(5, 102, "Javier Ocares", "Luna", 3, 9000, "pagada"),
-  boletaDemo(9, 103, "Daniela Aliaga", "Rocco", 4, 8500, "no_enviada"),
-  boletaDemo(18, 104, "María José Reyes", "Toby", 12, 8000, "pagada"),
-  boletaDemo(24, 105, "Javier Ocares", "Luna", 8, 9000, "pagada"),
-  boletaDemo(40, 106, "Daniela Aliaga", "Rocco", 10, 8500, "cancelada"),
-];
 
 export const PLANES = [
   { id: "LV", nombre: "Lunes a viernes", dias: [0,1,2,3,4] },
@@ -2383,7 +2359,6 @@ export function inicioSemana(fecha) {
 // ---------- Pago a trabajadores ----------
 function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const dow = (hoy.getDay() + 6) % 7;
   const hoyStr0 = fechaKey(hoy);
   const avisos = [];
 
@@ -2797,7 +2772,6 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   // en mobile.
   const [diaSel, setDiaSel] = useState(() => fechaKey(hoy));
   const diaActivo = new Date(diaSel + "T00:00:00");
-  const dow = (diaActivo.getDay() + 6) % 7;
   const clientesDelDia = misClientes.filter((c) => estaProgramadoEnFecha(c, diaActivo, reprogramaciones));
 
   // Perros de OTROS paseadores que un coordinador compartió conmigo ese
@@ -3670,7 +3644,7 @@ function LauncherMobile({ tabs, setTab, destacar = [] }) {
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, objetivosSemanales, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
@@ -3694,9 +3668,6 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   const montoPendiente = pendientesCobro.reduce((acc, b) => acc + b.total, 0);
 
   const { desde, hasta } = rangoPeriodo("semana", hoy);
-  const semanaKey = fechaKey(desde);
-  const objetivosSemana = objetivosSemanales.filter((o) => o.semanaKey === semanaKey);
-  const objetivosCumplidos = objetivosSemana.filter((o) => o.cumplido).length;
 
   const boletasVenta = boletasEmitidas.filter(esVenta);
   const ingresosSemana = boletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= desde && f < hasta; });
@@ -4563,11 +4534,6 @@ function ChatEquipo({ user, mensajes, enviarMensaje, cargando, ultimaLectura, ma
   );
 }
 
-const USUARIOS_INICIAL = [
-  { id: 1, nombre: "Camila Soto", rol: "coordinador", fotoUrl: null },
-  { id: 2, nombre: "Pedro Vidal", rol: "entrenador", fotoUrl: null },
-  { id: 3, nombre: "Ignacio Muñoz", rol: "entrenador", fotoUrl: null },
-];
 
 // ---------- App ----------
 export default function HowriaAdmin() {
@@ -4657,7 +4623,7 @@ export default function HowriaAdmin() {
   // esta lista ya viene filtrada a "lo mío" sin filtrar nada acá.
   const [avisosDescartados, setAvisosDescartados] = useSyncedTable("avisos_descartados", avisoDescartadoToDb, dbToAvisoDescartado, "creado_en", sessionVersion);
   const [boletasAdiestramiento, setBoletasAdiestramiento, cargandoBoletasAdiestramiento] = useSyncedTable("boletas_adiestramiento", boletaAdiestramientoToDb, dbToBoletaAdiestramiento, "numero", sessionVersion);
-  const [mascotas, setMascotas, cargandoMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
+  const [mascotas, setMascotas] = useSyncedTable("mascotas", mascotaToDb, dbToMascota, "nombre", sessionVersion);
   const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes, sessionVersion);
   const [faseDiaPaseador, actualizarFaseDia, ausenciasPaseador, justificarAusencia, deshacerAusencia] = useFaseDiaPaseador(sessionVersion);
@@ -5092,7 +5058,7 @@ export default function HowriaAdmin() {
       }>
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}

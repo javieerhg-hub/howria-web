@@ -4,8 +4,8 @@
 import { useState, useMemo, Fragment } from "react";
 import { Search } from "lucide-react";
 import {
-  NAVY, CREAM, GOLD, INK, RUST, ESTADOS_FACTURA, tarjeta, sectionTitle, hint, label, input,
-  botonPrincipal, botonSecundario, Spinner, SkeletonLista, BotonEliminar, BotonConfirmable, ModalConfirmacion,
+  NAVY, CREAM, GOLD, INK, RUST, ESTADOS_FACTURA, tarjeta, sectionTitle, hint, input,
+  botonPrincipal, botonSecundario, SkeletonLista, BotonConfirmable, ModalConfirmacion,
   fmtCLP, fechaKey, esBoletaDeCliente, showToast,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta, esPorCobrar, montoParaResponsable } from "../lib/calculosBoletas.js";

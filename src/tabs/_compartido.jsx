@@ -9,7 +9,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST,
+  NAVY, CREAM_SOFT, GOLD, INK, RUST,
   MESES, ESTADOS_FACTURA,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
   BotonEliminar, ModalConfirmacion, fmtCLP, fechaKey, showToast,
