@@ -194,13 +194,18 @@ export default function AgendarPublico() {
           }
           .howria-agendar-intro { display: block; }
           .howria-agendar-logo-movil { display: none; }
+          .howria-agendar-rotulo { display: none; }
         }
       `}</style>
       <div className="howria-agendar-shell">
         <div className="howria-agendar-intro">
           <img src="/logo-howria.png" alt="Howria" style={{ height: 96, marginBottom: 26 }} />
+          {/* No repite el título de la tarjeta ("Agenda tu evaluación o
+              clase", que además se personaliza a "Hola {nombre}…" cuando el
+              link trae un cliente conocido) — con las dos columnas visibles
+              quedaba escrito dos veces en la misma pantalla. */}
           <h2 style={{ margin: "0 0 14px", fontSize: 30, lineHeight: 1.25, color: CREAM, fontFamily: "Georgia, serif", fontWeight: 700 }}>
-            Agenda tu evaluación o clase
+            Reserva tu hora con Howria
           </h2>
           <p style={{ margin: "0 0 22px", fontSize: 14.5, lineHeight: 1.65, color: "#9BAAB8" }}>
             Completa el formulario y elige el día y la hora que te acomoden.
@@ -236,7 +241,10 @@ export default function AgendarPublico() {
             </div>
           ) : (
             <>
-              <p style={{ margin: "0 0 4px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1 }}>Agendar con Howria</p>
+              {/* En escritorio el logo y "Reserva tu hora con Howria" ya están
+                  en la columna de al lado — este rótulo solo hace falta en
+                  celular, donde esa columna no se muestra. */}
+              <p className="howria-agendar-rotulo" style={{ margin: "0 0 4px", fontSize: 13, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 1 }}>Agendar con Howria</p>
               <h1 style={{ margin: "0 0 20px", fontSize: 20, color: NAVY, fontFamily: "Georgia, serif" }}>
                 {info.cliente ? `Hola ${info.cliente.nombre.split(" ")[0]}, elige día y hora` : "Agenda tu evaluación o clase"}
               </h1>
