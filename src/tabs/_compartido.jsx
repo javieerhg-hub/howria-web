@@ -77,20 +77,21 @@ export function detalleMesCliente({ cliente, compartido, paseador, registroPaseo
       const esDeEste = r?.realizado && (!r.paseadorNombre || r.paseadorNombre === paseador);
       const dow = (fecha.getDay() + 6) % 7;
       const programado = cliente.diasHabituales?.includes(dow);
-      if (esDeEste) {
-        estado = "hecho"; realizados++;
-        monto += montoPrincipal(tarifa, r);
-        // Si el reparto de ese paseo apunta al MISMO paseador dueño del
-        // cliente, le corresponden las dos partes: hizo el paseo entero.
-        // Pasa cuando se usa "Agregar paseo anterior" (que reparte al
-        // 100%) y después el cliente queda asignado a esa misma persona.
-        // Sin esto el detalle mostraba menos plata que la tabla de Pago
-        // trabajadores, que sí suma las dos partes por separado.
-        if (r.compartidoCon === paseador) monto += montoCompartido(tarifa, r);
-      }
+      if (esDeEste) { estado = "hecho"; realizados++; monto += montoPrincipal(tarifa, r); }
       else if (r?.cancelado) { estado = "cancelado"; cancelados++; }
       else if (programado && fecha < hoyMedianoche) { estado = "falta"; sinMarcar++; }
       else if (programado) estado = "futuro";
+      // Aparte de lo anterior: si el reparto de ese paseo apunta a este
+      // paseador, le toca su parte aunque el paseo no sea "suyo". Pasa
+      // cuando un paseo de SU cliente lo hizo otra persona (el registro
+      // queda a nombre de esa otra, así que `esDeEste` es falso) y se
+      // repartió con él. La tabla de Pago trabajadores siempre lo sumó,
+      // en una pasada aparte; acá faltaba, y el detalle mostraba menos
+      // plata que la tabla para la misma persona y el mismo mes.
+      if (r?.realizado && r.compartidoCon === paseador) {
+        monto += montoCompartido(tarifa, r);
+        if (estado !== "hecho") { estado = "hecho"; realizados++; }
+      }
     }
     dias.push({ dia: d, fecha, estado });
   }
