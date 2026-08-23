@@ -55,11 +55,25 @@ function CalendarioPerro({ cliente, paseador, registroPaseos, dias, anio, mes, h
           {Array.from({ length: offsetInicial }).map((_, i) => <span key={`v${i}`} />)}
           {dias.map((d) => {
             const editable = !compartido && d.estado !== "libre" && d.fecha <= hoy;
+            // En la tira de la ficha los días que no le tocan van
+            // invisibles (compacta), pero acá eso dejaba la grilla casi
+            // vacía y no se leía como un mes: se muestran en gris suave
+            // para que el calendario tenga forma de calendario.
+            if (d.estado === "libre") {
+              return (
+                <span key={d.dia} style={{ display: "flex", justifyContent: "center" }}>
+                  <span title={`${d.dia}/${mes + 1}: no le toca este día`}
+                    style={{ width: 28, height: 28, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#CFC7B0" }}>
+                    {d.dia}
+                  </span>
+                </span>
+              );
+            }
             return (
               <span key={d.dia} style={{ display: "flex", justifyContent: "center" }}>
                 <CeldaDiaMes dia={d.dia} estado={d.estado} mes={mes}
                   onClick={editable ? () => onToggleDia(d.fecha) : undefined}
-                  titulo={d.estado === "libre" ? `${d.dia}/${mes + 1}: no le toca este día` : d.fecha > hoy ? `${d.dia}/${mes + 1}: aún no llega` : undefined} />
+                  titulo={d.fecha > hoy ? `${d.dia}/${mes + 1}: aún no llega` : undefined} />
               </span>
             );
           })}
