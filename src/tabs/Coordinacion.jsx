@@ -445,9 +445,14 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const canceladosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
   const pendientesHoy = clientesHoyFiltrados.length - realizadosHoy - canceladosHoy;
 
+  // Los alumnos de solo adiestramiento no son carga de paseos, aunque les
+  // hayan quedado días habituales guardados — mismo criterio que
+  // estaProgramadoEnFecha (sin tipoServicio = paseos, por compatibilidad).
+  const clientesDePaseos = clientes.filter((c) => !c.tipoServicio?.length || c.tipoServicio.includes("paseos"));
+
   const fechasSemana = Array.from({ length: 7 }, (_, i) => { const f = new Date(inicioSemana); f.setDate(f.getDate() + i); return f; });
   const resumenSemana = fechasSemana.map((fecha, i) => {
-    const clientesDia = clientes.filter((c) => c.diasHabituales?.includes(i));
+    const clientesDia = clientesDePaseos.filter((c) => c.diasHabituales?.includes(i));
     return { dia: DIAS_LARGOS[i], total: clientesDia.length };
   });
 
@@ -457,7 +462,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   // paseador no aparezca sobrecargado acá y no en el detalle por día (o
   // al revés).
   const cargaPorPaseador = equipoPaseo.map((u) => {
-    const clientesDe = clientes.filter((c) => c.paseadorNombre === u.nombre);
+    const clientesDe = clientesDePaseos.filter((c) => c.paseadorNombre === u.nombre);
     const total = clientesDe.reduce((acc, c) => acc + (c.diasHabituales?.length || 0), 0);
     const picoDiario = Math.max(0, ...Array.from({ length: 7 }, (_, dow) => clientesDe.filter((c) => c.diasHabituales?.includes(dow)).length));
     return { nombre: u.nombre, total, picoDiario };

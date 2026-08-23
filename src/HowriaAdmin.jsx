@@ -2381,7 +2381,7 @@ export function inicioSemana(fecha) {
 
 
 // ---------- Pago a trabajadores ----------
-function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {} }) {
+function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dow = (hoy.getDay() + 6) % 7;
   const hoyStr0 = fechaKey(hoy);
@@ -2410,7 +2410,12 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
     avisos.push({ tipo: "factura", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}`, tab: "facturas" });
   }
 
-  const clientesHoy = clientes.filter((c) => c.diasHabituales?.includes(dow));
+  // Mismo criterio que el KPI "Paseos de hoy" de esta misma pantalla y que
+  // Coordinación: estaProgramadoEnFecha excluye a los alumnos de solo
+  // adiestramiento (que no tienen paseos que marcar) y sí toma en cuenta
+  // las reprogramaciones. Antes esto miraba diasHabituales crudo, así que
+  // el aviso podía contradecir al KPI que tiene justo arriba.
+  const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const sinMarcar = clientesHoy.filter((c) => { const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`]; return !r?.realizado && !r?.cancelado; });
   if (sinMarcar.length > 0) {
     avisos.push({ tipo: "paseo", icono: "🐾", texto: `${sinMarcar.length} paseo(s) de hoy sin marcar como realizado`, detalle: sinMarcar.map((c) => `${c.nombre} (${c.paseadorNombre || "sin paseador"})`).join(", "), clave: `paseo-${hoyStr0}-${sinMarcar.length}`, tab: "coordinacion" });
@@ -3675,7 +3680,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   if (user.rol === "paseador" || user.rol === "entrenador") {
     return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirRuta={onAbrirRuta} />;
   }
-  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador });
+  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador, reprogramaciones });
 
   function descartarAviso(clave) {
     setAvisosDescartados((prev) => [...prev, { id: Date.now() + Math.random(), clave, usuarioEmail: user.email }]);

@@ -25,6 +25,15 @@ describe("programadosEnRango", () => {
     // Solo el lunes 17: hasta = martes 18.
     expect(programadosEnRango(cliente, LUNES, new Date(2026, 7, 18), {})).toBe(1);
   });
+
+  it("un alumno de solo adiestramiento no tiene paseos programados, aunque le queden días habituales", () => {
+    const alumno = { ...cliente, tipoServicio: ["clases"] };
+    expect(programadosEnRango(alumno, LUNES, LUNES_SIGUIENTE, {})).toBe(0);
+  });
+
+  it("un cliente sin tipoServicio guardado se sigue tratando como de paseos (clientes antiguos)", () => {
+    expect(programadosEnRango({ ...cliente, tipoServicio: [] }, LUNES, LUNES_SIGUIENTE, {})).toBe(3);
+  });
 });
 
 describe("realizadosEnRango", () => {

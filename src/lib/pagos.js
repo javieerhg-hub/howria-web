@@ -17,6 +17,12 @@ function fechaKey(fecha) {
 // paseador, así que tampoco debe empeorar su % de cumplimiento.
 // `hasta` es exclusivo.
 export function programadosEnRango(cliente, desde, hasta, registroPaseos = {}) {
+  // Un cliente de solo adiestramiento no tiene paseos programados, aunque
+  // le hayan quedado días habituales guardados. Mismo criterio que
+  // estaProgramadoEnFecha: sin tipoServicio guardado se trata como paseos,
+  // por compatibilidad con los clientes anteriores a ese campo. Sin esto
+  // inflaba los "programados" y hundía el % de cumplimiento del paseador.
+  if (cliente.tipoServicio?.length && !cliente.tipoServicio.includes("paseos")) return 0;
   let n = 0;
   const cur = new Date(desde);
   while (cur < hasta) {

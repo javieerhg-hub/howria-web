@@ -65,6 +65,12 @@ export function filasDetalleMes(clientes, paseador, registroPaseos, anio, mes, d
 // números) sin construir JSX.
 export function detalleMesCliente({ cliente, compartido, paseador, registroPaseos, anio, mes, diasEnMes, hoyMedianoche }) {
   const tarifa = Number(cliente.tarifaPaseador || 0);
+  // Un cliente de solo adiestramiento no tiene paseos que marcar, aunque
+  // le hayan quedado días habituales guardados de antes. Mismo criterio
+  // que estaProgramadoEnFecha (sin tipoServicio guardado = paseos, por
+  // compatibilidad con los clientes anteriores al campo). Sin esto, sus
+  // días aparecían como "falta marcar" e inflaban el contador.
+  const esDePaseos = !cliente.tipoServicio?.length || cliente.tipoServicio.includes("paseos");
   let realizados = 0, monto = 0, sinMarcar = 0, cancelados = 0;
   const dias = [];
   for (let d = 1; d <= diasEnMes; d++) {
@@ -76,7 +82,7 @@ export function detalleMesCliente({ cliente, compartido, paseador, registroPaseo
     } else {
       const esDeEste = r?.realizado && (!r.paseadorNombre || r.paseadorNombre === paseador);
       const dow = (fecha.getDay() + 6) % 7;
-      const programado = cliente.diasHabituales?.includes(dow);
+      const programado = esDePaseos && cliente.diasHabituales?.includes(dow);
       if (esDeEste) { estado = "hecho"; realizados++; monto += montoPrincipal(tarifa, r); }
       else if (r?.cancelado) { estado = "cancelado"; cancelados++; }
       else if (programado && fecha < hoyMedianoche) { estado = "falta"; sinMarcar++; }

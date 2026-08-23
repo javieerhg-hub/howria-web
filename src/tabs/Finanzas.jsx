@@ -294,6 +294,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       validas.forEach((k) => {
         const r = registroPaseos[`${c.id}_${k}`];
         if (!r?.realizado) return;
+        // Si el registro guardó quién hizo el paseo y no fue esta persona,
+        // la parte principal no le toca — la plata sigue al registro, no
+        // al dueño del cliente. Mismo criterio que montoRealizadoEnRango
+        // (lib/pagos.js), que es lo que usa Pago trabajadores para pagar
+        // de verdad; sin este filtro, un paseo de su cliente hecho por
+        // otra persona y repartido con él le sumaba las DOS partes acá
+        // (la principal en este bucle y la compartida en
+        // misPaseosCompartidos), o sea más de lo que se le iba a pagar.
+        if (r.paseadorNombre && r.paseadorNombre !== user.nombre) return;
         realizados++;
         // Reparto entre dos paseadores para un paseo puntual (ver
         // Coordinación, "Compartir con...") — a este paseador le queda el
