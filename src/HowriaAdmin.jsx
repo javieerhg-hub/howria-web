@@ -4240,7 +4240,7 @@ const PRIORIDAD_BARRA_NAV = ["boletas", "facturas", "clientes", "agenda", "mail"
 function ItemBarraNav({ activo, Icono, label, onClick, badge }) {
   if (activo) {
     return (
-      <button onClick={onClick}
+      <button onClick={onClick} className="howria-navitem"
         style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 10px", borderRadius: 999, background: NAVY, border: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0, position: "relative" }}>
         <Icono size={17} color={CREAM} style={{ flex: "none" }} />
         <span style={{ fontSize: 12, color: CREAM, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
@@ -4249,7 +4249,7 @@ function ItemBarraNav({ activo, Icono, label, onClick, badge }) {
     );
   }
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} className="howria-navitem"
       style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "7px 4px", border: "none", background: "none", cursor: "pointer", flex: "1 1 0", minWidth: 0, position: "relative" }}>
       <span style={{ position: "relative" }}>
         <Icono size={18} color="#8A7E5C" />
@@ -4498,6 +4498,18 @@ export default function HowriaAdmin() {
     window.scrollTo(0, 0);
     forzarRecalculoZoomIOS();
   }, [tab]);
+  // "Adelante"/"atrás" para el slide direccional del cambio de pestaña
+  // (ver .howria-tab-entrada-* en el <style> global) — se compara el
+  // orden declarado en TODOS_LOS_TABS, no un historial real de
+  // navegación, así que es una aproximación: "Coordinación → Inicio" se
+  // siente como "atrás" aunque técnicamente no se haya "retrocedido".
+  // tabAnteriorRef se actualiza recién en el próximo render (después de
+  // leer la dirección de este), así que compara contra la pestaña previa.
+  const tabAnteriorRef = useRef(tab);
+  const idxTabActual = TODOS_LOS_TABS.findIndex((t) => t.id === tab);
+  const idxTabAnterior = TODOS_LOS_TABS.findIndex((t) => t.id === tabAnteriorRef.current);
+  const direccionTab = idxTabActual >= idxTabAnterior ? "adelante" : "atras";
+  useEffect(() => { tabAnteriorRef.current = tab; }, [tab]);
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   // Se levanta al padre (mismo motivo que mapaPaseadorSel arriba) — Mapa
   // de rutas se desmonta al salir de la pestaña, y sin esto la ruta ya
@@ -4698,16 +4710,31 @@ export default function HowriaAdmin() {
         .howria-modal-fondo { animation: howria-modal-fondo-in .15s ease; }
         .howria-modal-caja { animation: howria-modal-caja-in .18s cubic-bezier(0.16, 1, 0.3, 1); }
 
-        @keyframes howria-tab-entrada-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        .howria-tab-entrada { animation: howria-tab-entrada-in .18s ease; }
+        /* Slide direccional (no un fade parejo) — "adelante" entra desde la
+           derecha, "atrás" desde la izquierda, según el orden declarado en
+           TODOS_LOS_TABS (ver direccionTab más arriba). translate3d +
+           will-change para que la corra el compositor de la GPU, no el
+           hilo principal — se nota en celulares de gama media. */
+        @keyframes howria-tab-in-adelante { from { opacity: 0; transform: translate3d(18px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+        @keyframes howria-tab-in-atras { from { opacity: 0; transform: translate3d(-18px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+        .howria-tab-entrada { will-change: transform, opacity; animation-duration: .2s; animation-timing-function: ease; }
+        .howria-tab-entrada-adelante { animation-name: howria-tab-in-adelante; }
+        .howria-tab-entrada-atras { animation-name: howria-tab-in-atras; }
 
         @keyframes howria-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .howria-toast-item { animation: howria-toast-in .2s ease; transition: opacity .18s ease, transform .18s ease; }
         .howria-toast-saliendo { opacity: 0; transform: translateY(-6px); }
 
+        /* Rebote (spring) al tocar un ícono de la barra inferior flotante —
+           la zona que más se toca en todo el celular, se nota más que el
+           scale(0.98) genérico de cualquier botón. cubic-bezier con
+           overshoot (>1) simula el resorte sin animar dos veces (ida y
+           vuelta) — vuelve sola a 1 al soltar el dedo. */
+        button.howria-navitem:not(:disabled):active { transform: scale(0.88); transition: transform .28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
         @media (prefers-reduced-motion: reduce) {
           .howria-card, button:not(:disabled) { transition: none !important; }
-          .howria-modal-fondo, .howria-modal-caja, .howria-tab-entrada, .howria-toast-item {
+          .howria-modal-fondo, .howria-modal-caja, .howria-tab-entrada, .howria-toast-item, .howria-navitem {
             animation: none !important; transition: none !important;
           }
         }
@@ -4907,7 +4934,7 @@ export default function HowriaAdmin() {
               espacio en vez de forzar scroll horizontal antes de tiempo. */}
           <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       <Suspense fallback={<div className="howria-card" style={tarjeta}><p style={{ ...hint, display: "flex", alignItems: "center", gap: 8, margin: 0 }}><Spinner size={15} color={GOLD} pista="#E4DBC3" /> Cargando…</p></div>}>
-      <div key={tab} className="howria-tab-entrada">
+      <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab("inicio")}>
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} objetivosSemanales={objetivosSemanales} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
