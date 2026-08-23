@@ -2523,6 +2523,124 @@ function claveTutorialVisto(email) {
   return `howria_tutorial_visto_${email}`;
 }
 
+// Umbral de arrastre para que dispare "Marcar realizado" al soltar — lo
+// suficientemente lejos para que no sea un roce sin querer, caminando con
+// el perro en la mano.
+const UMBRAL_SWIPE_HECHO = 96;
+
+// Mismo mecanismo de swipe que ya usa Coordinación para "Reprogramar"
+// (ver FilaSwipeReprogramar, Coordinacion.jsx), pero deslizando a la
+// DERECHA y disparando la acción sola al soltar pasado el umbral — acá no
+// hace falta un segundo toque de confirmación porque "Marcar realizado" ya
+// era, antes de este cambio, una acción de un solo toque y 100%
+// reversible (se puede volver a tocar/deslizar para deshacer).
+//
+// El pointer no se captura de entrada en cada toque — recién se confirma
+// que es un gesto horizontal (no un tap en un botón interno, no un
+// scroll vertical) antes de tomar el control del puntero, así los botones
+// de "Marcar cancelado" y "+ Agregar nota" que viven adentro de la misma
+// tarjeta se siguen pudiendo tocar normal.
+function TarjetaPaseoDia({ cliente: c, registro, hoy, diaActivo, notaAbiertaId, notaTexto, setNotaAbiertaId, setNotaTexto, toggleRealizado, toggleCancelado, guardarNota }) {
+  const [dx, setDx] = useState(0);
+  const [arrastrando, setArrastrando] = useState(false);
+  const inicioRef = useRef(null);
+  const capturadoRef = useRef(false);
+
+  const hecho = !!registro.realizado;
+  const cancelado = !!registro.cancelado;
+  const puedeSwipe = !hecho && !cancelado && diaActivo <= hoy;
+  const key = `${c.id}_${fechaKey(diaActivo)}`;
+
+  function iniciar(e) {
+    if (!puedeSwipe) return;
+    inicioRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    capturadoRef.current = false;
+  }
+  function mover(e) {
+    if (!inicioRef.current) return;
+    const deltaX = e.clientX - inicioRef.current.x;
+    const deltaY = e.clientY - inicioRef.current.y;
+    if (!capturadoRef.current) {
+      if (Math.abs(deltaX) < 10 || Math.abs(deltaY) > Math.abs(deltaX)) return;
+      capturadoRef.current = true;
+      setArrastrando(true);
+      e.currentTarget.setPointerCapture?.(inicioRef.current.id);
+    }
+    setDx(Math.max(0, Math.min(UMBRAL_SWIPE_HECHO * 1.4, deltaX)));
+  }
+  function soltar() {
+    if (capturadoRef.current) {
+      setArrastrando(false);
+      if (dx >= UMBRAL_SWIPE_HECHO) toggleRealizado(c.id, diaActivo);
+      setDx(0);
+    }
+    inicioRef.current = null;
+    capturadoRef.current = false;
+  }
+
+  const contenido = (
+    <div style={{
+      padding: "14px 16px", borderRadius: 8,
+      border: cancelado ? `1.5px solid ${RUST}` : hecho ? `1.5px solid #2F6A46` : "1px solid #E4DBC3",
+      background: cancelado ? "#F1DCD2" : hecho ? "#D8ECDE" : "#FFFFFF",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+          <div>
+            <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{c.nombre}</div>
+            <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>🐾 {c.perro}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {!cancelado && (
+            <button onClick={() => toggleRealizado(c.id, diaActivo)} disabled={diaActivo > hoy}
+              style={{ fontSize: 12.5, fontWeight: 600, color: hecho ? "#2F6A46" : "#B0A587", background: "none", border: "none", cursor: diaActivo > hoy ? "default" : "pointer" }}>
+              {hecho ? "✓ Realizado" : "Marcar realizado"}
+            </button>
+          )}
+          <button onClick={() => toggleCancelado(c.id, diaActivo)}
+            style={{ fontSize: 11.5, color: cancelado ? RUST : "#B0A587", background: "none", border: `1px solid ${cancelado ? RUST : "#DCD2B4"}`, borderRadius: 14, padding: "4px 10px", cursor: "pointer" }}>
+            {cancelado ? "Cliente canceló" : "Marcar cancelado"}
+          </button>
+        </div>
+      </div>
+      {registro.nota && notaAbiertaId !== key && (
+        <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#5C5442", fontStyle: "italic" }}>"{registro.nota}"</p>
+      )}
+      {notaAbiertaId === key ? (
+        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+          <input value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} placeholder="Ej. estuvo muy energético hoy..."
+            onKeyDown={(e) => e.key === "Enter" && guardarNota(c.id, diaActivo)} style={{ ...input, marginBottom: 0, flex: 1 }} autoFocus />
+          <button onClick={() => guardarNota(c.id, diaActivo)} style={{ ...botonSecundario, padding: "8px 14px" }}>Guardar</button>
+        </div>
+      ) : (
+        <button onClick={() => { setNotaAbiertaId(key); setNotaTexto(registro.nota || ""); }} style={{ marginTop: 8, background: "none", border: "none", color: "#8A7E5C", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
+          {registro.nota ? "Editar nota" : "+ Agregar nota"}
+        </button>
+      )}
+    </div>
+  );
+
+  if (!puedeSwipe) return contenido;
+
+  return (
+    <div style={{ position: "relative", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", inset: 0, background: "#2F6A46", color: "#fff", borderRadius: 8,
+        display: "flex", alignItems: "center", gap: 8, paddingLeft: 18, fontSize: 13, fontWeight: 700,
+        opacity: dx > 4 ? Math.min(1, dx / UMBRAL_SWIPE_HECHO) : 0,
+      }}>
+        <CircleCheck size={18} /> {dx >= UMBRAL_SWIPE_HECHO ? "Soltá para marcar" : "Desliza para marcar hecho"}
+      </div>
+      <div onPointerDown={iniciar} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={soltar}
+        style={{ position: "relative", transform: `translateX(${dx}px)`, transition: arrastrando ? "none" : "transform .2s ease", touchAction: "pan-y" }}>
+        {contenido}
+      </div>
+    </div>
+  );
+}
+
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada, reprogramaciones = [] }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -2822,7 +2940,8 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
           </div>
         </div>
 
-        <p style={{ ...label, marginTop: 18 }}>Clientes programados este día</p>
+        <p style={{ ...label, marginTop: 18, marginBottom: 2 }}>Clientes programados este día</p>
+        <p style={{ ...hint, marginTop: 0 }}>Desliza una tarjeta hacia la derecha para marcarla realizada, sin tener que acertarle al botón.</p>
         {clientesDelDia.length === 0 ? (
           <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados este día.</p>
         ) : (
@@ -2830,50 +2949,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
             {clientesDelDia.map((c) => {
               const key = `${c.id}_${fechaKey(diaActivo)}`;
               const registro = registroPaseos[key] || {};
-              const hecho = !!registro.realizado;
-              const cancelado = !!registro.cancelado;
               return (
-                <div key={c.id} style={{
-                  padding: "14px 16px", borderRadius: 8,
-                  border: cancelado ? `1.5px solid ${RUST}` : hecho ? `1.5px solid #2F6A46` : "1px solid #E4DBC3",
-                  background: cancelado ? "#F1DCD2" : hecho ? "#D8ECDE" : "#FFFFFF",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
-                      <div>
-                        <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{c.nombre}</div>
-                        <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>🐾 {c.perro}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {!cancelado && (
-                        <button onClick={() => toggleRealizado(c.id, diaActivo)} disabled={diaActivo > hoy}
-                          style={{ fontSize: 12.5, fontWeight: 600, color: hecho ? "#2F6A46" : "#B0A587", background: "none", border: "none", cursor: diaActivo > hoy ? "default" : "pointer" }}>
-                          {hecho ? "✓ Realizado" : "Marcar realizado"}
-                        </button>
-                      )}
-                      <button onClick={() => toggleCancelado(c.id, diaActivo)}
-                        style={{ fontSize: 11.5, color: cancelado ? RUST : "#B0A587", background: "none", border: `1px solid ${cancelado ? RUST : "#DCD2B4"}`, borderRadius: 14, padding: "4px 10px", cursor: "pointer" }}>
-                        {cancelado ? "Cliente canceló" : "Marcar cancelado"}
-                      </button>
-                    </div>
-                  </div>
-                  {registro.nota && notaAbiertaId !== key && (
-                    <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "#5C5442", fontStyle: "italic" }}>"{registro.nota}"</p>
-                  )}
-                  {notaAbiertaId === key ? (
-                    <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                      <input value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} placeholder="Ej. estuvo muy energético hoy..."
-                        onKeyDown={(e) => e.key === "Enter" && guardarNota(c.id, diaActivo)} style={{ ...input, marginBottom: 0, flex: 1 }} autoFocus />
-                      <button onClick={() => guardarNota(c.id, diaActivo)} style={{ ...botonSecundario, padding: "8px 14px" }}>Guardar</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => { setNotaAbiertaId(key); setNotaTexto(registro.nota || ""); }} style={{ marginTop: 8, background: "none", border: "none", color: "#8A7E5C", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-                      {registro.nota ? "Editar nota" : "+ Agregar nota"}
-                    </button>
-                  )}
-                </div>
+                <TarjetaPaseoDia key={c.id} cliente={c} registro={registro} hoy={hoy} diaActivo={diaActivo}
+                  notaAbiertaId={notaAbiertaId} notaTexto={notaTexto} setNotaAbiertaId={setNotaAbiertaId} setNotaTexto={setNotaTexto}
+                  toggleRealizado={toggleRealizado} toggleCancelado={toggleCancelado} guardarNota={guardarNota} />
               );
             })}
           </div>
