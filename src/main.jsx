@@ -14,10 +14,14 @@ const HowriaAdminBundle = React.lazy(() =>
 );
 const Home = React.lazy(() => import("./Home.jsx"));
 const AgendarPublico = React.lazy(() => import("./AgendarPublico.jsx"));
+// Embudo de ventas para tutores de cachorros — se comparte por
+// Instagram/WhatsApp y termina en un único botón que abre WhatsApp.
+const Cachorros = React.lazy(() => import("./Cachorros.jsx"));
 
 const pathname = window.location.pathname;
 const esAdmin = pathname.startsWith("/admin");
 const esAgendar = pathname.startsWith("/agendar") || pathname.startsWith("/agendaadiestrador");
+const esCachorros = pathname.startsWith("/cachorros");
 
 // Registra el service worker apenas se carga el panel (no pide ningún
 // permiso — eso sigue pasando solo cuando alguien activa notificaciones
@@ -41,7 +45,7 @@ function Cargando() {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Suspense fallback={<Cargando />}>
-      {esAdmin ? <HowriaAdminBundle /> : esAgendar ? <AgendarPublico /> : <Home />}
+      {esAdmin ? <HowriaAdminBundle /> : esAgendar ? <AgendarPublico /> : esCachorros ? <Cachorros /> : <Home />}
     </Suspense>
   </React.StrictMode>
 );
