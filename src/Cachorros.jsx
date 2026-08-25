@@ -12,7 +12,7 @@
 // conducta que aplican a esa edad) y el flujo evaluación → plan de clases
 // es el que ya existe en la app. Sin precios, sin testimonios inventados
 // y sin cifras de resultados.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NAVY = "#14213D";
 const CREAM = "#F5EFE0";
@@ -88,6 +88,25 @@ function Titulo({ children, color = NAVY, style }) {
 }
 
 export default function Cachorros() {
+  // El video parte en silencio (obligado por los navegadores). Este botón
+  // desaparece apenas el visitante activa el sonido, o si lo activa desde
+  // los controles nativos — de ahí el listener de volumechange.
+  const videoRef = useRef(null);
+  const [sinSonido, setSinSonido] = useState(true);
+  function activarSonido() {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    v.play?.().catch(() => {});
+  }
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    function alCambiarVolumen() { setSinSonido(v.muted || v.volume === 0); }
+    v.addEventListener("volumechange", alCambiarVolumen);
+    return () => v.removeEventListener("volumechange", alCambiarVolumen);
+  }, []);
+
   // El botón fijo aparece recién cuando el visitante pasó del hero: antes
   // de eso todavía no tiene contexto para decidir, y tapaba la portada.
   const [mostrarFijo, setMostrarFijo] = useState(false);
@@ -145,22 +164,42 @@ export default function Cachorros() {
           <p style={{ fontSize: 15.5, color: MUTED, margin: "0 0 22px", lineHeight: 1.6 }}>
             Así trabajamos con los cachorros:
           </p>
-          {/* Vertical: se limita el ancho para que no ocupe una pantalla
-              entera de alto en escritorio. Con controles y sin autoplay —
-              el video trae voz, arrancar solo con sonido molesta. */}
-          <video
-            controls
-            preload="metadata"
-            playsInline
-            poster="/videos-cachorro-portada.jpg"
-            style={{
-              width: "100%", maxWidth: 340, aspectRatio: "9 / 16", display: "block",
-              margin: "0 auto", borderRadius: 14, background: NAVY,
-              boxShadow: "0 14px 40px rgba(20,33,61,0.22)",
-            }}>
-            <source src="/videos-cachorro.mp4" type="video/mp4" />
-            Tu navegador no puede reproducir este video.
-          </video>
+          {/* Arranca solo, en silencio y en bucle. Lo de "en silencio" no
+              es una preferencia: NINGÚN navegador deja reproducir solo con
+              audio (Chrome/Safari/Firefox lo bloquean), así que con sonido
+              el video simplemente no partiría. Funciona igual porque el
+              video trae los subtítulos incrustados; abajo hay un botón
+              para activar el audio con un toque. */}
+          <div style={{ position: "relative", width: "100%", maxWidth: 340, margin: "0 auto" }}>
+            <video
+              ref={videoRef}
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              poster="/videos-cachorro-portada.jpg"
+              style={{
+                width: "100%", aspectRatio: "9 / 16", display: "block",
+                borderRadius: 14, background: NAVY,
+                boxShadow: "0 14px 40px rgba(20,33,61,0.22)",
+              }}>
+              <source src="/videos-cachorro.mp4" type="video/mp4" />
+              Tu navegador no puede reproducir este video.
+            </video>
+            {sinSonido && (
+              <button onClick={activarSonido} className="howria-emb-cta"
+                style={{
+                  position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 52,
+                  background: "rgba(20,33,61,0.92)", color: CREAM, border: `1px solid ${GOLD}`,
+                  borderRadius: 999, padding: "9px 18px", fontSize: 13.5, fontWeight: 600,
+                  cursor: "pointer", whiteSpace: "nowrap", transition: "filter .15s ease",
+                }}>
+                🔇 Activar sonido
+              </button>
+            )}
+          </div>
         </div>
       </Seccion>
 
