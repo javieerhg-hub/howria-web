@@ -22,6 +22,13 @@ const GOLD_DARK = "#7C5D1A";
 const INK = "#211E1B";
 const MUTED = "#6B6248";
 
+// Video alojado en Drive de Howria. Se incrusta con la URL /preview (la
+// de /view no se puede embeber) dentro de un iframe — Drive no permite
+// usar el archivo como <video src> directo. El archivo tiene que estar
+// compartido como "cualquiera con el enlace": se verificó sin sesión de
+// Google iniciada, que es lo que ve un cliente.
+const VIDEO_DRIVE_ID = "1kHDjTPdhZgvHNg8vuk9XfqT_LrBinrWL";
+
 const WHATSAPP = "56992471504";
 const MENSAJE = "Hola Howria 🐾 Vi la página de cachorros y quiero agendar la evaluación para mi perro.";
 const LINK_WHATSAPP = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(MENSAJE)}`;
@@ -128,6 +135,33 @@ export default function Cachorros() {
           Ver cómo funciona ↓
         </a>
       </header>
+
+      {/* ---------- Video ---------- */}
+      {/* Va justo después de la portada: es el punto de más atención de
+          la página, y un video hace el trabajo de convencer mucho más
+          rápido que el texto. Se puede mover a otra sección si Javier
+          prefiere. */}
+      <Seccion fondo={CREAM_SOFT} style={{ paddingTop: 56, paddingBottom: 56 }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
+          <p style={{ fontSize: 15.5, color: MUTED, margin: "0 0 22px", lineHeight: 1.6 }}>
+            Así trabajamos con los cachorros:
+          </p>
+          <div style={{
+            position: "relative", width: "100%", aspectRatio: "16 / 9",
+            borderRadius: 14, overflow: "hidden", background: NAVY,
+            boxShadow: "0 14px 40px rgba(20,33,61,0.22)",
+          }}>
+            <iframe
+              src={`https://drive.google.com/file/d/${VIDEO_DRIVE_ID}/preview`}
+              title="Video: adiestramiento de cachorros en Howria"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              loading="lazy"
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+            />
+          </div>
+        </div>
+      </Seccion>
 
       {/* ---------- Identificación con el problema ---------- */}
       <Seccion>
