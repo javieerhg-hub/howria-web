@@ -779,17 +779,23 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
               const estado = ESTADOS_CLIENTE.find((e) => e.id === (c.estadoCliente || "activo"));
               return (
                 <button key={c.id} onClick={() => setPerfilId(c.id)} className="howria-card" style={{ textAlign: "left", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 14, padding: 16, cursor: "pointer", font: "inherit", position: "relative" }}>
-                  <div style={{ position: "absolute", top: 14, right: 14, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  {/* Las etiquetas van en su propia línea, no flotando en la
+                      esquina: cuando estaban absolutas obligaban a reservar
+                      70px a la derecha de TODA la fila, y al nombre le
+                      quedaban unos 70px útiles — los clientes con varios
+                      dueños ("Carolina, Xavier, Eugenia") se partían en tres
+                      líneas apretadas contra la etiqueta. */}
+                  <div style={{ display: "flex", justifyContent: "flex-end", flexWrap: "wrap", gap: 4, marginBottom: 8, minHeight: 19 }}>
                     <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
                     {c.tipoServicio?.includes("evaluacion") && (
                       <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A" }}>Evaluación</span>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", paddingRight: 70 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                     <div style={{ width: 46, height: 46, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none", border: "2px solid #EDE4CE" }} />
-                    <div>
-                      <div style={{ fontWeight: 600, color: NAVY }}>{c.nombre}</div>
-                      <div style={{ fontSize: 13, color: "#8A7E5C" }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: NAVY, lineHeight: 1.3 }}>{c.nombre}</div>
+                      <div style={{ fontSize: 13, color: "#8A7E5C", lineHeight: 1.35 }}>🐾 {c.perro} · {c.raza || "raza s/i"}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
