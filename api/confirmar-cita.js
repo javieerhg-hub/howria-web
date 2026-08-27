@@ -17,8 +17,17 @@ function fmtCLP(n) {
   return Number(n || 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 }
 
+// Este código corre en los servidores de Vercel, que están en UTC. Sin
+// `timeZone` explícito, Intl formatea en UTC: una cita de las 15:00 en
+// Chile salía como 18:00 en el correo, y una de la tarde-noche cambiaba
+// derechamente de DÍA (22:00 del lunes → "01:00 del martes"). El cliente
+// recibía una fecha distinta a la que había elegido. api/cliente-agenda.js
+// ya lo hacía bien; este correo era el único que faltaba.
+const ZONA_CHILE = "America/Santiago";
+
 function renderCorreoConfirmacion(cita) {
   const fecha = new Intl.DateTimeFormat("es-CL", {
+    timeZone: ZONA_CHILE,
     weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   }).format(new Date(cita.fecha_hora));
   const fechaCap = fecha.charAt(0).toUpperCase() + fecha.slice(1);
