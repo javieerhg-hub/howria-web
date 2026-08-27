@@ -393,9 +393,34 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
               return disponibilidadFecha.filter((d) => d.adiestrador === objetivo && d.fecha === key).map((d) => d.horaInicio);
             }
 
+            // Una hora que ya tiene cita (pedida o confirmada) sigue estando
+            // en disponibilidad_fecha, así que se veía verde — como libre —
+            // aunque estuviera tomada. En vez de borrar la fila al confirmar
+            // (que perdería la disponibilidad para siempre si después se
+            // cancela la cita), se cruza con las citas y se muestra ocupada.
+            // La reserva pública ya la descartaba por su cuenta, así que
+            // nunca hubo riesgo de doble reserva; esto arregla lo que ve el
+            // adiestrador.
+            function citaEnBloque(key, hora) {
+              const inicioBloque = new Date(`${key}T${hora}:00`).getTime();
+              const finBloque = inicioBloque + 60 * 60000;
+              return citas.find((c) => {
+                if (c.adiestrador !== objetivo) return false;
+                if (c.estado !== "pendiente" && c.estado !== "agendada") return false;
+                const ini = new Date(c.fechaISO).getTime();
+                const fin = ini + (c.duracionMin || 60) * 60000;
+                return inicioBloque < fin && finBloque > ini;
+              });
+            }
+
             function estadoDia(key) {
               if (key < hoyKey) return "pasado";
-              return bloquesDe(key).length > 0 ? "disponible" : "bloqueado";
+              const bloques = bloquesDe(key);
+              if (bloques.length === 0) return "bloqueado";
+              // Un día con todas sus horas ya reservadas no es un día
+              // "disponible" — se marca como sin cupo para que no confunda.
+              const libres = bloques.filter((h) => !citaEnBloque(key, h));
+              return libres.length > 0 ? "disponible" : "bloqueado";
             }
 
             function onClickDia(key) {
@@ -470,6 +495,24 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {BLOQUES_DIA.map((hora) => {
                         const activo = bloquesDelDiaSeleccionado.includes(hora);
+                        const cita = citaEnBloque(diaSeleccionado, hora);
+                        // Ocupado gana sobre disponible: no tiene sentido
+                        // "quitar la disponibilidad" de una hora que ya está
+                        // reservada — para liberarla hay que cancelar la cita.
+                        if (cita) {
+                          const quien = cita.clienteNombre || "cliente";
+                          return (
+                            <span key={hora}
+                              title={`Reservado: ${quien}${cita.perro ? ` · 🐾 ${cita.perro}` : ""} — ${cita.estado === "pendiente" ? "por confirmar" : "confirmada"}. Para liberar esta hora hay que cancelar la cita.`}
+                              style={{
+                                borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600,
+                                background: NAVY, color: CREAM, border: `1.5px solid ${NAVY}`,
+                                display: "inline-flex", alignItems: "center", gap: 6, cursor: "default",
+                              }}>
+                              {hora} · reservado
+                            </span>
+                          );
+                        }
                         return (
                           <button key={hora} type="button" onClick={() => toggleBloqueDisponibilidad(objetivo, diaSeleccionado, hora)}
                             style={{
