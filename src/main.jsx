@@ -17,11 +17,16 @@ const AgendarPublico = React.lazy(() => import("./AgendarPublico.jsx"));
 // Embudo de ventas para tutores de cachorros — se comparte por
 // Instagram/WhatsApp y termina en un único botón que abre WhatsApp.
 const Cachorros = React.lazy(() => import("./Cachorros.jsx"));
+// Vuelta de la pasarela de pago: son páginas de cierre, no de trámite.
+const PagoExitoso = React.lazy(() => import("./PagoResultado.jsx").then((m) => ({ default: m.PagoExitoso })));
+const PagoFallido = React.lazy(() => import("./PagoResultado.jsx").then((m) => ({ default: m.PagoFallido })));
 
 const pathname = window.location.pathname;
 const esAdmin = pathname.startsWith("/admin");
 const esAgendar = pathname.startsWith("/agendar") || pathname.startsWith("/agendaadiestrador");
 const esCachorros = pathname.startsWith("/cachorros");
+const esPagoExitoso = pathname.startsWith("/pago-exitoso");
+const esPagoFallido = pathname.startsWith("/pago-fallido");
 
 // Registra el service worker apenas se carga el panel (no pide ningún
 // permiso — eso sigue pasando solo cuando alguien activa notificaciones
@@ -45,7 +50,12 @@ function Cargando() {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Suspense fallback={<Cargando />}>
-      {esAdmin ? <HowriaAdminBundle /> : esAgendar ? <AgendarPublico /> : esCachorros ? <Cachorros /> : <Home />}
+      {esAdmin ? <HowriaAdminBundle />
+        : esAgendar ? <AgendarPublico />
+        : esCachorros ? <Cachorros />
+        : esPagoExitoso ? <PagoExitoso />
+        : esPagoFallido ? <PagoFallido />
+        : <Home />}
     </Suspense>
   </React.StrictMode>
 );
