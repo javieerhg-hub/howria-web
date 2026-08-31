@@ -48,22 +48,81 @@ function vistaPrevia(m) {
   return crudo.replace(/\s+/g, " ").trim().slice(0, 140);
 }
 
+// Tamaños de texto para leer el cuerpo del correo. La elección se guarda
+// y vale para todos los correos, no para uno solo.
+const TAMANOS_TEXTO = [
+  { id: "chico", etiqueta: "Chico", px: 13 },
+  { id: "normal", etiqueta: "Normal", px: 15 },
+  { id: "grande", etiqueta: "Grande", px: 17.5 },
+  { id: "enorme", etiqueta: "Enorme", px: 20 },
+];
+const TAMANO_POR_DEFECTO = "normal";
+
+function cargarTamanoTexto() {
+  try { return localStorage.getItem("howria_mail_texto") || TAMANO_POR_DEFECTO; } catch { return TAMANO_POR_DEFECTO; }
+}
+function guardarTamanoTexto(id) {
+  try { localStorage.setItem("howria_mail_texto", id); } catch { /* modo privado: solo no se recuerda */ }
+}
+function pxDe(id) {
+  return (TAMANOS_TEXTO.find((t) => t.id === id) || TAMANOS_TEXTO[1]).px;
+}
+
+// El HTML del correo se envuelve en un documento propio antes de meterlo
+// al iframe. El motivo: los correos vienen maquetados a un ancho fijo de
+// ~600px, y el iframe en el celular mide ~340px. El navegador no los
+// achica solo — muestra un pedazo del correo a tamaño completo, que es
+// justo lo que se percibe como "mucho zoom". Las reglas de abajo lo
+// obligan a caber en el ancho que haya.
+//
+// Van con !important porque los correos traen sus anchos en atributos
+// (width="600") y en estilos en línea, que si no le ganarían a la hoja.
+function envolverHtmlCorreo(html, px) {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; padding: 10px; background: #FFFFFF; color: #332E22;
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    font-size: ${px}px; line-height: 1.55;
+    overflow-wrap: break-word; word-break: break-word;
+  }
+  * { max-width: 100% !important; box-sizing: border-box !important; }
+  /* Al achicar el ancho hay que dejar que el alto acompañe, si no la
+     imagen sale aplastada. Pero NO en los espaciadores de 1px, que son
+     moneda corriente en el HTML de correo: su proporción es 1:1, así
+     que con height:auto un espaciador de 600x1 se convierte en un
+     cuadrado gigante (medido: 40px de alto pasaban a 291px). */
+  img:not([width="1"]):not([height="1"]), video { height: auto !important; }
+  table { table-layout: auto !important; }
+  a { color: #14213D; }
+</style></head>
+<body>${html}</body></html>`;
+}
+
 // Mismo render para cualquier mensaje (entrante o saliente): si trae HTML
 // se muestra en un iframe sandbox — el saliente es contenido propio, pero
 // aplicar la misma regla sin excepciones evita tener dos caminos distintos
 // para renderizar HTML de correo, uno de ellos sin aislar.
-function CuerpoCorreo({ mensaje }) {
+//
+// El sandbox se queda vacío a propósito. Con "allow-same-origin" se
+// podría medir el alto real del contenido, pero un srcDoc con ese
+// permiso hereda el origen del panel — o sea, el HTML de un correo
+// cualquiera quedaría corriendo dentro de Howria. No vale la pena.
+function CuerpoCorreo({ mensaje, px }) {
   if (mensaje.cuerpoHtml) {
     return (
       <iframe
         sandbox=""
-        srcDoc={mensaje.cuerpoHtml}
+        srcDoc={envolverHtmlCorreo(mensaje.cuerpoHtml, px)}
         title={`Correo: ${mensaje.asunto || "sin asunto"}`}
-        style={{ width: "100%", height: 300, border: "1px solid #E4DBC3", borderRadius: 6, background: "#FFFFFF" }}
+        className="howria-mail-cuerpo"
+        style={{ width: "100%", border: "1px solid #E4DBC3", borderRadius: 6, background: "#FFFFFF", display: "block" }}
       />
     );
   }
-  return <p style={{ margin: 0, fontSize: 13.5, color: "#332E22", whiteSpace: "pre-wrap" }}>{mensaje.cuerpoTexto || "(sin contenido)"}</p>;
+  return <p style={{ margin: 0, fontSize: px, lineHeight: 1.55, color: "#332E22", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>{mensaje.cuerpoTexto || "(sin contenido)"}</p>;
 }
 
 function Etiqueta({ bg, color, children, style }) {
@@ -82,6 +141,15 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
   const [errorEnvio, setErrorEnvio] = useState("");
   const [verArchivados, setVerArchivados] = useState(false);
   const [filtroCategoria, setFiltroCategoria] = useState("todas"); // "todas" | "sin" | id
+  // Tamaño de lectura del cuerpo del correo. Se recuerda entre sesiones
+  // porque es una preferencia de la persona (y de su pantalla), no algo
+  // que tenga sentido volver a elegir en cada correo.
+  const [tamanoTexto, setTamanoTexto] = useState(cargarTamanoTexto);
+  const pxCuerpo = pxDe(tamanoTexto);
+  function cambiarTamano(id) {
+    setTamanoTexto(id);
+    guardarTamanoTexto(id);
+  }
   // Redactar un correo nuevo (no atado a ninguno existente) — antes solo
   // se podía responder a alguien que hubiera escrito primero. El servidor
   // (api/responder-correo.js) ya soportaba esto de sobra, solo faltaba el
@@ -311,12 +379,30 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
             </div>
 
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
                 <Etiqueta bg={m.direccion === "entrante" ? "#D8ECDE" : "#F1DCD2"} color={m.direccion === "entrante" ? "#2F6A46" : "#A85C3B"} style={{ fontSize: 11, padding: "3px 10px" }}>
                   {m.direccion === "entrante" ? `De: ${m.remitente}` : `Para: ${m.destinatario}`}
                 </Etiqueta>
+                <div role="group" aria-label="Tamaño del texto del correo" style={{ display: "flex", gap: 4 }}>
+                  {TAMANOS_TEXTO.map((t) => {
+                    const activo = tamanoTexto === t.id;
+                    return (
+                      <button key={t.id} type="button" onClick={() => cambiarTamano(t.id)} aria-pressed={activo}
+                        title={`Texto ${t.etiqueta.toLowerCase()}`} aria-label={`Texto ${t.etiqueta.toLowerCase()}`}
+                        style={{
+                          minWidth: 34, minHeight: 34, borderRadius: 8, cursor: "pointer", lineHeight: 1,
+                          fontSize: t.px * 0.78, fontWeight: activo ? 700 : 400,
+                          border: activo ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                          background: activo ? NAVY : "#FFFFFF",
+                          color: activo ? CREAM : "#6B6248",
+                        }}>
+                        A
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <CuerpoCorreo mensaje={m} />
+              <CuerpoCorreo mensaje={m} px={pxCuerpo} />
             </div>
 
             <div style={{ borderTop: "1px solid #E4DBC3", paddingTop: 14 }}>
@@ -342,6 +428,17 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
+      {/* El alto del marco del correo no se puede calcular: el iframe va
+          con sandbox vacío, así que no hay forma de medir el contenido
+          desde afuera. Se fija a mano, y en pantallas chicas se le da
+          buena parte del alto disponible — leer un correo en 300px de
+          alto en el celular era casi todo scroll. */}
+      <style>{`
+        .howria-mail-cuerpo { height: 440px; }
+        @media (max-width: 720px) {
+          .howria-mail-cuerpo { height: 68vh; min-height: 300px; }
+        }
+      `}</style>
       <div className="howria-card" style={tarjeta}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
           <div>
