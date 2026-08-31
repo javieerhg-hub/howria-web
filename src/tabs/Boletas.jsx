@@ -731,7 +731,25 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
     img2.onload = () => { huellaImgRef.current = img2; };
   }, []);
 
-  const clientesAdiestramiento = clientes.filter((c) => c.tipoServicio?.includes("clases"));
+  const clientesAdiestramiento = useMemo(
+    () => clientes.filter((c) => c.tipoServicio?.includes("clases")),
+    [clientes]
+  );
+
+  // El <select> lista solo a los clientes con "Clases" marcado, pero
+  // clienteId arrancaba apuntando al primero de TODOS los clientes —
+  // casi siempre uno de paseos, que no está entre las opciones. El
+  // desplegable igual mostraba el primer nombre de la lista (así se
+  // comporta un select cuyo value no existe entre sus opciones), pero el
+  // formulario creía que no había nadie elegido y "Generar boleta"
+  // quedaba gris hasta que uno seleccionaba a mano. Es el mismo arreglo
+  // que el formulario de paseos ya hace en cambiarFiltroPaseador; acá el
+  // disparador es que los clientes terminen de cargar.
+  useEffect(() => {
+    if (clienteManual || clientesAdiestramiento.length === 0) return;
+    if (clientesAdiestramiento.some((c) => c.id === Number(clienteId))) return;
+    setClienteId(clientesAdiestramiento[0].id);
+  }, [clientesAdiestramiento, clienteId, clienteManual]);
   const cliente = clienteManual
     ? { nombre: nombreManual.trim(), perro: perroManual.trim(), telefono: "", _dbId: null }
     : clientesAdiestramiento.find((c) => c.id === Number(clienteId));

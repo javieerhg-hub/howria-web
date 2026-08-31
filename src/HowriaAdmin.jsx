@@ -1863,7 +1863,13 @@ function LogoHowria({ height = 40 }) {
   return <img src={LOGO_B64} alt="Howria" style={{ height, display: "block" }} />;
 }
 
-function NotificacionesBell({ avisos, setTab }) {
+// `haciaArriba` es para la campana de la barra lateral, que vive abajo
+// del todo: el panel se abría hacia abajo y quedaba 285px por debajo del
+// borde de la pantalla, sin forma de llegar a él (la barra es
+// position:fixed, así que scrollear la página no lo mueve). Solo se veía
+// el primer tercio de la lista de avisos. En el encabezado móvil la
+// campana está arriba, así que ahí se sigue abriendo hacia abajo.
+function NotificacionesBell({ avisos, setTab, haciaArriba = false }) {
   const [abierto, setAbierto] = useState(false);
 
   function irAlAviso(a) {
@@ -1884,7 +1890,14 @@ function NotificacionesBell({ avisos, setTab }) {
       {abierto && (
         <>
           <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 19 }} />
-          <div style={{ position: "absolute", left: 0, top: "110%", width: 280, maxWidth: "calc(100vw - 24px)", background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20 }}>
+          <div style={{
+            position: "absolute", left: 0, width: 280, maxWidth: "calc(100vw - 24px)",
+            ...(haciaArriba ? { bottom: "110%" } : { top: "110%" }),
+            // Con muchos avisos la lista puede pasarse de alto igual —
+            // que scrollee dentro del panel en vez de salirse de la pantalla.
+            maxHeight: "min(60vh, 420px)", overflowY: "auto",
+            background: "#FFFFFF", borderRadius: 8, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 14, zIndex: 20,
+          }}>
             <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: "#8A7E5C", textTransform: "uppercase" }}>Avisos</p>
             {avisos.length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, color: "#9A9179" }}>No hay avisos pendientes.</p>
@@ -4988,7 +5001,12 @@ export default function HowriaAdmin() {
       </div>
 
       <div className="howria-shell">
-        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 25 }}>
+        {/* boxSizing border-box a propósito: con el content-box que hereda
+            la página, "height: 100vh" + 20px de padding arriba y abajo daba
+            una barra de 100vh + 40px. Como es position:fixed, esos 40px de
+            más quedaban fuera de la pantalla y no había forma de llegar a
+            ellos scrolleando — "Cerrar sesión" salía cortado por abajo. */}
+        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "fixed", top: 0, left: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto", zIndex: 25 }}>
           <div style={{ padding: "4px 10px 20px", flex: "none" }}>
             <LogoHowria height={38} />
           </div>
@@ -5033,7 +5051,7 @@ export default function HowriaAdmin() {
 
           <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" }}>
-              {!esPaseador && <NotificacionesBell avisos={calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
+              {!esPaseador && <NotificacionesBell haciaArriba avisos={calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador })} setTab={setTab} />}
               <BotonNotificacionesPush usuarioEmail={user.email} />
             </div>
             <div style={{ padding: "0 8px", fontSize: 13, color: CREAM }}>
