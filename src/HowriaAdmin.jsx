@@ -4963,12 +4963,22 @@ export default function HowriaAdmin() {
 
         /* Slide direccional (no un fade parejo) — "adelante" entra desde la
            derecha, "atrás" desde la izquierda, según el orden declarado en
-           TODOS_LOS_TABS (ver direccionTab más arriba). translate3d +
-           will-change para que la corra el compositor de la GPU, no el
+           TODOS_LOS_TABS (ver direccionTab más arriba). Se usa translate3d
+           y no "left" para que la corra el compositor de la GPU y no el
            hilo principal — se nota en celulares de gama media. */
         @keyframes howria-tab-in-adelante { from { opacity: 0; transform: translate3d(18px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
         @keyframes howria-tab-in-atras { from { opacity: 0; transform: translate3d(-18px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
-        .howria-tab-entrada { will-change: transform, opacity; animation-duration: .2s; animation-timing-function: ease; }
+        /* SIN will-change: transform, a propósito. Esta clase envuelve el
+           contenido de TODA pestaña, y "will-change: transform" convierte
+           al elemento en el marco de referencia de cualquier descendiente
+           con position: fixed — aunque no haya ninguna transformación
+           aplicada; basta con declarar la intención. Con eso, los modales
+           dejaban de centrarse respecto a la pantalla y se centraban
+           respecto al contenido de la pestaña, que en el celular puede
+           medir miles de píxeles: se abrían muy abajo y había que
+           deslizar un buen rato para encontrarlos. La animación dura
+           200ms y se ve igual de fluida sin la pista de optimización. */
+        .howria-tab-entrada { animation-duration: .2s; animation-timing-function: ease; }
         .howria-tab-entrada-adelante { animation-name: howria-tab-in-adelante; }
         .howria-tab-entrada-atras { animation-name: howria-tab-in-atras; }
 
