@@ -262,7 +262,180 @@ function ModalResolverAusencia({ paseador, pendientes, equipoPaseo, nuevoPaseado
   );
 }
 
-export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user }) {
+// ---------- Clientes entrantes (decidir qué hacer con cada uno) -------
+//
+// api/cliente-agenda.js crea un cliente REAL apenas alguien reserva por
+// el link público — antes de que nadie confirme la cita — a propósito
+// incompleto: sin paseador, sin tarifa, sin plan. Eso sirve para que la
+// cita aparezca de una en las pantallas del entrenador, pero deja al
+// cliente flotando sin que nadie decida qué hacer con él. Este panel es
+// donde se decide: qué servicio va a tomar y quién lo atiende.
+//
+// Se listan solo los marcados con triagePendiente (database/107), no los
+// que "parecen" incompletos: un cliente puede estar sin paseador a
+// propósito, y adivinar por los campos vacíos traería gente que no
+// corresponde.
+const SERVICIOS_ENTRANTE = [
+  { id: "paseos", nombre: "Paseos" },
+  { id: "evaluacion", nombre: "Evaluación" },
+  { id: "clases", nombre: "Clases" },
+];
+
+function fmtFechaCita(iso) {
+  return new Date(iso).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+}
+
+function FichaEntrante({ cliente, citas, equipoPaseo, entrenadores, onGuardar }) {
+  const [servicios, setServicios] = useState(cliente.tipoServicio || []);
+  const [paseador, setPaseador] = useState(cliente.paseadorNombre || "");
+  const [valorPaseo, setValorPaseo] = useState(cliente.valorPaseoRef || "");
+  const [tarifaPaseador, setTarifaPaseador] = useState(cliente.tarifaPaseador || "");
+  const [adiestrador, setAdiestrador] = useState(cliente.adiestradorNombre || "");
+
+  const quierePaseos = servicios.includes("paseos");
+  const quiereAdiestrador = servicios.includes("clases") || servicios.includes("evaluacion");
+
+  // Qué falta para que la decisión sirva de algo. Un cliente de paseos
+  // sin paseador o con tarifa en $0 queda a medias y termina saliendo en
+  // los avisos de Inicio; mejor pedirlo acá que arrastrarlo.
+  const faltan = [];
+  if (servicios.length === 0) faltan.push("elegir al menos un servicio");
+  if (quierePaseos && !paseador) faltan.push("asignar un paseador");
+  if (quierePaseos && !(Number(valorPaseo) > 0)) faltan.push("poner cuánto paga el cliente");
+  if (quierePaseos && !(Number(tarifaPaseador) > 0)) faltan.push("poner cuánto recibe el paseador");
+  if (quiereAdiestrador && !adiestrador) faltan.push("asignar un adiestrador");
+
+  function toggleServicio(id) {
+    setServicios((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function guardar() {
+    if (faltan.length > 0) return;
+    onGuardar(cliente.id, {
+      tipoServicio: servicios,
+      paseadorNombre: quierePaseos ? paseador : cliente.paseadorNombre,
+      valorPaseoRef: quierePaseos ? Number(valorPaseo) : cliente.valorPaseoRef,
+      tarifaPaseador: quierePaseos ? Number(tarifaPaseador) : cliente.tarifaPaseador,
+      adiestradorNombre: quiereAdiestrador ? adiestrador : cliente.adiestradorNombre,
+      triagePendiente: false,
+    });
+  }
+
+  return (
+    <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 12, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "none", background: cliente.fotoUrl ? `url(${cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: NAVY }}>{cliente.nombre}</p>
+          <p style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>🐾 {cliente.perro || "sin perro"}</p>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12.5, color: "#6B6248", lineHeight: 1.7, marginBottom: 12 }}>
+        {cliente.telefono && <div>📞 {cliente.telefono}</div>}
+        {cliente.email && <div>✉️ {cliente.email}</div>}
+        {cliente.direccion && <div>📍 {cliente.direccion}</div>}
+        {citas.map((c, i) => (
+          <div key={i} style={{ marginTop: 6, color: NAVY }}>
+            📅 {c.tipo === "evaluacion" ? "Evaluación" : "Clase"} con {c.adiestrador} · {fmtFechaCita(c.fechaISO)}
+            <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: c.estado === "pendiente" ? "#F3E3B4" : "#D8ECDE", color: c.estado === "pendiente" ? "#8A6A1E" : "#2F6A46" }}>
+              {c.estado === "pendiente" ? "Por confirmar" : "Confirmada"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ ...label, marginBottom: 6 }}>¿Qué va a tomar?</p>
+      <div role="group" aria-label="Servicios del cliente" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {SERVICIOS_ENTRANTE.map((sv) => {
+          const activo = servicios.includes(sv.id);
+          return (
+            <button key={sv.id} type="button" onClick={() => toggleServicio(sv.id)} aria-pressed={activo}
+              style={{
+                padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer", minHeight: 40,
+                border: activo ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                background: activo ? NAVY : "#FFFFFF", color: activo ? CREAM : INK, fontWeight: activo ? 600 : 400,
+              }}>
+              {sv.nombre}
+            </button>
+          );
+        })}
+      </div>
+
+      {quierePaseos && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={label} htmlFor={`entrante-paseador-${cliente.id}`}>Paseador</label>
+          <select id={`entrante-paseador-${cliente.id}`} value={paseador} onChange={(e) => setPaseador(e.target.value)} style={input}>
+            <option value="">Elegir…</option>
+            {equipoPaseo.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 140px" }}>
+              <label style={label} htmlFor={`entrante-valor-${cliente.id}`}>Paga el cliente</label>
+              <input id={`entrante-valor-${cliente.id}`} type="number" min="0" value={valorPaseo}
+                onChange={(e) => setValorPaseo(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+            <div style={{ flex: "1 1 140px" }}>
+              <label style={label} htmlFor={`entrante-tarifa-${cliente.id}`}>Recibe el paseador</label>
+              <input id={`entrante-tarifa-${cliente.id}`} type="number" min="0" value={tarifaPaseador}
+                onChange={(e) => setTarifaPaseador(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quiereAdiestrador && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={label} htmlFor={`entrante-adiestrador-${cliente.id}`}>Adiestrador</label>
+          <select id={`entrante-adiestrador-${cliente.id}`} value={adiestrador} onChange={(e) => setAdiestrador(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+            <option value="">Elegir…</option>
+            {entrenadores.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          </select>
+        </div>
+      )}
+
+      {faltan.length > 0 && (
+        <p style={{ ...hint, color: RUST, margin: "10px 0" }}>Falta {faltan.join(", ")}.</p>
+      )}
+      <button onClick={guardar} disabled={faltan.length > 0}
+        style={{ ...botonPrincipal, marginTop: 10, opacity: faltan.length > 0 ? 0.45 : 1 }}>
+        Listo, ya está decidido
+      </button>
+    </div>
+  );
+}
+
+export function PanelClientesEntrantes({ clientes, setClientes, usuarios, citasAgenda = [] }) {
+  const entrantes = clientes.filter((c) => c.triagePendiente);
+  const equipoPaseo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const entrenadores = usuarios.filter((u) => u.rol === "entrenador").sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  function guardarDecision(clienteId, cambios) {
+    setClientes((prev) => prev.map((c) => (c.id === clienteId ? { ...c, ...cambios } : c)));
+    showToast("Cliente listo.", "exito");
+  }
+
+  if (entrantes.length === 0) return null;
+
+  return (
+    <div className="howria-card" style={{ ...tarjeta, border: `1px solid ${GOLD}` }}>
+      <h2 style={sectionTitle}>Clientes nuevos por definir ({entrantes.length})</h2>
+      <p style={hint}>
+        Entraron solos por el link público y ya pidieron cita. Define qué servicio van a tomar y quién los atiende;
+        al guardar salen de esta lista.
+      </p>
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        {entrantes.map((c) => (
+          <FichaEntrante key={c.id} cliente={c}
+            citas={citasAgenda.filter((x) => x.clienteId && x.clienteId === c._dbId)}
+            equipoPaseo={equipoPaseo} entrenadores={entrenadores} onGuardar={guardarDecision} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, setRegistroPaseos, setTab, setMapaPaseadorSel, faseDiaPaseador = {}, ausenciasPaseador = {}, cargandoClientes = false, reprogramaciones = [], moverPaseo, eliminarReprogramacion, user, citasAgenda = [] }) {
   // Solo paseador/entrenador reales (no "Sin asignar", ni cuentas de
   // coordinador/administrador que nunca van a tener un horario de
   // paseos) — de la lista de usuarios, no de quién tiene clientes hoy,
@@ -621,6 +794,8 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <PanelClientesEntrantes clientes={clientes} setClientes={setClientes} usuarios={usuarios} citasAgenda={citasAgenda} />
+
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Paseos de hoy</h2>
         <p style={hint}>Quién falta por marcar, agrupado por paseador. Desliza un paseo sin marcar hacia la izquierda para reprogramarlo al tiro.</p>

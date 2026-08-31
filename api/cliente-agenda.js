@@ -308,6 +308,10 @@ export default async function handler(req, res) {
           tipo_servicio: [tipo === "evaluacion" ? "evaluacion" : "clases"],
           estado_cliente: "activo",
           fecha_inicio: null,
+          // Queda esperando que el equipo decida qué servicio va a tomar
+          // y quién lo atiende — sale en el panel de clientes entrantes,
+          // arriba de Coordinación (database/107).
+          triage_pendiente: true,
         })
         .select("id")
         .single();

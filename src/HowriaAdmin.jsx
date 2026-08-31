@@ -149,6 +149,9 @@ function clienteToDb(c) {
     tipo_servicio: c.tipoServicio || [],
     estado_cliente: c.estadoCliente,
     fecha_inicio: c.fechaInicio || null,
+    // true = entró solo por la agenda pública y todavía nadie decidió
+    // qué hacer con él (database/107).
+    triage_pendiente: c.triagePendiente || false,
   };
 }
 
@@ -181,6 +184,7 @@ function dbToCliente(row) {
     tipoServicio: row.tipo_servicio || [],
     estadoCliente: row.estado_cliente,
     fechaInicio: row.fecha_inicio,
+    triagePendiente: row.triage_pendiente || false,
   };
 }
 
@@ -3727,6 +3731,9 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   // mismo criterio que la vista del entrenador pero sin acotar por quién
   // los atiende — coordinación/administrador ven el negocio completo.
   const clientesEvaluacionTodos = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && (c.estadoCliente || "activo") !== "baja");
+  // Clientes que entraron solos por el link público y todavía esperan que
+  // alguien decida qué servicio van a tomar (database/107).
+  const clientesEntrantes = clientes.filter((c) => c.triagePendiente);
   const equipoActivo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
@@ -3754,6 +3761,21 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
       <div className="howria-inicio-launcher-order">
         <LauncherMobile tabs={tabs} setTab={setTab} />
       </div>
+
+      {/* Aviso corto: el panel completo para decidir vive en Coordinación
+          (ver PanelClientesEntrantes). Acá solo se avisa que hay gente
+          esperando, para que no se pase por no entrar a la pestaña. */}
+      {clientesEntrantes.length > 0 && tabs.some((t) => t.id === "coordinacion") && (
+        <button onClick={() => setTab("coordinacion")} className="howria-card"
+          style={{ ...tarjeta, border: `1px solid ${GOLD}`, background: "#FBF6E9", cursor: "pointer", textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
+          <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "#8A6A1E" }}>
+            🆕 {clientesEntrantes.length} cliente(s) nuevo(s) por definir
+          </p>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B5518" }}>
+            {clientesEntrantes.map((c) => c.perro || c.nombre).join(", ")} — entraron por el link público. Tócalo para decidir qué servicio toman y quién los atiende.
+          </p>
+        </button>
+      )}
 
       {clientesEvaluacionTodos.length > 0 && (
         <div className="howria-card" style={tarjeta}>
@@ -5113,7 +5135,7 @@ export default function HowriaAdmin() {
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
-        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} />}
+        {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} citasAgenda={citasAgenda} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} esAdmin={esAdmin} />}
         {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}
