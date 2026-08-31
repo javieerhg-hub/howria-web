@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, TEMARIO_ADIESTRAMIENTO,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, SkeletonLista,
-  ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen,
+  ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen, clienteEstaCerrado, tipoServicioComoAlumno,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, fechaISOaInputLocal, SeccionPlegable } from "./_compartido.jsx";
 // Alumnos incrusta el calendario del mes como una de sus vistas ("Ver
@@ -47,7 +47,7 @@ function SelectorTemas({ seleccionados, onToggle, compacto = false }) {
   );
 }
 
-function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreActual, onGuardar, onCancelar }) {
+function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreActual, onGuardar, onCancelar, candidatosEvaluacion = [] }) {
   const [form, setForm] = useState(() => inicial
     ? { id: inicial.id, nombre: inicial.nombre || "", perro: inicial.perro || "", telefono: inicial.telefono || "", email: inicial.email || "",
         comuna: inicial.comuna || "", edad: inicial.edad || "", adiestradorNombre: inicial.adiestradorNombre || (esEntrenador ? nombreActual : ""),
@@ -55,6 +55,25 @@ function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreAc
     : { nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: esEntrenador ? nombreActual : "", temasObjetivo: [], fotoUrl: null });
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
+
+  // Al elegir a alguien de evaluación se copian sus datos y se guarda su
+  // id: eso es lo que hace que al guardar se actualice su ficha en vez de
+  // crear otra. Volver a "desde cero" limpia todo, id incluido.
+  function elegirDesdeEvaluacion(valor) {
+    if (!valor) {
+      setForm({ nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: esEntrenador ? nombreActual : "", temasObjetivo: [], fotoUrl: null });
+      return;
+    }
+    const c = candidatosEvaluacion.find((x) => String(x.id) === String(valor));
+    if (!c) return;
+    setForm({
+      id: c.id,
+      nombre: c.nombre || "", perro: c.perro || "", telefono: c.telefono || "", email: c.email || "",
+      comuna: c.comuna || "", edad: c.edad || "",
+      adiestradorNombre: c.adiestradorNombre || (esEntrenador ? nombreActual : ""),
+      temasObjetivo: c.temasObjetivo || [], fotoUrl: c.fotoUrl || null,
+    });
+  }
 
   function toggleTema(id) {
     setForm((prev) => ({ ...prev, temasObjetivo: prev.temasObjetivo.includes(id) ? prev.temasObjetivo.filter((t) => t !== id) : [...prev.temasObjetivo, id] }));
@@ -77,6 +96,33 @@ function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreAc
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>{inicial ? "Editar ficha" : "Ficha de ingreso"}</h2>
       <p style={hint}>Datos del alumno y con qué objetivo llega — se usan para armar su caso de adiestramiento.</p>
+
+      {/* Casi siempre el alumno nuevo YA es cliente: vino a evaluación por
+          el link público y quedó registrado. Elegirlo acá rellena sus
+          datos y, sobre todo, guarda sobre su ficha en vez de crear una
+          segunda — antes la única opción era escribirlo todo de nuevo y
+          quedaban dos fichas de la misma persona. */}
+      {!inicial && candidatosEvaluacion.length > 0 && (
+        <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 14, marginTop: 16 }}>
+          <label style={label} htmlFor="alumno-desde-evaluacion">¿Ya vino a evaluación?</label>
+          <select id="alumno-desde-evaluacion" value={form.id || ""} onChange={(e) => elegirDesdeEvaluacion(e.target.value)}
+            style={{ ...input, marginBottom: 0 }}>
+            <option value="">No — cargar un alumno desde cero</option>
+            {candidatosEvaluacion.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>
+            ))}
+          </select>
+          {form.id ? (
+            <p style={{ ...hint, margin: "8px 0 0" }}>
+              Se rellenaron sus datos. Al guardar se actualiza <b>su ficha</b> y pasa a clases — no se crea una nueva.
+            </p>
+          ) : (
+            <p style={{ ...hint, margin: "8px 0 0" }}>
+              Si la persona ya vino a evaluación, elígela acá para no dejar dos fichas de la misma.
+            </p>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 16 }}>
         <div style={{ width: 76, height: 76, borderRadius: "50%", flex: "none", background: form.fotoUrl ? `url(${form.fotoUrl}) center/cover` : "#E4DBC3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#8A7E5C", textAlign: "center", overflow: "hidden" }}>
@@ -678,6 +724,15 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
 
   const clienteSel = clientes.find((c) => c.id === clienteSelId) || null;
 
+  // Clientes que vinieron por evaluación y todavía no son alumnos. Un
+  // entrenador solo ve los suyos, igual que en el resto de la pestaña.
+  const candidatosEvaluacion = useMemo(() => clientes
+    .filter((c) => c.tipoServicio?.includes("evaluacion") && !c.tipoServicio?.includes("clases"))
+    .filter((c) => !clienteEstaCerrado(c))
+    .filter((c) => !esEntrenador || c.adiestradorNombre === nombreActual)
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es")),
+    [clientes, esEntrenador, nombreActual]);
+
   // Salto desde "Accesos directos" en el Inicio del entrenador — mismo
   // patrón que saltarClienteDbId (Mail → Clientes).
   useEffect(() => {
@@ -696,7 +751,12 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
   function guardarAlumno(datos) {
     const id = datos.id || Date.now();
     if (datos.id) {
-      setClientes((prev) => prev.map((c) => (c.id === datos.id ? { ...c, ...datos } : c)));
+      // Se actualiza una ficha que ya existe. Si venía de evaluación hay
+      // que dejarla como alumno, si no seguiría fuera de esta pestaña
+      // (la lista filtra por tipoServicio que incluya "clases").
+      setClientes((prev) => prev.map((c) => (c.id === datos.id
+        ? { ...c, ...datos, tipoServicio: tipoServicioComoAlumno(c.tipoServicio), triagePendiente: false }
+        : c)));
     } else {
       const nuevo = {
         nombre: "", perro: "", telefono: "", email: "", comuna: "", edad: "", adiestradorNombre: "", temasObjetivo: [],
@@ -725,6 +785,7 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
 
   if (vista === "ingreso") {
     return <FormularioIngresoAlumno inicial={clienteSel} entrenadores={entrenadores} esEntrenador={esEntrenador} nombreActual={nombreActual}
+      candidatosEvaluacion={candidatosEvaluacion}
       onGuardar={guardarAlumno} onCancelar={() => setVista(clienteSel ? "caso" : "lista")} />;
   }
   if (vista === "caso" && clienteSel) {

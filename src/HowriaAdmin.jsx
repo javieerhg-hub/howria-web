@@ -1122,6 +1122,15 @@ export const ESTADOS_CLIENTE = [
 // Un cliente archivado en "solo evaluación" no debe seguir apareciendo
 // en lo que está por hacerse. Se usa en las listas de evaluación y en los
 // avisos — ver los usos de esta función.
+// Convertir a alguien en alumno: deja de estar "en evaluación" y pasa a
+// clases, pero SIN pisarle los otros servicios. Reemplazar el arreglo
+// completo por ["clases"] le borraría los paseos a un cliente que hace
+// las dos cosas, y con eso desaparecería de Coordinación y dejaría de
+// generar boletas de paseo.
+export function tipoServicioComoAlumno(tipoServicio) {
+  return [...new Set([...(tipoServicio || []).filter((t) => t !== "evaluacion"), "clases"])];
+}
+
 export function clienteEstaCerrado(c) {
   const estado = c.estadoCliente || "activo";
   return estado === "evaluado" || estado === "baja";

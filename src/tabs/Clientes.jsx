@@ -7,7 +7,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
-  comprimirImagen,
+  comprimirImagen, tipoServicioComoAlumno,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
 import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
@@ -686,7 +686,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           // La evaluación que ya hizo no se pierde: sigue como cita en su
           // historial, solo deja de ser el servicio que tiene contratado.
           setClientes((prev) => prev.map((c) => (c.id === cliente.id
-            ? { ...c, tipoServicio: ["clases"], estadoCliente: "activo", triagePendiente: false }
+            ? { ...c, tipoServicio: tipoServicioComoAlumno(c.tipoServicio), estadoCliente: "activo", triagePendiente: false }
             : c)));
           setPlanesClases((prev) => [...prev, {
             clienteId: cliente._dbId,
