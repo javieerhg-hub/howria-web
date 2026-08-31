@@ -7,7 +7,7 @@ import {
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, SkeletonLista,
   ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen,
 } from "../HowriaAdmin.jsx";
-import { hayChoqueHorario, fechaISOaInputLocal } from "./_compartido.jsx";
+import { hayChoqueHorario, fechaISOaInputLocal, SeccionPlegable } from "./_compartido.jsx";
 // Alumnos incrusta el calendario del mes como una de sus vistas ("Ver
 // calendario") — mismos datos, mismo componente que usa la pestaña
 // Calendario independiente.
@@ -562,7 +562,108 @@ function renderFilaAlumno(a, onAbrir) {
   );
 }
 
-export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, setCitas, registroPaseos = {}, planesClases, setPlanesClases, cargandoPlanesClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
+// Catálogo de packs de clases: lo que se vende, definido una vez y
+// reusado en cada cliente (database/109). Distinto de planes_clases, que
+// es el pack que YA compró alguien puntual. Se elige desde la ficha del
+// cliente, en la sección Evaluación.
+//
+// Sin precio a propósito: el precio se escribe al emitir la boleta
+// (modo "Pack con precio propio"), porque en la práctica no siempre es
+// el mismo — hay descuentos y precios armados para un caso puntual.
+function PacksClases({ packsClases, setPacksClases }) {
+  const [creando, setCreando] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [numClases, setNumClases] = useState(4);
+  const [incluyeEvaluacion, setIncluyeEvaluacion] = useState(false);
+
+  const activos = packsClases.filter((p) => p.activo);
+
+  function crear() {
+    if (!nombre.trim()) return;
+    setPacksClases((prev) => [...prev, {
+      nombre: nombre.trim(),
+      numClases: Number(numClases) || 0,
+      incluyeEvaluacion,
+      activo: true,
+      id: Date.now(),
+    }]);
+    setNombre("");
+    setNumClases(4);
+    setIncluyeEvaluacion(false);
+    setCreando(false);
+    showToast("Pack creado.", "exito");
+  }
+
+  function actualizar(pack, cambios) {
+    setPacksClases((prev) => prev.map((p) => ((p._dbId || p.id) === (pack._dbId || pack.id) ? { ...p, ...cambios } : p)));
+  }
+
+  return (
+    <SeccionPlegable titulo="Packs de clases" subtitulo={`${activos.length} activo(s) de ${packsClases.length}`}>
+      <p style={{ ...hint, marginTop: 0 }}>
+        Los packs que vendes. Aparecen para elegir en la ficha de un cliente que ya hizo su evaluación.
+        El precio no va acá: se escribe al emitir la boleta, porque no siempre es el mismo.
+      </p>
+
+      <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+        {packsClases.length === 0 && <p style={hint}>Todavía no hay packs.</p>}
+        {packsClases.map((pack) => (
+          <div key={pack._dbId || pack.id}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: CREAM_SOFT, borderRadius: 8, padding: "10px 14px", opacity: pack.activo ? 1 : 0.55 }}>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{pack.nombre}</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#8A7E5C" }}>
+                {pack.numClases} clase{pack.numClases === 1 ? "" : "s"}
+                {pack.incluyeEvaluacion ? " · incluye evaluación" : ""}
+                {pack.activo ? "" : " · desactivado"}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button onClick={() => actualizar(pack, { incluyeEvaluacion: !pack.incluyeEvaluacion })}
+                style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0 }}>
+                {pack.incluyeEvaluacion ? "Quitar evaluación" : "Incluir evaluación"}
+              </button>
+              {/* Desactivar en vez de borrar: un pack ya vendido sigue
+                  nombrado en el plan de ese cliente. */}
+              <button onClick={() => actualizar(pack, { activo: !pack.activo })}
+                style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0 }}>
+                {pack.activo ? "Desactivar" : "Reactivar"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {creando ? (
+        <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, display: "grid", gap: 10 }}>
+          <div>
+            <label style={label} htmlFor="pack-nombre">Nombre del pack</label>
+            <input id="pack-nombre" type="text" placeholder="ej. 8 clases intensivas" value={nombre}
+              onChange={(e) => setNombre(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+          </div>
+          <div>
+            <label style={label} htmlFor="pack-clases">Cuántas clases trae</label>
+            <input id="pack-clases" type="number" min="0" value={numClases}
+              onChange={(e) => setNumClases(e.target.value)} style={{ ...input, marginBottom: 0, width: 110 }} />
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5, color: NAVY }}>
+            <input type="checkbox" checked={incluyeEvaluacion} onChange={(e) => setIncluyeEvaluacion(e.target.checked)} style={{ width: 16, height: 16 }} />
+            Incluye la evaluación
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={crear} disabled={!nombre.trim()}
+              style={{ ...botonPrincipal, marginTop: 0, width: "auto", padding: "8px 18px", opacity: nombre.trim() ? 1 : 0.45 }}>Crear pack</button>
+            <button onClick={() => setCreando(false)} style={{ ...botonSecundario, width: "auto", padding: "8px 18px", margin: 0 }}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setCreando(true)} style={{ ...botonSecundario, width: "auto", padding: "8px 16px", margin: 0 }}>+ Nuevo pack</button>
+      )}
+    </SeccionPlegable>
+  );
+}
+
+export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios, citasAgenda, setCitas, registroPaseos = {}, planesClases, setPlanesClases, cargandoPlanesClases, packsClases = [], setPacksClases, clasesRealizadas, marcarClase, deshacerClase, cargandoClasesRealizadas, rolActual, nombreActual, esAdmin, saltarAlumnoDbId, limpiarSaltoAlumno }) {
   const [vista, setVista] = useState("lista"); // "lista" | "ingreso" | "caso" | "calendario"
   const [clienteSelId, setClienteSelId] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -667,6 +768,15 @@ export function Alumnos({ clientes, setClientes, boletasAdiestramiento, usuarios
           <button onClick={() => { setClienteSelId(null); setVista("ingreso"); }} style={botonPrincipal}>+ Nuevo alumno</button>
         </div>
       </div>
+
+      {/* Editar el catálogo es configuración, no operación del día:
+          queda para coordinador/administrador. Un entrenador igual ve
+          los packs cuando elige uno en la ficha de un cliente. */}
+      {!esEntrenador && (
+        <div style={{ marginTop: 18 }}>
+          <PacksClases packsClases={packsClases} setPacksClases={setPacksClases} />
+        </div>
+      )}
 
       <div style={{ marginTop: 18 }}>
         {(cargandoClasesRealizadas || cargandoPlanesClases) ? (

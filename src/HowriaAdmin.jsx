@@ -595,6 +595,25 @@ function dbToPlanClase(row) {
   };
 }
 
+// Catálogo de packs de clases (database/109) — lo que se vende, no lo
+// que compró un cliente puntual (eso es planes_clases).
+function packClaseToDb(p) {
+  return {
+    nombre: p.nombre,
+    num_clases: p.numClases,
+    incluye_evaluacion: p.incluyeEvaluacion || false,
+    activo: p.activo !== false,
+  };
+}
+function dbToPackClase(row) {
+  return {
+    nombre: row.nombre,
+    numClases: row.num_clases,
+    incluyeEvaluacion: row.incluye_evaluacion || false,
+    activo: row.activo !== false,
+  };
+}
+
 function claseRealizadaToDb(c) {
   return {
     plan_id: c.planId,
@@ -4776,6 +4795,7 @@ export default function HowriaAdmin() {
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
   const [disponibilidadFecha, toggleBloqueDisponibilidad, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
   const [planesClases, setPlanesClases, cargandoPlanesClases] = useSyncedTable("planes_clases", planClaseToDb, dbToPlanClase, "creado_en", sessionVersion);
+  const [packsClases, setPacksClases] = useSyncedTable("packs_clases", packClaseToDb, dbToPackClase, "creado_en", sessionVersion);
   const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(sessionVersion);
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
@@ -5150,7 +5170,7 @@ export default function HowriaAdmin() {
             rolActual={user.rol} registroPaseos={registroPaseos} />
         )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} setPlanesClases={setPlanesClases} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
@@ -5162,7 +5182,7 @@ export default function HowriaAdmin() {
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
+        {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} packsClases={packsClases} setPacksClases={setPacksClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
         {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} setTareasEquipo={setTareasEquipo} setObjetivosSemanales={setObjetivosSemanales} setObjetivosMensuales={setObjetivosMensuales} setProspectos={setProspectos} setCitasAgenda={setCitasAgenda} />}

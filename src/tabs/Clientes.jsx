@@ -320,7 +320,7 @@ function InterruptorEval({ activo, onClick, siText, noText, colorSi }) {
   );
 }
 
-function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar }) {
+function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, packsClases = [], onComproPack }) {
   const hechas = citasEvaluacion.filter((c) => c.estado === "realizada").length;
   const pagadas = citasEvaluacion.filter((c) => c.pagada).length;
 
@@ -376,6 +376,35 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar }) {
         </div>
       )}
 
+      {/* El otro final posible de una evaluación: en vez de cerrarse, el
+          cliente compra clases. Se elige el pack y pasa a ser alumno con
+          su plan ya armado. La boleta se emite aparte, en Boletas
+          (modo "Pack con precio propio"), porque el precio no siempre es
+          el mismo para todos. */}
+      {!yaEstaCerrado && hechas > 0 && !(cliente.tipoServicio || []).includes("clases") && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3" }}>
+          <p style={{ ...label, marginBottom: 6 }}>¿Compró un pack de clases?</p>
+          {packsClases.filter((p) => p.activo).length === 0 ? (
+            <p style={{ ...hint, margin: 0 }}>No hay packs cargados todavía — se crean en Alumnos, sección “Packs de clases”.</p>
+          ) : (
+            <>
+              <p style={{ ...hint, margin: "0 0 8px" }}>
+                Al elegirlo pasa de evaluación a clases, con el plan creado para ir marcando cada una.
+                La boleta se emite aparte, en Boletas.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {packsClases.filter((p) => p.activo).map((pack) => (
+                  <button key={pack._dbId || pack.id} type="button" onClick={() => onComproPack(pack)}
+                    style={{ ...botonSecundario, width: "auto", padding: "8px 16px", margin: 0 }}>
+                    {pack.nombre} ({pack.numClases} clase{pack.numClases === 1 ? "" : "s"})
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {yaEstaCerrado && (
         <p style={{ ...hint, marginTop: 12, color: "#6B6248" }}>
           Este cliente está archivado como <b>Solo evaluación</b>. Para reactivarlo, cámbiale el estado desde “Editar”.
@@ -396,7 +425,7 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar }) {
   );
 }
 
-function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], usuarios = [], citasAgenda = [], setCitas, setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
+function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], usuarios = [], citasAgenda = [], packsClases = [], setPlanesClases, nombreUsuario: _nombreUsuarioPerfil, setCitas, setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
     ...boletasCliente.map((b) => ({ ...b, _tipo: "paseo" })),
@@ -651,6 +680,25 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
       <SeccionEvaluacion cliente={cliente}
         citasEvaluacion={citasCliente.filter((c) => c.tipo === "evaluacion").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO))}
         setCitas={setCitas}
+        packsClases={packsClases}
+        onComproPack={(pack) => {
+          // El cliente deja de estar "en evaluación" y pasa a ser alumno.
+          // La evaluación que ya hizo no se pierde: sigue como cita en su
+          // historial, solo deja de ser el servicio que tiene contratado.
+          setClientes((prev) => prev.map((c) => (c.id === cliente.id
+            ? { ...c, tipoServicio: ["clases"], estadoCliente: "activo", triagePendiente: false }
+            : c)));
+          setPlanesClases((prev) => [...prev, {
+            clienteId: cliente._dbId,
+            nombre: pack.nombre,
+            numClases: pack.numClases,
+            incluyeEvaluacion: pack.incluyeEvaluacion,
+            boletaAdiestramientoId: null,
+            creadoPor: _nombreUsuarioPerfil || null,
+            id: Date.now(),
+          }]);
+          showToast(`${cliente.nombre} pasó a clases con "${pack.nombre}".`, "exito");
+        }}
         onArchivar={() => {
           // Archivar es también sacarlo del panel de clientes nuevos: ya
           // se decidió qué pasaba con él, que es justo lo que ese panel
@@ -704,7 +752,7 @@ function estiloPillaFiltro(activo, color, bg) {
   };
 }
 
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades, packsClases = [], setPlanesClases }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -752,6 +800,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         boletasAdiestramientoCliente={boletasAdiestramiento.filter((b) => esBoletaDeCliente(b, clientePerfil))}
         correosCliente={correos.filter((c) => c.clienteId === clientePerfil._dbId)}
         citasCliente={citasAgenda.filter((c) => c.clienteId === clientePerfil._dbId)}
+        packsClases={packsClases} setPlanesClases={setPlanesClases}
         usuarios={usuarios}
         citasAgenda={citasAgenda}
         setCitas={setCitas}
