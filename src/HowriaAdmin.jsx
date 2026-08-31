@@ -1558,6 +1558,9 @@ export function dbToCorreo(row) {
     prospectoId: row.prospecto_id,
     leido: row.leido,
     archivado: row.archivado || false,
+    // null = sin clasificar, que es como nace todo correo que entra.
+    // Ver database/106_correos_categoria.sql.
+    categoria: row.categoria || null,
     creadoEn: row.creado_en,
   };
 }
