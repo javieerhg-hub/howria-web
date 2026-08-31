@@ -89,13 +89,21 @@ function envolverHtmlCorreo(html, px) {
     overflow-wrap: break-word; word-break: break-word;
   }
   * { max-width: 100% !important; box-sizing: border-box !important; }
+  /* max-width por sí solo NO alcanza para las tablas. Una tabla nunca
+     baja del ancho mínimo de su contenido, así que una tabla anidada
+     con width="500" mantenía todo a 560px dentro de un marco de 360
+     aunque el max-width computara 100%. Lo que sí funciona es pisar ese
+     ancho con width:100%: medido contra un correo real de Flow, 560px
+     -> 345px, sin desborde. Se deja table-layout en auto a propósito:
+     con "fixed" el resultado era el mismo ancho pero más alto, y rompe
+     las maquetas de varias columnas. */
+  table { width: 100% !important; }
   /* Al achicar el ancho hay que dejar que el alto acompañe, si no la
      imagen sale aplastada. Pero NO en los espaciadores de 1px, que son
      moneda corriente en el HTML de correo: su proporción es 1:1, así
      que con height:auto un espaciador de 600x1 se convierte en un
      cuadrado gigante (medido: 40px de alto pasaban a 291px). */
   img:not([width="1"]):not([height="1"]), video { height: auto !important; }
-  table { table-layout: auto !important; }
   a { color: #14213D; }
 </style></head>
 <body>${html}</body></html>`;
