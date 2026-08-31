@@ -4729,9 +4729,22 @@ export default function HowriaAdmin() {
   // leer la dirección de este), así que compara contra la pestaña previa.
   const tabAnteriorRef = useRef(tab);
   const idxTabActual = TODOS_LOS_TABS.findIndex((t) => t.id === tab);
-  const idxTabAnterior = TODOS_LOS_TABS.findIndex((t) => t.id === tabAnteriorRef.current);
-  const direccionTab = idxTabActual >= idxTabAnterior ? "adelante" : "atras";
-  useEffect(() => { tabAnteriorRef.current = tab; }, [tab]);
+  // La dirección se decide UNA vez, al cambiar de pestaña, y queda fija
+  // mientras se está en ella. Antes se recalculaba en cada render y
+  // tabAnteriorRef se actualizaba en un efecto: al volver a una pestaña
+  // anterior el primer render daba "atras", y el siguiente re-render
+  // —que llega enseguida, apenas responde cualquier consulta— daba
+  // "adelante". Cambiaba la clase sobre el mismo elemento y la animación
+  // se reproducía de nuevo, ahora hacia el otro lado; además, mientras
+  // corría volvía a aplicar un transform, que es lo que descoloca a los
+  // modales con position: fixed.
+  const direccionTabRef = useRef("adelante");
+  if (tabAnteriorRef.current !== tab) {
+    const idxTabAnterior = TODOS_LOS_TABS.findIndex((t) => t.id === tabAnteriorRef.current);
+    direccionTabRef.current = idxTabActual >= idxTabAnterior ? "adelante" : "atras";
+    tabAnteriorRef.current = tab;
+  }
+  const direccionTab = direccionTabRef.current;
   const [mapaPaseadorSel, setMapaPaseadorSel] = useState("");
   // Se levanta al padre (mismo motivo que mapaPaseadorSel arriba) — Mapa
   // de rutas se desmonta al salir de la pestaña, y sin esto la ruta ya
