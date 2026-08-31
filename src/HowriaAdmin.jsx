@@ -5005,8 +5005,15 @@ export default function HowriaAdmin() {
             la página, "height: 100vh" + 20px de padding arriba y abajo daba
             una barra de 100vh + 40px. Como es position:fixed, esos 40px de
             más quedaban fuera de la pantalla y no había forma de llegar a
-            ellos scrolleando — "Cerrar sesión" salía cortado por abajo. */}
-        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "fixed", top: 0, left: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto", zIndex: 25 }}>
+            ellos scrolleando — "Cerrar sesión" salía cortado por abajo.
+
+            overflow visible (antes overflowY: "auto"): la barra no necesita
+            scroll propio, el <nav> de adentro ya scrollea solo. Y como en
+            CSS un overflow-y distinto de visible obliga a que overflow-x
+            también deje de serlo, la barra recortaba 96px del panel de
+            notificaciones, que es más ancho que ella — el texto de cada
+            aviso salía cortado por la derecha. */}
+        <aside className="howria-sidebar" style={{ width: 232, flex: "none", background: NAVY, flexDirection: "column", padding: "20px 12px", position: "fixed", top: 0, left: 0, height: "100vh", boxSizing: "border-box", overflow: "visible", zIndex: 25 }}>
           <div style={{ padding: "4px 10px 20px", flex: "none" }}>
             <LogoHowria height={38} />
           </div>
