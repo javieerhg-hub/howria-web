@@ -1253,6 +1253,31 @@ export const TODOS_LOS_TABS = [
   { id: "mail", label: "Mail", grupo: "Prospección" },
 ];
 const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Agenda general", "Clientes y dinero", "Equipo", "Prospección"];
+
+// Tablas que solo hacen falta en ciertas pestañas. Si el rol no tiene
+// NINGUNA de ellas, no se bajan: un paseador entraba descargando
+// inventario, pagos, objetivos, planes de clases y solicitudes de
+// registro que nunca iba a ver — 32 consultas al abrir la app, todas
+// para todos.
+//
+// Solo van acá las tablas cuyo uso se verificó una por una. Las que usa
+// Inicio (tareas_equipo, prospectos) quedan fuera a propósito: Inicio lo
+// tiene todo el mundo, así que gatearlas no ahorraría nada. Y cualquier
+// tabla que no figure en este mapa se sigue bajando siempre — el riesgo
+// de una pantalla vacía por un mapeo incompleto es peor que el ahorro.
+const TABS_QUE_USAN_TABLA = {
+  logins_pendientes_borrar: ["usuarios"],
+  solicitudes_registro: ["usuarios"],
+  entregas_inventario: ["inventario"],
+  costos_negocio: ["finanzas"],
+  pagos_trabajadores: ["finanzas", "pagos"],
+  ajustes_pago_pendientes: ["pagos"],
+  objetivos_semanales: ["equipo"],
+  objetivos_mensuales: ["equipo"],
+  planes_clases: ["alumnos", "clientes"],
+  packs_clases: ["alumnos", "clientes"],
+  clases_realizadas: ["alumnos", "clientes"],
+};
 export const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrador"];
 
 // Un ícono por pestaña, para el launcher tipo "app" de la pantalla de
@@ -4716,15 +4741,32 @@ export default function HowriaAdmin() {
   const [mapaRuta, setMapaRuta] = useState(null);
   const [mapaVelocidad, setMapaVelocidad] = useState(20);
   const [mapaDuracionParada, setMapaDuracionParada] = useState(25);
+  // Se pide antes que el resto porque de acá sale qué pestañas tiene el
+  // rol, y con eso se decide qué tablas hace falta bajar (ver
+  // versionSiSeUsa). Es una consulta chica y de una sola tanda.
+  const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
+
+  // Pasarle null a un hook de datos cancela su consulta (mismo mecanismo
+  // que se usa antes del login, ver el comentario de sessionVersion).
+  // Mientras los permisos no llegan devuelve null: no se baja nada de lo
+  // opcional hasta saber si el rol lo necesita.
+  const tabsDelRol = permisosRoles && user ? (permisosRoles[user.rol] || []) : null;
+  function versionSiSeUsa(tabla) {
+    const necesarias = TABS_QUE_USAN_TABLA[tabla];
+    if (!necesarias) return sessionVersion;
+    if (!tabsDelRol) return null;
+    return necesarias.some((t) => tabsDelRol.includes(t)) ? sessionVersion : null;
+  }
+
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
-  const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", sessionVersion);
-  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
+  const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", versionSiSeUsa("logins_pendientes_borrar"));
+  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", versionSiSeUsa("pagos_trabajadores"));
   // Borrador de bono/descuento por paseador+período, compartido — antes
   // vivía solo en localStorage de quien lo escribía, invisible para otra
   // persona/dispositivo hasta confirmar el pago.
-  const [ajustesPago, setAjustesPago] = useSyncedTable("ajustes_pago_pendientes", ajustePagoToDb, dbToAjustePago, "actualizado_en", sessionVersion);
+  const [ajustesPago, setAjustesPago] = useSyncedTable("ajustes_pago_pendientes", ajustePagoToDb, dbToAjustePago, "actualizado_en", versionSiSeUsa("ajustes_pago_pendientes"));
   // Antes vivía solo en localStorage — descartar un aviso en la PC no
   // hacía nada en el celular de la misma persona, volvía a aparecer ahí
   // sin marcar. RLS acota cada fila a su propio usuario_email, así que
@@ -4735,7 +4777,6 @@ export default function HowriaAdmin() {
   const [mascotaIncompatibilidades, setMascotaIncompatibilidades] = useSyncedTable("mascota_incompatibilidades", incompatibilidadToDb, dbToIncompatibilidad, "creado_en", sessionVersion);
   const [registroPaseos, setRegistroPaseos] = useRegistroPaseosSincronizado(clientes, sessionVersion);
   const [faseDiaPaseador, actualizarFaseDia, ausenciasPaseador, justificarAusencia, deshacerAusencia] = useFaseDiaPaseador(sessionVersion);
-  const [permisosRoles, actualizarPermisoRol] = usePermisosRoles(sessionVersion);
   const [notificacionesRoles, actualizarNotificacionRol] = useNotificacionesRoles(sessionVersion);
   const [configuracion, actualizarConfiguracion] = useConfiguracion(sessionVersion);
 
@@ -4808,23 +4849,23 @@ export default function HowriaAdmin() {
 
   const [mostrarCambiarPassword, setMostrarCambiarPassword] = useState(false);
 
-  const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", sessionVersion);
-  const [costosNegocio, setCostosNegocio] = useSyncedTable("costos_negocio", costoNegocioToDb, dbToCostoNegocio, "fecha", sessionVersion);
-  const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", sessionVersion);
+  const [objetivosSemanales, setObjetivosSemanales, cargandoObjetivosSemanales] = useSyncedTable("objetivos_semanales", objetivoSemanalToDb, dbToObjetivoSemanal, "created_at", versionSiSeUsa("objetivos_semanales"));
+  const [costosNegocio, setCostosNegocio] = useSyncedTable("costos_negocio", costoNegocioToDb, dbToCostoNegocio, "fecha", versionSiSeUsa("costos_negocio"));
+  const [objetivosMensuales, setObjetivosMensuales, cargandoObjetivosMensuales] = useSyncedTable("objetivos_mensuales", objetivoMensualToDb, dbToObjetivoMensual, "created_at", versionSiSeUsa("objetivos_mensuales"));
   const [tareasEquipo, setTareasEquipo, cargandoTareasEquipo] = useSyncedTable("tareas_equipo", tareaToDb, dbToTarea, "created_at", sessionVersion);
   const [citasAgenda, setCitasAgenda, cargandoCitasAgenda] = useSyncedTable("citas_agenda", citaToDb, dbToCita, "created_at", sessionVersion, "citas_agenda", true);
   const [disponibilidadFecha, toggleBloqueDisponibilidad, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
-  const [planesClases, setPlanesClases, cargandoPlanesClases] = useSyncedTable("planes_clases", planClaseToDb, dbToPlanClase, "creado_en", sessionVersion);
-  const [packsClases, setPacksClases] = useSyncedTable("packs_clases", packClaseToDb, dbToPackClase, "creado_en", sessionVersion);
-  const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(sessionVersion);
+  const [planesClases, setPlanesClases, cargandoPlanesClases] = useSyncedTable("planes_clases", planClaseToDb, dbToPlanClase, "creado_en", versionSiSeUsa("planes_clases"));
+  const [packsClases, setPacksClases] = useSyncedTable("packs_clases", packClaseToDb, dbToPackClase, "creado_en", versionSiSeUsa("packs_clases"));
+  const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(versionSiSeUsa("clases_realizadas"));
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
   const [correos, setCorreos, cargandoCorreos] = useCorreos(sessionVersion);
   const [mensajesEquipo, enviarMensajeEquipo, cargandoMensajesEquipo] = useMensajesEquipo(sessionVersion);
   const [ultimaLecturaChat, marcarChatLeido] = useLecturaChatEquipo(user?.email, sessionVersion);
-  const [entregasInventario, registrarEntregaInventario, eliminarEntregaInventario, cargandoInventario] = useEntregasInventario(sessionVersion);
+  const [entregasInventario, registrarEntregaInventario, eliminarEntregaInventario, cargandoInventario] = useEntregasInventario(versionSiSeUsa("entregas_inventario"));
   const [reprogramaciones, moverPaseo, eliminarReprogramacion] = useReprogramaciones(sessionVersion);
-  const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(sessionVersion);
+  const [solicitudesRegistro, setSolicitudesRegistro] = useSolicitudesRegistro(versionSiSeUsa("solicitudes_registro"));
   const [saltarClienteDbId, setSaltarClienteDbId] = useState(null);
   const [saltarAlumnoDbId, setSaltarAlumnoDbId] = useState(null);
   // "Volver a mi ruta" desde Inicio: manda a Mis Paseos y le avisa que
