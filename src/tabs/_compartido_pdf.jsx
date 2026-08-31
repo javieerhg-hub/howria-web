@@ -264,16 +264,19 @@ export function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg)
   // pack lleva el precio, y lo que trae se lista debajo sin monto (ya
   // está dentro del precio). Poner un valor al lado de cada línea daría
   // a entender que se suman.
+  // Una boleta de evaluación suelta se emite con numClases en 0 — sin
+  // este guardia la boleta diría "0 clase(s) de adiestramiento (x $0)".
+  const tieneClases = Number(emitida.numClases || 0) > 0;
   const filas = emitida.packPrecioManual ? [
     { texto: emitida.packNombre || "Pack de adiestramiento", valor: fmtCLP(emitida.total), color: INK },
     ...[
-      `${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad}`,
+      ...(tieneClases ? [`${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad}`] : []),
       ...(emitida.evaluacion !== "ninguna" ? [`Evaluación ${emitida.evaluacion}`] : []),
       ...(emitida.packIncluye || []),
     ].map((linea) => ({ texto: `· ${linea}`, valor: "", color: INK })),
-  ] : [
+  ] : tieneClases ? [
     { texto: `${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad} (x ${fmtCLP(emitida.precioClase)})`, valor: fmtCLP(subtotalClases), color: INK },
-  ];
+  ] : [];
   if (!emitida.packPrecioManual && montoDescuento > 0) {
     const etiqueta = emitida.descuentoPackPct > 0 ? ` (-${emitida.descuentoPackPct}%)` : "";
     filas.push({ texto: `Descuento pack de ${emitida.numClases} clases${etiqueta}`, valor: `- ${fmtCLP(montoDescuento)}`, color: RUST });

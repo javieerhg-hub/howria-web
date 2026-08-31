@@ -320,7 +320,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
             <select value={plan.boletaAdiestramientoId || ""} onChange={(e) => actualizarPlan({ boletaAdiestramientoId: e.target.value || null })} style={{ ...input, marginBottom: 0 }}>
               <option value="">Sin vincular</option>
               {boletasDisponibles.map((b) => (
-                <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases} clases · {fmtCLP(b.total)}</option>
+                <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases > 0 ? b.numClases + " clases" : "Evaluación"} · {fmtCLP(b.total)}</option>
               ))}
             </select>
           </div>
@@ -395,7 +395,7 @@ function FormularioNuevoPlan({ boletasDisponibles, onCrear, onCancelar }) {
       <select value={boletaId} onChange={(e) => setBoletaId(e.target.value)} style={{ ...input, marginBottom: 12 }}>
         <option value="">Sin vincular</option>
         {boletasDisponibles.map((b) => (
-          <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases} clases · {fmtCLP(b.total)}</option>
+          <option key={b._dbId} value={b._dbId}>N°{String(b.numero).padStart(3, "0")} · {b.cliente}{b.perro ? ` (${b.perro})` : ""} · {b.numClases > 0 ? b.numClases + " clases" : "Evaluación"} · {fmtCLP(b.total)}</option>
         ))}
       </select>
       <div style={{ display: "flex", gap: 8 }}>

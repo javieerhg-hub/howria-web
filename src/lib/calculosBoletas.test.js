@@ -122,6 +122,23 @@ describe("calcularBoletaAdiestramiento", () => {
     expect(r.total).toBe(60000);
   });
 
+  describe("evaluación suelta (sin clases)", () => {
+    it("con 0 clases el total es solo la evaluación", () => {
+      const r = calcularBoletaAdiestramiento({
+        numClases: 0, precioClase: 0, evaluacion: "presencial", precioEvaluacion: 25000,
+      });
+      expect(r.subtotalClases).toBe(0);
+      expect(r.total).toBe(25000);
+    });
+
+    it("le suma el transporte si lo hay", () => {
+      const r = calcularBoletaAdiestramiento({
+        numClases: 0, precioClase: 0, evaluacion: "online", precioEvaluacion: 20000, transporte: 5000,
+      });
+      expect(r.total).toBe(25000);
+    });
+  });
+
   describe("pack con precio puesto a mano", () => {
     it("el precio escrito es el total, sin recalcular nada", () => {
       const r = calcularBoletaAdiestramiento({ packPrecioManual: true, packPrecio: 80000 });
