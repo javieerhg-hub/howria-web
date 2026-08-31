@@ -9,7 +9,7 @@ import {
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable } from "../lib/calculosBoletas.js";
-import { montoPrincipal, montoCompartido } from "../lib/reparto.js";
+import { resumenPaseadorEnRango } from "../lib/pagos.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
 
 function variacion(actual, anterior) {
@@ -255,88 +255,31 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // cancelados × tarifaPaseador — pero generalizado al selector de
   // período semana/mes/año en vez de quedar fijo al mes en curso.
   if (esPaseador) {
-    const misClientesPaseador = clientesProp.filter((c) => c.paseadorNombre === user.nombre);
     const hoyLocal = new Date();
     hoyLocal.setHours(0, 0, 0, 0);
-
-    function diasEnRango(desde, hasta, diasSemana) {
-      const claves = [];
-      const cursor = new Date(desde);
-      cursor.setHours(0, 0, 0, 0);
-      const fin = new Date(hasta);
-      fin.setHours(0, 0, 0, 0);
-      while (cursor <= fin) {
-        const dow = (cursor.getDay() + 6) % 7;
-        if (diasSemana.includes(dow)) claves.push(fechaKey(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      return claves;
-    }
 
     // Para semana/mes/año el rango siempre corre hasta hoy — para un
     // rango personalizado en el pasado, hay que parar en actualHasta y no
     // seguir contando días después de esa fecha.
     const finPaseador = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
-    const resumenPaseador = misClientesPaseador.map((c) => {
-      const clavesHabituales = diasEnRango(actualDesde, finPaseador, c.diasHabituales || []);
-      // Un paseo movido HACIA una fecha dentro del rango (venga de donde
-      // venga) también cuenta — si no, el paseador pierde la plata de un
-      // paseo que sí hizo, solo porque cayó en un día no habitual.
-      const desdeKey = fechaKey(actualDesde), hastaKey = fechaKey(finPaseador);
-      const clavesReprogramadas = reprogramaciones
-        .filter((r) => r.clienteId === c._dbId && r.fechaNueva >= desdeKey && r.fechaNueva <= hastaKey)
-        .map((r) => r.fechaNueva);
-      const claves = [...new Set([...clavesHabituales, ...clavesReprogramadas])];
-      const cancelados = claves.filter((k) => registroPaseos[`${c.id}_${k}`]?.cancelado).length;
-      const validas = claves.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado);
-      const tarifa = Number(c.tarifaPaseador || 0);
-      let realizados = 0, monto = 0;
-      validas.forEach((k) => {
-        const r = registroPaseos[`${c.id}_${k}`];
-        if (!r?.realizado) return;
-        // Si el registro guardó quién hizo el paseo y no fue esta persona,
-        // la parte principal no le toca — la plata sigue al registro, no
-        // al dueño del cliente. Mismo criterio que montoRealizadoEnRango
-        // (lib/pagos.js), que es lo que usa Pago trabajadores para pagar
-        // de verdad; sin este filtro, un paseo de su cliente hecho por
-        // otra persona y repartido con él le sumaba las DOS partes acá
-        // (la principal en este bucle y la compartida en
-        // misPaseosCompartidos), o sea más de lo que se le iba a pagar.
-        if (r.paseadorNombre && r.paseadorNombre !== user.nombre) return;
-        realizados++;
-        // Reparto entre dos paseadores para un paseo puntual (ver
-        // Coordinación, "Compartir con...") — a este paseador le queda el
-        // resto del porcentaje, no el 100%.
-        monto += montoPrincipal(tarifa, r);
-      });
-      // "faltantes": de los días netos de cancelación, los que ya deberían
-      // haberse hecho (el rango nunca pasa de hoy, ver finPaseador arriba)
-      // pero todavía no se marcaron — un paseo que se quedó sin registrar.
-      const faltantes = validas.length - realizados;
-      return { cliente: c, programados: validas.length, realizados, cancelados, faltantes, monto };
+
+    // El cálculo vive en lib/pagos.js, no acá: es plata, ya tuvo un bug
+    // real (mostraba de más cuando un paseo del cliente propio lo hacía
+    // otra persona y se repartía con este paseador), y esta pantalla solo
+    // la ve un paseador — o sea que desde una sesión de administrador no
+    // hay forma de mirarla. Estando en un archivo aparte se puede probar
+    // sin sesión: ver "resumenPaseadorEnRango" en lib/pagos.test.js.
+    const { filas: resumenPaseador, compartidos: misPaseosCompartidos, totales: totalesPaseador } = resumenPaseadorEnRango({
+      clientes: clientesProp,
+      registroPaseos,
+      reprogramaciones,
+      paseador: user.nombre,
+      desde: actualDesde,
+      hasta: finPaseador,
     });
-
-    // Paseos de clientes ajenos donde este paseador quedó como el segundo
-    // de un reparto — mismo criterio que "Paseos que compartiste" en Mis
-    // Paseos (Tu pago), pero acotado al rango de fechas elegido acá.
-    const desdeKeyPaseador = fechaKey(actualDesde), hastaKeyPaseador = fechaKey(finPaseador);
-    const misPaseosCompartidos = Object.entries(registroPaseos)
-      .filter(([, r]) => r.realizado && r.compartidoCon === user.nombre)
-      .map(([key, r]) => {
-        const idx = key.indexOf("_");
-        const fecha = key.slice(idx + 1);
-        if (fecha < desdeKeyPaseador || fecha > hastaKeyPaseador) return null;
-        const clienteIdLocal = Number(key.slice(0, idx));
-        const cliente = clientesProp.find((c) => c.id === clienteIdLocal);
-        if (!cliente) return null;
-        return { cliente, fecha, monto: montoCompartido(Number(cliente.tarifaPaseador || 0), r) };
-      })
-      .filter(Boolean);
-    const totalCompartidoPaseador = misPaseosCompartidos.reduce((acc, x) => acc + x.monto, 0);
-
-    const totalRealizadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.realizados, 0);
-    const totalProgramadosPaseador = resumenPaseador.reduce((acc, r) => acc + r.programados, 0);
-    const totalMontoPaseador = resumenPaseador.reduce((acc, r) => acc + r.monto, 0) + totalCompartidoPaseador;
+    const totalRealizadosPaseador = totalesPaseador.realizados;
+    const totalProgramadosPaseador = totalesPaseador.programados;
+    const totalMontoPaseador = totalesPaseador.monto;
 
     function exportarCsvPaseador() {
       const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Cancelados", "Faltantes", "Monto"];
