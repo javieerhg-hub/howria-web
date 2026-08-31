@@ -301,6 +301,101 @@ function FilaMascota({ mascota, todasLasMascotas, incompatibilidades, setMascota
 }
 
 // ---------- Perfil de cliente ----------
+// Sección "Evaluación" de la ficha del cliente: en qué va cada
+// evaluación y si ya la pagaron. "Ya se hizo" no es un campo nuevo — es
+// el estado de la cita, que ya tenía 'realizada' desde database/012 y se
+// marcaba solo desde Agenda; acá se puede marcar sin salir de la ficha.
+// "Pagó" sí es nuevo (database/108) y es una marca simple, no una boleta.
+function InterruptorEval({ activo, onClick, siText, noText, colorSi }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={activo}
+      style={{
+        padding: "7px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", minHeight: 38,
+        border: activo ? `1.5px solid ${colorSi}` : "1px solid #DCD2B4",
+        background: activo ? colorSi : "#FFFFFF",
+        color: activo ? "#FFFFFF" : "#6B6248", fontWeight: activo ? 700 : 400,
+      }}>
+      {activo ? siText : noText}
+    </button>
+  );
+}
+
+function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar }) {
+  const hechas = citasEvaluacion.filter((c) => c.estado === "realizada").length;
+  const pagadas = citasEvaluacion.filter((c) => c.pagada).length;
+
+  function actualizarCita(cita, cambios) {
+    setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, ...cambios } : c)));
+  }
+
+  function toggleRealizada(cita) {
+    actualizarCita(cita, { estado: cita.estado === "realizada" ? "agendada" : "realizada" });
+  }
+
+  function togglePagada(cita) {
+    const pagaAhora = !cita.pagada;
+    actualizarCita(cita, {
+      pagada: pagaAhora,
+      pagadaEn: pagaAhora ? new Date().toISOString().slice(0, 10) : null,
+    });
+  }
+
+  // Solo tiene sentido archivar a alguien que vino por la evaluación, ya
+  // la hizo, y no quedó tomando nada más.
+  const soloVinoPorEvaluacion = (cliente.tipoServicio || []).every((t) => t === "evaluacion");
+  const yaEstaCerrado = (cliente.estadoCliente || "activo") === "evaluado";
+  const puedeArchivar = soloVinoPorEvaluacion && hechas > 0 && !yaEstaCerrado;
+
+  const resumen = citasEvaluacion.length === 0
+    ? "Sin evaluaciones agendadas"
+    : `${hechas} de ${citasEvaluacion.length} realizada(s) · ${pagadas} pagada(s)`;
+
+  return (
+    <SeccionPlegable titulo="Evaluación" subtitulo={resumen} defaultAbierta>
+      {citasEvaluacion.length === 0 ? (
+        <p style={hint}>Este cliente no tiene evaluaciones agendadas.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {citasEvaluacion.map((cita) => (
+            <div key={cita.id} style={{ background: CREAM_SOFT, borderRadius: 10, padding: 12 }}>
+              <p style={{ margin: "0 0 8px", fontSize: 13.5, color: NAVY, fontWeight: 600 }}>
+                {new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                {cita.adiestrador ? ` · ${cita.adiestrador}` : ""}
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <InterruptorEval activo={cita.estado === "realizada"} onClick={() => toggleRealizada(cita)}
+                  siText="✓ Ya se hizo" noText="Marcar como hecha" colorSi="#2F6A46" />
+                <InterruptorEval activo={!!cita.pagada} onClick={() => togglePagada(cita)}
+                  siText="✓ Pagada" noText="Marcar como pagada" colorSi={GOLD} />
+              </div>
+              {cita.pagada && cita.pagadaEn && (
+                <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>Pagó el {cita.pagadaEn}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {yaEstaCerrado && (
+        <p style={{ ...hint, marginTop: 12, color: "#6B6248" }}>
+          Este cliente está archivado como <b>Solo evaluación</b>. Para reactivarlo, cámbiale el estado desde “Editar”.
+        </p>
+      )}
+      {puedeArchivar && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E4DBC3" }}>
+          <p style={{ ...hint, margin: "0 0 8px" }}>
+            Vino solo por la evaluación y ya se hizo. Si no va a seguir con paseos ni clases, archívalo:
+            sale de las listas de pendientes y queda bajo el filtro “Solo evaluación”.
+          </p>
+          <button onClick={onArchivar} style={{ ...botonSecundario, width: "auto", padding: "8px 16px" }}>
+            Solo evaluación — archivar cliente
+          </button>
+        </div>
+      )}
+    </SeccionPlegable>
+  );
+}
+
 function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, correosCliente = [], citasCliente = [], usuarios = [], citasAgenda = [], setCitas, setClientes, setBoletasEmitidas, setBoletasAdiestramiento, onVolver, onEditar, onEliminar, puedeEliminar, nombreUsuario, mascotas = [], setMascotas, mascotaIncompatibilidades = [], setMascotaIncompatibilidades }) {
   const plan = PLANES.find((p) => p.id === cliente.planHabitual);
   const historialVentas = [
@@ -552,6 +647,17 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
           </div>
         </div>
       </SeccionPlegable>
+
+      <SeccionEvaluacion cliente={cliente}
+        citasEvaluacion={citasCliente.filter((c) => c.tipo === "evaluacion").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO))}
+        setCitas={setCitas}
+        onArchivar={() => {
+          // Archivar es también sacarlo del panel de clientes nuevos: ya
+          // se decidió qué pasaba con él, que es justo lo que ese panel
+          // pregunta.
+          setClientes((prev) => prev.map((c) => (c.id === cliente.id ? { ...c, estadoCliente: "evaluado", triagePendiente: false } : c)));
+          showToast("Cliente archivado como solo evaluación.", "exito");
+        }} />
 
       <SeccionPlegable titulo="Historial" subtitulo={resumenHistorial}>
         <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16 }}>

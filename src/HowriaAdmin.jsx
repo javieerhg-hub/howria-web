@@ -517,6 +517,11 @@ function citaToDb(c) {
     origen: c.origen || "staff",
     duracion_min: c.duracionMin || 60,
     precio: c.precio ?? null,
+    // Marca simple de "el cliente ya pagó esto" (database/108). No pasa
+    // por boletas a propósito: la evaluación se cobra en el momento y
+    // esto es solo la anotación de que está al día.
+    pagada: c.pagada || false,
+    pagada_en: c.pagadaEn || null,
     // confirmada_en / email_enviado no se mandan desde acá — los escribe
     // únicamente api/confirmar-cita.js, para que un guardado normal del
     // cliente nunca los pise con estado local desactualizado.
@@ -542,6 +547,8 @@ function dbToCita(row) {
     origen: row.origen || "staff",
     duracionMin: row.duracion_min || 60,
     precio: row.precio,
+    pagada: row.pagada || false,
+    pagadaEn: row.pagada_en || null,
     confirmadaEn: row.confirmada_en,
     emailEnviado: row.email_enviado || false,
     planId: row.plan_id,
@@ -1086,8 +1093,20 @@ export const PANEL_BG = "#F1EFE9"; // fondo del panel del staff — más claro y
 export const ESTADOS_CLIENTE = [
   { id: "activo", nombre: "Activo", color: "#2F6A46", bg: "#D8ECDE" },
   { id: "pausado", nombre: "Pausado", color: "#8A6A1E", bg: "#F3E3B4" },
+  // Vino solo por la evaluación, ya se hizo, y no sigue con paseos ni
+  // clases. No es "dado de baja" (eso es dejar el servicio) ni activo:
+  // es un caso cerrado que se archiva. Color apagado a propósito.
+  { id: "evaluado", nombre: "Solo evaluación", color: "#6B6248", bg: "#EDE4CE" },
   { id: "baja", nombre: "Dado de baja", color: "#A85C3B", bg: "#F1DCD2" },
 ];
+
+// Un cliente archivado en "solo evaluación" no debe seguir apareciendo
+// en lo que está por hacerse. Se usa en las listas de evaluación y en los
+// avisos — ver los usos de esta función.
+export function clienteEstaCerrado(c) {
+  const estado = c.estadoCliente || "activo";
+  return estado === "evaluado" || estado === "baja";
+}
 
 // Los id deben coincidir exactamente con el "check" de
 // database/049_fase_dia_paseador.sql.
@@ -2482,7 +2501,7 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
     avisos.push({ tipo: "boleta-pendiente", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
   }
 
-  const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
+  const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c) && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
   if (necesitanEvaluacion.length > 0) {
     avisos.push({ tipo: "evaluacion", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda" });
   }
@@ -3446,7 +3465,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     // Clientes que entraron por el link público pidiendo evaluación con
     // él — automático (no requiere marcarlos a mano como los alumnos
     // destacados), mismo estilo de chip para reconocerlos igual de rápido.
-    const clientesEvaluacionPropios = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && c.adiestradorNombre === user.nombre && (c.estadoCliente || "activo") !== "baja");
+    const clientesEvaluacionPropios = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && c.adiestradorNombre === user.nombre && !clienteEstaCerrado(c));
 
     // Evaluaciones que pidieron hora CON ÉL por el link público y siguen
     // sin confirmar — prioridad 2 en su Inicio, justo después de sus
@@ -3730,7 +3749,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   // Todos los clientes que entraron por evaluación (cualquier entrenador),
   // mismo criterio que la vista del entrenador pero sin acotar por quién
   // los atiende — coordinación/administrador ven el negocio completo.
-  const clientesEvaluacionTodos = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && (c.estadoCliente || "activo") !== "baja");
+  const clientesEvaluacionTodos = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c));
   // Clientes que entraron solos por el link público y todavía esperan que
   // alguien decida qué servicio van a tomar (database/107).
   const clientesEntrantes = clientes.filter((c) => c.triagePendiente);
