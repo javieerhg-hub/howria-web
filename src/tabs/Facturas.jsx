@@ -264,7 +264,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             )}
           </td>
           <td style={{ padding: "10px" }}>{b.perro ? `🐾 ${b.perro}` : "—"}</td>
-          <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`}</td>
+          <td style={{ padding: "10px" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : (b.packNombre || `Adiestramiento · ${b.modalidad}`)}</td>
           <td style={{ padding: "10px", color: "#8A7E5C" }}>{b.fecha}</td>
           <td style={{ padding: "10px", textAlign: "right", fontWeight: 600 }}>{fmtCLP(b.total)}</td>
           <td style={{ padding: "10px" }}>
@@ -357,7 +357,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
         )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : `Adiestramiento · ${b.modalidad}`} · Emitida {b.fecha}</span>
+          <span style={{ fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? `${b.mes} ${b.anio}` : (b.packNombre || `Adiestramiento · ${b.modalidad}`)} · Emitida {b.fecha}</span>
           <span style={{ fontSize: 19, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>{fmtCLP(b.total)}</span>
         </div>
         {b.estado === "pagada" && b.formaPago && (

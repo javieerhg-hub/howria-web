@@ -71,10 +71,24 @@ export function calcularBoletaPaseos({
 
 // Boleta de adiestramiento: N clases a un precio, con descuento de pack
 // (por % y/o monto fijo, se suman), más evaluación opcional y transporte.
+//
+// Excepción: un pack armado a mano (packPrecioManual) NO se calcula. El
+// precio que escribió quien emite la boleta ES el total, y todo lo demás
+// (clases, evaluación, lo que trae el pack) pasa a ser solo la
+// descripción de qué incluye. Es a propósito: si el precio se recalculara
+// a partir de las partes, escribir "$80.000" y ver otro número abajo
+// sería exactamente el error que este modo viene a evitar.
 export function calcularBoletaAdiestramiento({
   numClases, precioClase, descuentoPackPct = 0, descuentoPackMonto = 0,
   evaluacion = "ninguna", precioEvaluacion = 0, transporte = 0,
+  packPrecioManual = false, packPrecio = 0,
 }) {
+  if (packPrecioManual) {
+    const total = Math.max(Number(packPrecio || 0), 0);
+    // subtotalClases = total (no 0) para que cualquier vista que muestre
+    // el subtotal sin saber de packs siga mostrando algo coherente.
+    return { subtotalClases: total, montoDescuentoPct: 0, montoDescuento: 0, montoEvaluacion: 0, total };
+  }
   const subtotalClases = Number(numClases || 0) * Number(precioClase || 0);
   const montoDescuentoPct = Math.round(subtotalClases * (Number(descuentoPackPct || 0) / 100));
   const montoDescuento = montoDescuentoPct + Number(descuentoPackMonto || 0);

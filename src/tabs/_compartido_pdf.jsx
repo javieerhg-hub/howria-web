@@ -253,8 +253,45 @@ export function dibujarCalendarioBoleta(ctx, x, yTop, width, mesIdx, anio, diasM
 
 export function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg) {
   const ctx = canvas.getContext("2d");
-  const W = 560, H = 820;
+
+  const { subtotalClases, montoDescuento } = calcularBoletaAdiestramiento({
+    numClases: emitida.numClases, precioClase: emitida.precioClase,
+    descuentoPackPct: emitida.descuentoPackPct, descuentoPackMonto: emitida.descuentoPackMonto,
+    evaluacion: emitida.evaluacion, precioEvaluacion: emitida.precioEvaluacion, transporte: emitida.transporte,
+    packPrecioManual: emitida.packPrecioManual, packPrecio: emitida.total,
+  });
+  // Un pack armado a mano se cobra como una sola cosa: el nombre del
+  // pack lleva el precio, y lo que trae se lista debajo sin monto (ya
+  // está dentro del precio). Poner un valor al lado de cada línea daría
+  // a entender que se suman.
+  const filas = emitida.packPrecioManual ? [
+    { texto: emitida.packNombre || "Pack de adiestramiento", valor: fmtCLP(emitida.total), color: INK },
+    ...[
+      `${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad}`,
+      ...(emitida.evaluacion !== "ninguna" ? [`Evaluación ${emitida.evaluacion}`] : []),
+      ...(emitida.packIncluye || []),
+    ].map((linea) => ({ texto: `· ${linea}`, valor: "", color: INK })),
+  ] : [
+    { texto: `${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad} (x ${fmtCLP(emitida.precioClase)})`, valor: fmtCLP(subtotalClases), color: INK },
+  ];
+  if (!emitida.packPrecioManual && montoDescuento > 0) {
+    const etiqueta = emitida.descuentoPackPct > 0 ? ` (-${emitida.descuentoPackPct}%)` : "";
+    filas.push({ texto: `Descuento pack de ${emitida.numClases} clases${etiqueta}`, valor: `- ${fmtCLP(montoDescuento)}`, color: RUST });
+  }
+  if (!emitida.packPrecioManual && emitida.evaluacion !== "ninguna" && emitida.precioEvaluacion > 0) {
+    filas.push({ texto: `Evaluación ${emitida.evaluacion === "presencial" ? "presencial" : "online"}`, valor: fmtCLP(emitida.precioEvaluacion), color: INK });
+  }
+  if (!emitida.packPrecioManual && emitida.transporte > 0) {
+    filas.push({ texto: "Transporte", valor: fmtCLP(emitida.transporte), color: INK });
+  }
+
+  const W = 560;
   const M = 34;
+  // 820px alcanzaban justo para las 4 filas como máximo que podía tener
+  // una boleta calculada. Un pack a mano puede listar todo lo que uno
+  // quiera, así que la boleta crece 36px (el alto de una fila) por cada
+  // línea de más — si no, lo último quedaba cortado fuera del canvas.
+  const H = 820 + Math.max(0, filas.length - 4) * 36;
   canvas.width = W;
   canvas.height = H;
 
@@ -321,24 +358,6 @@ export function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg)
   ctx.textAlign = "left";
 
   y += 36;
-  const { subtotalClases, montoDescuento } = calcularBoletaAdiestramiento({
-    numClases: emitida.numClases, precioClase: emitida.precioClase,
-    descuentoPackPct: emitida.descuentoPackPct, descuentoPackMonto: emitida.descuentoPackMonto,
-    evaluacion: emitida.evaluacion, precioEvaluacion: emitida.precioEvaluacion, transporte: emitida.transporte,
-  });
-  const filas = [
-    { texto: `${emitida.numClases} clase(s) de adiestramiento ${emitida.modalidad} (x ${fmtCLP(emitida.precioClase)})`, valor: fmtCLP(subtotalClases), color: INK },
-  ];
-  if (montoDescuento > 0) {
-    const etiqueta = emitida.descuentoPackPct > 0 ? ` (-${emitida.descuentoPackPct}%)` : "";
-    filas.push({ texto: `Descuento pack de ${emitida.numClases} clases${etiqueta}`, valor: `- ${fmtCLP(montoDescuento)}`, color: RUST });
-  }
-  if (emitida.evaluacion !== "ninguna" && emitida.precioEvaluacion > 0) {
-    filas.push({ texto: `Evaluación ${emitida.evaluacion === "presencial" ? "presencial" : "online"}`, valor: fmtCLP(emitida.precioEvaluacion), color: INK });
-  }
-  if (emitida.transporte > 0) {
-    filas.push({ texto: "Transporte", valor: fmtCLP(emitida.transporte), color: INK });
-  }
   filas.forEach((fila, idx) => {
     const rowH = 36;
     const fy = y + rowH * idx + 23;

@@ -702,6 +702,14 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
   const [evaluacion, setEvaluacion] = useState("ninguna");
   const [precioEvaluacion, setPrecioEvaluacion] = useState(0);
   const [transporte, setTransporte] = useState(0);
+  // Pack armado a mano. En vez de despejar el precio por clase hacia
+  // atrás hasta que el total dé el número que uno quiere cobrar, se
+  // describe qué trae el pack y se escribe el precio directo. Ver
+  // database/105_boletas_adiestramiento_pack.sql.
+  const [modoPack, setModoPack] = useState(false);
+  const [packNombre, setPackNombre] = useState("");
+  const [packIncluye, setPackIncluye] = useState([""]); // arranca con una línea vacía visible
+  const [packPrecio, setPackPrecio] = useState(0);
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [emitida, setEmitida] = useState(null);
   const [paraConfirmar, setParaConfirmar] = useState(null);
@@ -727,7 +735,18 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
 
   const { subtotalClases, montoDescuento, montoEvaluacion, total } = calcularBoletaAdiestramiento({
     numClases, precioClase, descuentoPackPct, descuentoPackMonto, evaluacion, precioEvaluacion, transporte,
+    packPrecioManual: modoPack, packPrecio,
   });
+
+  // Las líneas en blanco no se guardan — la lista se edita con inputs
+  // sueltos, así que casi siempre queda alguna a medio llenar.
+  const incluyeLimpio = packIncluye.map((linea) => linea.trim()).filter(Boolean);
+
+  // Un pack sin precio escrito emitiría una boleta en $0 sin avisar. En
+  // el modo por clase no hace falta el chequeo: el total sale de campos
+  // que ya vienen con un valor por defecto.
+  const faltaPrecioPack = modoPack && !(Number(packPrecio) > 0);
+  const puedeGenerar = Boolean(cliente && cliente.nombre) && !faltaPrecioPack;
 
   function elegirPack(n, descuentoPct, descuentoMonto = 0) {
     setNumClases(n);
@@ -736,8 +755,23 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
     setEmitida(null);
   }
 
+  function cambiarIncluye(idx, valor) {
+    setPackIncluye((prev) => prev.map((linea, i) => (i === idx ? valor : linea)));
+    setEmitida(null);
+  }
+  function agregarIncluye() {
+    setPackIncluye((prev) => [...prev, ""]);
+    setEmitida(null);
+  }
+  function quitarIncluye(idx) {
+    // Nunca se queda sin ninguna línea: si se borra la última, vuelve a
+    // dejar una vacía para poder seguir escribiendo.
+    setPackIncluye((prev) => (prev.length === 1 ? [""] : prev.filter((_, i) => i !== idx)));
+    setEmitida(null);
+  }
+
   function revisar() {
-    if (!cliente || !cliente.nombre) return;
+    if (!puedeGenerar) return;
     // No se inserta todavía — se muestra la pantalla de confirmación con
     // una foto de lo calculado ahora. Recién al confirmar se crea la
     // boleta de verdad.
@@ -747,12 +781,19 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
       perro: cliente.perro,
       modalidad,
       numClases: Number(numClases),
-      precioClase: Number(precioClase),
-      descuentoPackPct: Number(descuentoPackPct || 0),
-      descuentoPackMonto: Number(descuentoPackMonto || 0),
-      evaluacion,
-      precioEvaluacion: montoEvaluacion,
-      transporte: Number(transporte || 0),
+      // En un pack a mano el precio escrito ya ES el total, así que los
+      // montos que lo compondrían se guardan en 0. Si quedaran con lo
+      // que hubiera en pantalla, cualquier vista que sume las partes
+      // (el PDF, un informe futuro) cobraría dos veces lo mismo.
+      precioClase: modoPack ? 0 : Number(precioClase),
+      descuentoPackPct: modoPack ? 0 : Number(descuentoPackPct || 0),
+      descuentoPackMonto: modoPack ? 0 : Number(descuentoPackMonto || 0),
+      evaluacion, // en modo pack queda como descripción: qué evaluación trae
+      precioEvaluacion: modoPack ? 0 : montoEvaluacion,
+      transporte: modoPack ? 0 : Number(transporte || 0),
+      packNombre: modoPack ? (packNombre.trim() || "Pack a medida") : null,
+      packIncluye: modoPack ? incluyeLimpio : [],
+      packPrecioManual: modoPack,
       subtotalClases,
       montoDescuento,
       total,
@@ -855,16 +896,32 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
         <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14, fontSize: 14, color: INK, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Cliente</span><b>{p.cliente}{p.perro ? ` · 🐾 ${p.perro}` : ""}</b></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Modalidad</span><b style={{ textTransform: "capitalize" }}>{p.modalidad}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Clases</span><b>{p.numClases} × {fmtCLP(p.precioClase)}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Subtotal clases</span><b>{fmtCLP(p.subtotalClases)}</b></div>
-          {p.montoDescuento > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", color: RUST }}><span>Descuento pack{p.descuentoPackPct > 0 ? ` (-${p.descuentoPackPct}%)` : ""}</span><b>- {fmtCLP(p.montoDescuento)}</b></div>
-          )}
-          {p.evaluacion !== "ninguna" && (
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Evaluación {p.evaluacion}</span><b>{fmtCLP(p.precioEvaluacion)}</b></div>
-          )}
-          {p.transporte > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Transporte</span><b>{fmtCLP(p.transporte)}</b></div>
+          {p.packPrecioManual ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Pack</span><b>{p.packNombre}</b></div>
+              <div>
+                <span style={{ color: "#8A7E5C" }}>Incluye</span>
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18, lineHeight: 1.6 }}>
+                  <li>{p.numClases} clase(s) de adiestramiento {p.modalidad}</li>
+                  {p.evaluacion !== "ninguna" && <li>Evaluación {p.evaluacion}</li>}
+                  {p.packIncluye.map((linea, i) => <li key={i}>{linea}</li>)}
+                </ul>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Clases</span><b>{p.numClases} × {fmtCLP(p.precioClase)}</b></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Subtotal clases</span><b>{fmtCLP(p.subtotalClases)}</b></div>
+              {p.montoDescuento > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: RUST }}><span>Descuento pack{p.descuentoPackPct > 0 ? ` (-${p.descuentoPackPct}%)` : ""}</span><b>- {fmtCLP(p.montoDescuento)}</b></div>
+              )}
+              {p.evaluacion !== "ninguna" && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Evaluación {p.evaluacion}</span><b>{fmtCLP(p.precioEvaluacion)}</b></div>
+              )}
+              {p.transporte > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Transporte</span><b>{fmtCLP(p.transporte)}</b></div>
+              )}
+            </>
           )}
           {p.mensajePersonalizado && (
             <div style={{ marginTop: 4 }}><span style={{ color: "#8A7E5C" }}>Mensaje: </span><i>{p.mensajePersonalizado}</i></div>
@@ -927,24 +984,77 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
           ))}
         </div>
 
-        <p style={label}>Pack (sugerencias) — o edita a mano abajo</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          <button type="button" onClick={() => elegirPack(4, 0, 20000)} style={botonSecundario}>Pack 4 clases — ahorra $20.000</button>
-          <button type="button" onClick={() => elegirPack(8, 10)} style={botonSecundario}>8 clases — ahorra 10%</button>
-          <button type="button" onClick={() => elegirPack(12, 15)} style={botonSecundario}>12 clases — ahorra 15%</button>
+        <p style={label} id="badiestramiento-modo-label">Cómo se cobra</p>
+        <div role="group" aria-labelledby="badiestramiento-modo-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+          {[
+            { valor: false, texto: "Por clase" },
+            { valor: true, texto: "Pack con precio propio" },
+          ].map((m) => (
+            <button key={String(m.valor)} type="button" onClick={() => { setModoPack(m.valor); setEmitida(null); }} aria-pressed={modoPack === m.valor}
+              style={{
+                padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
+                border: modoPack === m.valor ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
+                background: modoPack === m.valor ? NAVY : "#FFFFFF",
+                color: modoPack === m.valor ? CREAM : INK, fontWeight: modoPack === m.valor ? 600 : 400,
+              }}>
+              {m.texto}
+            </button>
+          ))}
         </div>
+        <p style={{ ...hint, marginTop: 0, marginBottom: 16 }}>
+          {modoPack
+            ? "Armas el pack como quieras y escribes el precio: ese es el total, tal cual."
+            : "El total se calcula solo: clases × precio, menos descuentos, más evaluación y transporte."}
+        </p>
 
         <label style={label} htmlFor="badiestramiento-num-clases">Número de clases</label>
         <input id="badiestramiento-num-clases" type="number" min="1" value={numClases} onChange={(e) => { setNumClases(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label} htmlFor="badiestramiento-precio-clase">Precio por clase</label>
-        <input id="badiestramiento-precio-clase" type="number" min="0" value={precioClase} onChange={(e) => { setPrecioClase(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label} htmlFor="badiestramiento-descuento-pct">Descuento por pack (%)</label>
-        <input id="badiestramiento-descuento-pct" type="number" min="0" max="100" value={descuentoPackPct} onChange={(e) => { setDescuentoPackPct(e.target.value); setEmitida(null); }} style={input} />
-        <label style={label} htmlFor="badiestramiento-descuento-monto">Descuento por pack (monto fijo, opcional)</label>
-        <input id="badiestramiento-descuento-monto" type="number" min="0" value={descuentoPackMonto} onChange={(e) => { setDescuentoPackMonto(e.target.value); setEmitida(null); }} style={input} />
 
-        <h2 style={{ ...sectionTitle, marginTop: 26 }}>3. Evaluación y transporte</h2>
-        <p style={label} id="badiestramiento-evaluacion-label">Evaluación</p>
+        {modoPack ? (
+          <>
+            <label style={label} htmlFor="badiestramiento-pack-nombre">Nombre del pack</label>
+            <input id="badiestramiento-pack-nombre" type="text" placeholder="ej. Pack Cachorro Feliz" value={packNombre}
+              onChange={(e) => { setPackNombre(e.target.value); setEmitida(null); }} style={input} />
+
+            <p style={label} id="badiestramiento-incluye-label">Qué más incluye (una línea por cosa)</p>
+            <div aria-labelledby="badiestramiento-incluye-label" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+              {packIncluye.map((linea, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input type="text" aria-label={`Qué incluye, línea ${idx + 1}`} placeholder="ej. 2 sesiones a domicilio" value={linea}
+                    onChange={(e) => cambiarIncluye(idx, e.target.value)} style={{ ...input, marginBottom: 0, flex: 1 }} />
+                  <button type="button" onClick={() => quitarIncluye(idx)} aria-label={`Quitar la línea ${idx + 1}`}
+                    style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "8px 10px", minHeight: 44 }}>×</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={agregarIncluye} style={{ ...botonSecundario, marginBottom: 16 }}>+ Agregar línea</button>
+
+            <label style={label} htmlFor="badiestramiento-pack-precio">Precio del pack (este es el total)</label>
+            <input id="badiestramiento-pack-precio" type="number" min="0" value={packPrecio}
+              onChange={(e) => { setPackPrecio(e.target.value); setEmitida(null); }} style={input} />
+          </>
+        ) : (
+          <>
+            <p style={label}>Pack (sugerencias) — o edita a mano abajo</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              <button type="button" onClick={() => elegirPack(4, 0, 20000)} style={botonSecundario}>Pack 4 clases — ahorra $20.000</button>
+              <button type="button" onClick={() => elegirPack(8, 10)} style={botonSecundario}>8 clases — ahorra 10%</button>
+              <button type="button" onClick={() => elegirPack(12, 15)} style={botonSecundario}>12 clases — ahorra 15%</button>
+            </div>
+
+            <label style={label} htmlFor="badiestramiento-precio-clase">Precio por clase</label>
+            <input id="badiestramiento-precio-clase" type="number" min="0" value={precioClase} onChange={(e) => { setPrecioClase(e.target.value); setEmitida(null); }} style={input} />
+            <label style={label} htmlFor="badiestramiento-descuento-pct">Descuento por pack (%)</label>
+            <input id="badiestramiento-descuento-pct" type="number" min="0" max="100" value={descuentoPackPct} onChange={(e) => { setDescuentoPackPct(e.target.value); setEmitida(null); }} style={input} />
+            <label style={label} htmlFor="badiestramiento-descuento-monto">Descuento por pack (monto fijo, opcional)</label>
+            <input id="badiestramiento-descuento-monto" type="number" min="0" value={descuentoPackMonto} onChange={(e) => { setDescuentoPackMonto(e.target.value); setEmitida(null); }} style={input} />
+          </>
+        )}
+
+        <h2 style={{ ...sectionTitle, marginTop: 26 }}>{modoPack ? "3. Evaluación" : "3. Evaluación y transporte"}</h2>
+        <p style={label} id="badiestramiento-evaluacion-label">
+          {modoPack ? "Evaluación que trae el pack (va en el precio que pusiste)" : "Evaluación"}
+        </p>
         <div role="group" aria-labelledby="badiestramiento-evaluacion-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {[{ id: "ninguna", label: "Sin evaluación" }, { id: "presencial", label: "Presencial" }, { id: "online", label: "Online" }].map((e) => (
             <button key={e.id} type="button" onClick={() => { setEvaluacion(e.id); setEmitida(null); }} aria-pressed={evaluacion === e.id}
@@ -958,14 +1068,21 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
             </button>
           ))}
         </div>
-        {evaluacion !== "ninguna" && (
+        {/* En un pack a mano la evaluación y el transporte no se cobran
+            aparte: van dentro del precio que se escribió. Se ocultan los
+            campos de monto para que no quede la duda de si se suman. */}
+        {!modoPack && evaluacion !== "ninguna" && (
           <>
             <label style={label} htmlFor="badiestramiento-precio-evaluacion">Precio de la evaluación</label>
             <input id="badiestramiento-precio-evaluacion" type="number" min="0" value={precioEvaluacion} onChange={(e) => { setPrecioEvaluacion(e.target.value); setEmitida(null); }} style={input} />
           </>
         )}
-        <label style={label} htmlFor="badiestramiento-precio-transporte">Precio de transporte (opcional)</label>
-        <input id="badiestramiento-precio-transporte" type="number" min="0" value={transporte} onChange={(e) => { setTransporte(e.target.value); setEmitida(null); }} style={input} />
+        {!modoPack && (
+          <>
+            <label style={label} htmlFor="badiestramiento-precio-transporte">Precio de transporte (opcional)</label>
+            <input id="badiestramiento-precio-transporte" type="number" min="0" value={transporte} onChange={(e) => { setTransporte(e.target.value); setEmitida(null); }} style={input} />
+          </>
+        )}
 
         <div style={{ marginTop: 20, padding: "14px 16px", background: "#FBF6E9", border: `1px solid ${GOLD}`, borderRadius: 8 }}>
           <label style={{ ...label, marginBottom: 8, color: "#8A6A1E" }} htmlFor="badiestramiento-mensaje">💬 Mensaje personalizado para esta boleta</label>
@@ -973,27 +1090,40 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
         </div>
 
         <div style={{ marginTop: 20, padding: "18px 20px", background: PANEL_BG, borderRadius: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK }}>
-            <span>{numClases} clase(s) × {fmtCLP(precioClase)}</span>
-            <span>{fmtCLP(subtotalClases)}</span>
-          </div>
-          {montoDescuento > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: RUST, marginTop: 4 }}>
-              <span>Descuento pack{descuentoPackPct > 0 ? ` (-${descuentoPackPct}%)` : ""}</span>
-              <span>- {fmtCLP(montoDescuento)}</span>
-            </div>
-          )}
-          {montoEvaluacion > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK, marginTop: 4 }}>
-              <span>Evaluación {evaluacion}</span>
-              <span>{fmtCLP(montoEvaluacion)}</span>
-            </div>
-          )}
-          {Number(transporte || 0) > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK, marginTop: 4 }}>
-              <span>Transporte</span>
-              <span>{fmtCLP(Number(transporte))}</span>
-            </div>
+          {modoPack ? (
+            <>
+              <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: NAVY }}>{packNombre.trim() || "Pack a medida"}</p>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, color: INK, lineHeight: 1.7 }}>
+                <li>{numClases} clase(s) de adiestramiento {modalidad}</li>
+                {evaluacion !== "ninguna" && <li>Evaluación {evaluacion}</li>}
+                {incluyeLimpio.map((linea, i) => <li key={i}>{linea}</li>)}
+              </ul>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK }}>
+                <span>{numClases} clase(s) × {fmtCLP(precioClase)}</span>
+                <span>{fmtCLP(subtotalClases)}</span>
+              </div>
+              {montoDescuento > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: RUST, marginTop: 4 }}>
+                  <span>Descuento pack{descuentoPackPct > 0 ? ` (-${descuentoPackPct}%)` : ""}</span>
+                  <span>- {fmtCLP(montoDescuento)}</span>
+                </div>
+              )}
+              {montoEvaluacion > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK, marginTop: 4 }}>
+                  <span>Evaluación {evaluacion}</span>
+                  <span>{fmtCLP(montoEvaluacion)}</span>
+                </div>
+              )}
+              {Number(transporte || 0) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK, marginTop: 4 }}>
+                  <span>Transporte</span>
+                  <span>{fmtCLP(Number(transporte))}</span>
+                </div>
+              )}
+            </>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, color: NAVY, marginTop: 8, fontWeight: 700, borderTop: "1px solid #DCD2B4", paddingTop: 8 }}>
             <span>Total</span>
@@ -1001,8 +1131,14 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
           </div>
         </div>
 
-        <button onClick={revisar} disabled={!cliente || !cliente.nombre}
-          style={{ ...botonPrincipal, marginTop: 20, opacity: !cliente || !cliente.nombre ? 0.45 : 1 }}>
+        {faltaPrecioPack && (
+          <p style={{ ...hint, color: RUST, marginTop: 10, marginBottom: 0 }}>
+            Ponle un precio al pack para poder generar la boleta.
+          </p>
+        )}
+
+        <button onClick={revisar} disabled={!puedeGenerar}
+          style={{ ...botonPrincipal, marginTop: 20, opacity: puedeGenerar ? 1 : 0.45 }}>
           Generar boleta
         </button>
       </div>

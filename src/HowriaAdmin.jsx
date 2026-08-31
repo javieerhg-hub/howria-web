@@ -352,6 +352,12 @@ export function boletaAdiestramientoToDb(b) {
     evaluacion: b.evaluacion,
     precio_evaluacion: b.precioEvaluacion || 0,
     transporte: b.transporte || 0,
+    // Pack armado a mano: el nombre, la lista de lo que trae y la marca
+    // de que el precio se escribió en vez de calcularse. Ver migración
+    // 105_boletas_adiestramiento_pack.sql.
+    pack_nombre: b.packNombre || null,
+    pack_incluye: b.packIncluye || [],
+    pack_precio_manual: b.packPrecioManual || false,
     total: b.total,
     monto_responsable: b.montoResponsable ?? null,
     mensaje_personalizado: b.mensajePersonalizado || null,
@@ -382,6 +388,12 @@ export function dbToBoletaAdiestramiento(row) {
     evaluacion: row.evaluacion,
     precioEvaluacion: row.precio_evaluacion,
     transporte: row.transporte,
+    packNombre: row.pack_nombre || null,
+    // Las boletas emitidas antes de la migración 105 no traen la columna
+    // (o la traen null), así que se normaliza a lista vacía / false para
+    // que el resto del código no tenga que preguntar por undefined.
+    packIncluye: Array.isArray(row.pack_incluye) ? row.pack_incluye : [],
+    packPrecioManual: row.pack_precio_manual || false,
     total: row.total,
     montoResponsable: row.monto_responsable ?? undefined,
     mensajePersonalizado: row.mensaje_personalizado,

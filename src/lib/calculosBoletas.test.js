@@ -121,6 +121,36 @@ describe("calcularBoletaAdiestramiento", () => {
     expect(r.montoEvaluacion).toBe(0);
     expect(r.total).toBe(60000);
   });
+
+  describe("pack con precio puesto a mano", () => {
+    it("el precio escrito es el total, sin recalcular nada", () => {
+      const r = calcularBoletaAdiestramiento({ packPrecioManual: true, packPrecio: 80000 });
+      expect(r.total).toBe(80000);
+    });
+
+    it("ignora clases, descuentos, evaluación y transporte", () => {
+      // Todo esto sumaría/restaría en el modo normal — en un pack a mano
+      // es solo descripción de qué trae, no entra en el precio.
+      const r = calcularBoletaAdiestramiento({
+        packPrecioManual: true, packPrecio: 80000,
+        numClases: 8, precioClase: 15000, descuentoPackPct: 10, descuentoPackMonto: 5000,
+        evaluacion: "presencial", precioEvaluacion: 20000, transporte: 3000,
+      });
+      expect(r.total).toBe(80000);
+      expect(r.montoDescuento).toBe(0);
+      expect(r.montoEvaluacion).toBe(0);
+    });
+
+    it("nunca devuelve un total negativo", () => {
+      const r = calcularBoletaAdiestramiento({ packPrecioManual: true, packPrecio: -5000 });
+      expect(r.total).toBe(0);
+    });
+
+    it("un pack sin precio todavía escrito da 0, no NaN", () => {
+      const r = calcularBoletaAdiestramiento({ packPrecioManual: true, packPrecio: "" });
+      expect(r.total).toBe(0);
+    });
+  });
 });
 
 describe("calcularTotales", () => {
