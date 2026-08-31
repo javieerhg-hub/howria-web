@@ -12,6 +12,44 @@ import {
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
 import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
 
+// Los dos negocios de Howria. Un cliente cae en uno o en otro (hoy
+// ninguno hace las dos cosas, pero el filtro soporta que lo haga: en ese
+// caso aparecería en las dos vistas, que es lo correcto).
+function esDePaseos(c) {
+  return (c.tipoServicio || []).includes("paseos");
+}
+function esDeAdiestramiento(c) {
+  const t = c.tipoServicio || [];
+  return t.includes("evaluacion") || t.includes("clases");
+}
+
+// Lo que hay que saber de un cliente de adiestramiento sin abrir su
+// ficha: en qué va la evaluación, cuántas clases lleva y cuándo vuelve.
+function resumenAdiestramiento(cliente, citasAgenda, planesClases, clasesRealizadas) {
+  const suyas = citasAgenda.filter((c) => c.clienteId && c.clienteId === cliente._dbId);
+  const evaluaciones = suyas.filter((c) => c.tipo === "evaluacion" && c.estado !== "cancelada");
+  const hecha = evaluaciones.find((c) => c.estado === "realizada") || null;
+
+  const planes = planesClases.filter((p) => p.clienteId === cliente._dbId);
+  const totalClases = planes.reduce((acc, p) => acc + (p.numClases || 0), 0);
+  const idsPlanes = new Set(planes.map((p) => p._dbId).filter(Boolean));
+  const hechas = clasesRealizadas.filter((cr) => idsPlanes.has(cr.planId)).length;
+
+  const ahora = Date.now();
+  const proxima = suyas
+    .filter((c) => c.estado !== "cancelada" && c.estado !== "realizada" && new Date(c.fechaISO).getTime() >= ahora)
+    .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO))[0] || null;
+
+  return {
+    tieneEvaluacion: evaluaciones.length > 0,
+    evaluacionHecha: !!hecha,
+    evaluacionPagada: !!(hecha && hecha.pagada),
+    totalClases,
+    clasesHechas: hechas,
+    proxima,
+  };
+}
+
 const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
 function FormularioCliente({ inicial, paseadores, entrenadores, responsables, onGuardar, onCancelar }) {
@@ -752,7 +790,7 @@ function estiloPillaFiltro(activo, color, bg) {
   };
 }
 
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades, packsClases = [], setPlanesClases }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades, packsClases = [], planesClases = [], setPlanesClases, clasesRealizadas = [] }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -760,12 +798,15 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   const filtrosGuardados = cargarFiltrosClientesGuardados();
   const [filtroPaseador, setFiltroPaseador] = useState(filtrosGuardados.filtroPaseador || "todos");
   const [filtroEstado, setFiltroEstado] = useState(filtrosGuardados.filtroEstado || "todos");
+  // Paseos y adiestramiento se gestionan distinto, así que la lista se
+  // mira de a un negocio por vez. Se recuerda, como el resto de filtros.
+  const [negocio, setNegocio] = useState(filtrosGuardados.negocio || "paseos");
   const [soloEvaluacion, setSoloEvaluacion] = useState(filtrosGuardados.soloEvaluacion || false);
   const [orden, setOrden] = useState(filtrosGuardados.orden || "nombre-asc");
 
   useEffect(() => {
-    try { localStorage.setItem("howria_filtros_clientes", JSON.stringify({ filtroPaseador, filtroEstado, soloEvaluacion, orden })); } catch {}
-  }, [filtroPaseador, filtroEstado, soloEvaluacion, orden]);
+    try { localStorage.setItem("howria_filtros_clientes", JSON.stringify({ filtroPaseador, filtroEstado, soloEvaluacion, orden, negocio })); } catch {}
+  }, [filtroPaseador, filtroEstado, soloEvaluacion, orden, negocio]);
 
   useEffect(() => {
     if (!saltarClienteDbId) return;
@@ -820,16 +861,24 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
     );
   }
 
-  const paseadoresDisponibles = [...new Set(clientes.map((c) => c.paseadorNombre).filter(Boolean))].sort();
-  const conteoPorEstado = { activo: 0, pausado: 0, baja: 0 };
-  clientes.forEach((c) => { conteoPorEstado[c.estadoCliente || "activo"] = (conteoPorEstado[c.estadoCliente || "activo"] || 0) + 1; });
-  const totalEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion")).length;
+  const clientesPaseos = clientes.filter(esDePaseos);
+  const clientesAdiestramiento = clientes.filter(esDeAdiestramiento);
+  const esVistaPaseos = negocio === "paseos";
+  // Todo lo de abajo (conteos, pastillas, buscador, lista) trabaja sobre
+  // el negocio elegido: mezclarlos era justo lo que hacía que los 12 de
+  // adiestramiento se perdieran entre los 40 de paseos.
+  const delNegocio = esVistaPaseos ? clientesPaseos : clientesAdiestramiento;
 
-  const filtrados = clientes
+  const paseadoresDisponibles = [...new Set(delNegocio.map((c) => c.paseadorNombre).filter(Boolean))].sort();
+  const conteoPorEstado = { activo: 0, pausado: 0, baja: 0 };
+  delNegocio.forEach((c) => { conteoPorEstado[c.estadoCliente || "activo"] = (conteoPorEstado[c.estadoCliente || "activo"] || 0) + 1; });
+  const totalEvaluacion = delNegocio.filter((c) => c.tipoServicio?.includes("evaluacion")).length;
+
+  const filtrados = delNegocio
     .filter((c) => {
       const q = busqueda.trim().toLowerCase();
       if (q && !(c.nombre.toLowerCase().includes(q) || c.perro.toLowerCase().includes(q))) return false;
-      if (filtroPaseador !== "todos" && c.paseadorNombre !== filtroPaseador) return false;
+      if (esVistaPaseos && filtroPaseador !== "todos" && c.paseadorNombre !== filtroPaseador) return false;
       if (filtroEstado !== "todos" && (c.estadoCliente || "activo") !== filtroEstado) return false;
       if (soloEvaluacion && !c.tipoServicio?.includes("evaluacion")) return false;
       return true;
@@ -870,25 +919,48 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         />
       )}
 
+      {/* Los dos negocios, como las sub-pestañas de Boletas. Todo lo de
+          abajo responde a esta elección. */}
+      <div role="group" aria-label="Tipo de cliente" style={{ display: "flex", gap: 8, marginTop: 18 }}>
+        {[
+          { id: "paseos", nombre: "Paseos", n: clientesPaseos.length },
+          { id: "adiestramiento", nombre: "Adiestramiento", n: clientesAdiestramiento.length },
+        ].map((n) => {
+          const activo = negocio === n.id;
+          return (
+            <button key={n.id} type="button" onClick={() => setNegocio(n.id)} aria-pressed={activo}
+              style={{
+                flex: 1, padding: "11px 14px", borderRadius: 10, cursor: "pointer", fontSize: 14, minHeight: 46,
+                border: "none", fontWeight: activo ? 700 : 500,
+                background: activo ? NAVY : CREAM_SOFT, color: activo ? CREAM : INK,
+              }}>
+              {n.nombre} ({n.n})
+            </button>
+          );
+        })}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginTop: 20 }}>
-        <TarjetaResumenFactura titulo="Total clientes" valor={clientes.length} color={NAVY} bg={CREAM_SOFT} />
+        <TarjetaResumenFactura titulo={esVistaPaseos ? "Clientes de paseo" : "De adiestramiento"} valor={delNegocio.length} color={NAVY} bg={CREAM_SOFT} />
         <TarjetaResumenFactura titulo="Activos" valor={conteoPorEstado.activo} color={ESTADOS_CLIENTE[0].color} bg={ESTADOS_CLIENTE[0].bg} />
         <TarjetaResumenFactura titulo="Pausados" valor={conteoPorEstado.pausado} color={ESTADOS_CLIENTE[1].color} bg={ESTADOS_CLIENTE[1].bg} />
-        <TarjetaResumenFactura titulo="Evaluación pendiente" valor={totalEvaluacion} color="#1E5A7A" bg="#D6E6EE" />
+        {!esVistaPaseos && <TarjetaResumenFactura titulo="Evaluación pendiente" valor={totalEvaluacion} color="#1E5A7A" bg="#D6E6EE" />}
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
         <button onClick={() => setFiltroEstado("todos")} style={estiloPillaFiltro(filtroEstado === "todos", NAVY, CREAM)}>
-          Todos ({clientes.length})
+          Todos ({delNegocio.length})
         </button>
         {ESTADOS_CLIENTE.map((e) => (
           <button key={e.id} onClick={() => setFiltroEstado(e.id)} style={estiloPillaFiltro(filtroEstado === e.id, e.color, e.bg)}>
             {e.nombre} ({conteoPorEstado[e.id] || 0})
           </button>
         ))}
-        <button onClick={() => setSoloEvaluacion((v) => !v)} style={estiloPillaFiltro(soloEvaluacion, "#1E5A7A", "#D6E6EE")}>
-          Evaluación ({totalEvaluacion})
-        </button>
+        {!esVistaPaseos && (
+          <button onClick={() => setSoloEvaluacion((v) => !v)} style={estiloPillaFiltro(soloEvaluacion, "#1E5A7A", "#D6E6EE")}>
+            Evaluación ({totalEvaluacion})
+          </button>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, marginBottom: 4 }}>
@@ -897,10 +969,12 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
           <input placeholder="Buscar por cliente o perro..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
             style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }} />
         </div>
-        <select value={filtroPaseador} onChange={(e) => setFiltroPaseador(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 170px" }}>
-          <option value="todos">Todos los paseadores</option>
-          {paseadoresDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+        {esVistaPaseos && (
+          <select value={filtroPaseador} onChange={(e) => setFiltroPaseador(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 170px" }}>
+            <option value="todos">Todos los paseadores</option>
+            {paseadoresDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
         <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 150px" }}>
           <option value="todos">Todos los estados</option>
           <option value="activo">Activo</option>
@@ -921,7 +995,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
           </select>
         </div>
       </div>
-      <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: "6px 0 0" }}>{filtrados.length} de {clientes.length} cliente(s)</p>
+      <p style={{ fontSize: 12.5, color: "#8A7E5C", margin: "6px 0 0" }}>{filtrados.length} de {delNegocio.length} cliente(s) de {esVistaPaseos ? "paseos" : "adiestramiento"}</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14, marginTop: 14 }}>
         {cargandoClientes ? (
@@ -955,9 +1029,31 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
                   </div>
                   <div style={{ fontSize: 12.5, color: "#5C5442", marginTop: 10, lineHeight: 1.7 }}>
                     {c.telefono || "Sin teléfono"}<br />
-                    Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
-                    Paseador: {c.paseadorNombre || "sin asignar"}
-                    {c.tipoServicio?.includes("evaluacion") && <span style={{ color: "#8A6A1E", fontWeight: 600 }}> · eval. pendiente</span>}
+                    {esVistaPaseos ? (
+                      <>
+                        Ref: {fmtCLP(c.valorPaseoRef)} / paseo<br />
+                        Paseador: {c.paseadorNombre || "sin asignar"}
+                      </>
+                    ) : (() => {
+                      const r = resumenAdiestramiento(c, citasAgenda, planesClases, clasesRealizadas);
+                      return (
+                        <>
+                          {r.tieneEvaluacion
+                            ? (r.evaluacionHecha
+                              ? <span style={{ color: "#2F6A46", fontWeight: 600 }}>Evaluación hecha{r.evaluacionPagada ? " y pagada" : " · sin pagar"}</span>
+                              : <span style={{ color: "#8A6A1E", fontWeight: 600 }}>Evaluación pendiente</span>)
+                            : <span style={{ color: "#8A7E5C" }}>Sin evaluación agendada</span>}
+                          <br />
+                          {r.totalClases > 0
+                            ? <>Clases: {r.clasesHechas} de {r.totalClases}</>
+                            : <span style={{ color: "#8A7E5C" }}>Sin pack de clases</span>}
+                          <br />
+                          {r.proxima
+                            ? <>Próxima: {new Date(r.proxima.fechaISO).toLocaleDateString("es-CL", { day: "numeric", month: "short" })} · {new Date(r.proxima.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</>
+                            : <span style={{ color: RUST }}>Sin nada agendado</span>}
+                        </>
+                      );
+                    })()}
                   </div>
                 </button>
               );

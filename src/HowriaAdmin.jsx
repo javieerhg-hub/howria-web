@@ -1219,29 +1219,40 @@ export const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","
 export const DIAS_SEMANA = ["L","M","X","J","V","S","D"]; // lun..dom
 export const DIAS_SEMANA_LARGO = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 
+// Agrupadas por NEGOCIO, no por tipo de tarea. Howria son dos
+// operaciones distintas: paseos (con su logística de rutas y paseadores)
+// y adiestramiento (evaluación, y de ahí clases con un entrenador). Los
+// datos lo confirman: de 52 clientes, 40 son solo paseos y 12 solo
+// adiestramiento — ninguno hace las dos cosas. Antes "Trabajo diario"
+// mezclaba Coordinación y Mapa (paseos puros) con Agenda y Alumnos
+// (adiestramiento puro), que nunca se usan en la misma tarea.
+//
+// Calendario e Itinerario sí son de los dos mundos (traen sus pastillas
+// para mostrar/ocultar paseos, evaluaciones y clases), así que quedan en
+// su propio grupo en vez de forzarlos a uno de los dos lados.
 export const TODOS_LOS_TABS = [
   { id: "inicio", label: "Inicio", grupo: "" },
-  { id: "mis-paseos", label: "Mis paseos", grupo: "Trabajo diario" },
-  { id: "coordinacion", label: "Coordinación", grupo: "Trabajo diario" },
-  { id: "mapa", label: "Mapa", grupo: "Trabajo diario" },
-  { id: "agenda", label: "Agenda", grupo: "Trabajo diario" },
-  { id: "calendario", label: "Calendario", grupo: "Trabajo diario" },
-  { id: "itinerario", label: "Itinerario", grupo: "Trabajo diario" },
-  { id: "alumnos", label: "Alumnos", grupo: "Trabajo diario" },
-  { id: "mail", label: "Mail", grupo: "Trabajo diario" },
-  { id: "clientes", label: "Clientes", grupo: "Clientes y boletas" },
-  { id: "boletas", label: "Boletas", grupo: "Clientes y boletas" },
-  { id: "facturas", label: "Facturas", grupo: "Clientes y boletas" },
-  { id: "finanzas", label: "Finanzas", grupo: "Clientes y boletas" },
-  { id: "paseadores", label: "Paseadores", grupo: "Equipo" },
+  { id: "mis-paseos", label: "Mis paseos", grupo: "Paseos" },
+  { id: "coordinacion", label: "Coordinación", grupo: "Paseos" },
+  { id: "mapa", label: "Mapa", grupo: "Paseos" },
+  { id: "paseadores", label: "Paseadores", grupo: "Paseos" },
+  { id: "agenda", label: "Agenda", grupo: "Adiestramiento" },
+  { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento" },
+  { id: "calendario", label: "Calendario", grupo: "Agenda general" },
+  { id: "itinerario", label: "Itinerario", grupo: "Agenda general" },
+  { id: "clientes", label: "Clientes", grupo: "Clientes y dinero" },
+  { id: "boletas", label: "Boletas", grupo: "Clientes y dinero" },
+  { id: "facturas", label: "Facturas", grupo: "Clientes y dinero" },
+  { id: "finanzas", label: "Finanzas", grupo: "Clientes y dinero" },
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo" },
   { id: "notificaciones", label: "Notificaciones", grupo: "Equipo" },
   { id: "inventario", label: "Inventario", grupo: "Equipo" },
   { id: "usuarios", label: "Usuarios", grupo: "Equipo" },
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
+  { id: "mail", label: "Mail", grupo: "Prospección" },
 ];
-const ORDEN_GRUPOS = ["Trabajo diario", "Clientes y boletas", "Equipo", "Prospección"];
+const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Agenda general", "Clientes y dinero", "Equipo", "Prospección"];
 export const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrador"];
 
 // Un ícono por pestaña, para el launcher tipo "app" de la pantalla de
@@ -5179,7 +5190,7 @@ export default function HowriaAdmin() {
             rolActual={user.rol} registroPaseos={registroPaseos} />
         )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} setPlanesClases={setPlanesClases} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
