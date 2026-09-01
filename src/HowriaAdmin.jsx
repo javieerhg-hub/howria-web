@@ -27,6 +27,7 @@ const Boletas = React.lazy(() => import("./tabs/Boletas.jsx").then((m) => ({ def
 const Facturas = React.lazy(() => import("./tabs/Facturas.jsx").then((m) => ({ default: m.Facturas })));
 const Clientes = React.lazy(() => import("./tabs/Clientes.jsx").then((m) => ({ default: m.Clientes })));
 const Finanzas = React.lazy(() => import("./tabs/Finanzas.jsx").then((m) => ({ default: m.Finanzas })));
+const PagoAdiestramiento = React.lazy(() => import("./tabs/PagoAdiestramiento.jsx").then((m) => ({ default: m.PagoAdiestramiento })));
 const PagoTrabajadores = React.lazy(() => import("./tabs/PagoTrabajadores.jsx").then((m) => ({ default: m.PagoTrabajadores })));
 const Coordinacion = React.lazy(() => import("./tabs/Coordinacion.jsx").then((m) => ({ default: m.Coordinacion })));
 const MapaRutas = React.lazy(() => import("./tabs/MapaRutas.jsx").then((m) => ({ default: m.MapaRutas })));
@@ -433,6 +434,9 @@ function pagoToDb(p) {
     // (database/111). Obligatoria para marcar un pago.
     comprobante: p.comprobante || null,
     detalle: p.detalle || null,
+    // "paseos" o "adiestramiento": los dos viven en la misma tabla
+    // porque Finanzas ya la lee entera como costo del negocio.
+    tipo: p.tipo || "paseos",
     deshecho_por: p.deshechoPor || null,
     deshecho_en: p.deshechoEn || null,
   };
@@ -471,6 +475,7 @@ function dbToPago(row) {
     marcadoPor: row.marcado_por || undefined,
     comprobante: row.comprobante || null,
     detalle: row.detalle || null,
+    tipo: row.tipo || "paseos",
     _dbId: row.id,
     deshechoPor: row.deshecho_por || undefined,
     deshechoEn: row.deshecho_en || undefined,
@@ -533,6 +538,10 @@ function citaToDb(c) {
     // únicamente api/confirmar-cita.js, para que un guardado normal del
     // cliente nunca los pise con estado local desactualizado.
     plan_id: c.planId || null,
+    // Lo que se le paga AL ADIESTRADOR por esta cita — distinto de
+    // "precio", que es lo que pagó el cliente (database/112).
+    pago_adiestrador: c.pagoAdiestrador ?? null,
+    pagado_adiestrador: c.pagadoAdiestrador || false,
     // 0 es un número de clase válido (convención para "Evaluación" en
     // planes_clases) — con "||" se habría perdido y guardado null.
     numero_clase: c.numeroClase ?? null,
@@ -560,6 +569,8 @@ function dbToCita(row) {
     emailEnviado: row.email_enviado || false,
     planId: row.plan_id,
     numeroClase: row.numero_clase,
+    pagoAdiestrador: row.pago_adiestrador ?? null,
+    pagadoAdiestrador: row.pagado_adiestrador || false,
   };
 }
 
@@ -1245,6 +1256,7 @@ export const TODOS_LOS_TABS = [
   { id: "paseadores", label: "Paseadores", grupo: "Paseos" },
   { id: "agenda", label: "Agenda", grupo: "Adiestramiento" },
   { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento" },
+  { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Adiestramiento" },
   { id: "calendario", label: "Calendario", grupo: "Agenda general" },
   { id: "itinerario", label: "Itinerario", grupo: "Agenda general" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y dinero" },
@@ -1307,6 +1319,7 @@ const ICONOS_TAB = {
   finanzas: TrendingUp,
   paseadores: Footprints,
   pagos: Banknote,
+  "pago-adiestramiento": Banknote,
   equipo: Users,
   notificaciones: Bell,
   inventario: Package,
@@ -5453,6 +5466,7 @@ export default function HowriaAdmin() {
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
+        {tab === "pago-adiestramiento" && tabsPermitidosRol.includes("pago-adiestramiento") && <PagoAdiestramiento usuarios={usuarios} clientes={clientes} citasAgenda={citasAgenda} setCitas={setCitasAgenda} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} nombreUsuario={user.nombre} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} reclamosPago={reclamosPago} resolverReclamoPago={resolverReclamoPago} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} citasAgenda={citasAgenda} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
