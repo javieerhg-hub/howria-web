@@ -27,22 +27,87 @@ function fmtFecha(iso) {
   return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
 }
 
-// Fila editable: muestra qué se hizo y deja escribir cuánto le toca.
-function FilaPago({ titulo, subtitulo, referencia, valor, onCambiar }) {
+// Fila de un ítem por pagar. Muestra los tres números juntos a
+// propósito: lo que entró, lo que se lleva el adiestrador y lo que queda
+// para Howria. Ese tercero NO se escribe, se calcula — si se pudieran
+// escribir los dos, nada impediría que sumaran más de lo que entró, y
+// entonces el número dejaría de significar algo.
+//
+// El monto se guarda al confirmar y no a cada tecla: escribiendo, un
+// "2" camino a "25000" quedaría grabado como el pago acordado.
+function FilaPago({
+  titulo, subtitulo, boletasDelCliente, boletaVinculadaId, onVincular,
+  entroPorFactura, valor, onCambiar, onConfirmar, confirmado, puedeVincular,
+}) {
+  const leToca = Number(valor) || 0;
+  const entro = Number(entroPorFactura) || 0;
+  const paraHowria = entro - leToca;
+  const hayReferencia = entro > 0;
+
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", background: "#FFFFFF", border: "1px solid #E4DBC3", borderRadius: 10, padding: "12px 14px" }}>
-      <div style={{ minWidth: 0, flex: "1 1 200px" }}>
-        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{titulo}</p>
-        <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>{subtitulo}</p>
-        {referencia != null && (
-          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B0A587" }}>El cliente pagó {fmtCLP(referencia)}</p>
+    <div style={{ background: "#FFFFFF", border: `1px solid ${confirmado ? "#2F6A46" : "#E4DBC3"}`, borderRadius: 10, padding: "12px 14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{titulo}</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>{subtitulo}</p>
+        </div>
+        {confirmado && (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: "#D8ECDE", color: "#2F6A46", alignSelf: "flex-start" }}>
+            Guardado
+          </span>
         )}
       </div>
-      <div style={{ flex: "0 0 auto" }}>
-        <label style={{ ...label, marginBottom: 3, fontSize: 10.5 }}>Le toca</label>
-        <input type="number" min="0" value={valor} onChange={(e) => onCambiar(e.target.value)}
-          placeholder="0" style={{ ...input, marginBottom: 0, width: 120 }} />
+
+      {puedeVincular && (
+        <div style={{ marginTop: 10 }}>
+          <label style={{ ...label, marginBottom: 3, fontSize: 10.5 }}>Factura donde se cobró</label>
+          <select value={boletaVinculadaId || ""} onChange={(e) => onVincular(e.target.value || null)}
+            style={{ ...input, marginBottom: 0, fontSize: 12.5, padding: "7px 9px" }}>
+            <option value="">Sin factura vinculada</option>
+            {boletasDelCliente.map((b) => (
+              <option key={b._dbId} value={b._dbId}>
+                N°{String(b.numero).padStart(3, "0")} — {fmtCLP(b.total)}{b.estado === "pagada" ? "" : " (sin pagar)"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 10 }}>
+        <div>
+          <label style={{ ...label, marginBottom: 3, fontSize: 10.5 }}>Entró</label>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: hayReferencia ? INK : "#B0A587", minWidth: 90 }}>
+            {hayReferencia ? fmtCLP(entro) : "sin registrar"}
+          </p>
+        </div>
+        <div>
+          <label style={{ ...label, marginBottom: 3, fontSize: 10.5 }}>Le toca a él</label>
+          <input type="number" min="0" value={valor} onChange={(e) => onCambiar(e.target.value)}
+            placeholder="0" style={{ ...input, marginBottom: 0, width: 120 }} />
+        </div>
+        <div>
+          <label style={{ ...label, marginBottom: 3, fontSize: 10.5 }}>Queda para Howria</label>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, minWidth: 90,
+            color: !hayReferencia ? "#B0A587" : paraHowria < 0 ? RUST : "#2F6A46" }}>
+            {hayReferencia ? fmtCLP(paraHowria) : "—"}
+          </p>
+        </div>
+        <button onClick={onConfirmar} disabled={leToca <= 0}
+          style={{ ...botonSecundario, width: "auto", padding: "8px 16px", fontSize: 12.5, margin: 0, opacity: leToca > 0 ? 1 : 0.45 }}>
+          {confirmado ? "Guardar cambio" : "Confirmar"}
+        </button>
       </div>
+
+      {hayReferencia && paraHowria < 0 && (
+        <p style={{ ...hint, margin: "8px 0 0", color: RUST }}>
+          Le estás pagando más de lo que entró por esto. Se puede guardar igual, pero revisa que sea a propósito.
+        </p>
+      )}
+      {!hayReferencia && puedeVincular && (
+        <p style={{ ...hint, margin: "8px 0 0" }}>
+          Vincula la factura para saber cuánto entró y cuánto queda para Howria.
+        </p>
+      )}
     </div>
   );
 }
@@ -92,9 +157,58 @@ export function PagoAdiestramiento({
     setMontos((prev) => ({ ...prev, [clave]: valor }));
   }
 
+  // Boletas de adiestramiento de ese cliente, para poder vincular la
+  // evaluación con la factura donde se cobró.
+  function boletasDe(clienteNombre) {
+    const cliente = clientes.find((c) => c.nombre === clienteNombre);
+    if (!cliente) return [];
+    return boletasAdiestramiento
+      .filter((b) => b._dbId && esBoletaDeCliente(b, cliente))
+      .sort((a, b) => (b.numero || 0) - (a.numero || 0));
+  }
+
+  // Cuánto entró por una cita. La factura vinculada manda sobre
+  // cita.precio: precio es el de lista que se mostró al reservar, y no
+  // siempre es lo que se terminó cobrando (descuentos, packs que
+  // absorben la evaluación, citas agendadas a mano sin precio).
+  function entroPorCita(c) {
+    if (c.boletaAdiestramientoId) {
+      const b = boletasAdiestramiento.find((x) => x._dbId === c.boletaAdiestramientoId);
+      if (b) return b.total;
+    }
+    return c.precio || 0;
+  }
+
+  function vincularBoleta(cita, boletaDbId) {
+    setCitas((prev) => prev.map((x) => (x.id === cita.id ? { ...x, boletaAdiestramientoId: boletaDbId } : x)));
+  }
+
+  // Guardar el monto acordado de UN ítem, sin registrar todavía el pago.
+  // Sirve para ir dejando cerrado lo que ya se conversó y volver después
+  // a completar el resto, en vez de tener que definirlo todo de una vez.
+  function confirmarMontoCita(c) {
+    const monto = Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0;
+    if (monto <= 0) return;
+    setCitas((prev) => prev.map((x) => (x.id === c.id ? { ...x, pagoAdiestrador: monto } : x)));
+    showToast("Monto guardado.", "exito");
+  }
+
+  function confirmarMontoBoleta(b) {
+    const monto = Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0;
+    if (monto <= 0) return;
+    setBoletasAdiestramiento((prev) => prev.map((x) => (x._dbId === b._dbId ? { ...x, montoResponsable: monto } : x)));
+    showToast("Monto guardado.", "exito");
+  }
+
   const totalCitas = citasPendientes.reduce((acc, c) => acc + (Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0), 0);
   const totalBoletas = boletasPendientes.reduce((acc, b) => acc + (Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0), 0);
   const total = totalCitas + totalBoletas;
+  // Solo cuenta lo que entró de los ítems que efectivamente se van a
+  // pagar: sumar todo daría un "queda para Howria" inflado con plata de
+  // cosas que todavía no se están repartiendo.
+  const totalEntro =
+    citasPendientes.reduce((acc, c) => acc + ((Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0) > 0 ? entroPorCita(c) : 0), 0)
+    + boletasPendientes.reduce((acc, b) => acc + ((Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0) > 0 ? (b.total || 0) : 0), 0);
   const evaluacionesHechas = citasPendientes.filter((c) => c.tipo === "evaluacion").length;
 
   async function elegirComprobante(e) {
@@ -219,9 +333,15 @@ export function PagoAdiestramiento({
               <FilaPago key={c._dbId}
                 titulo={`${c.tipo === "evaluacion" ? "Evaluación" : "Clase"} · ${c.clienteNombre}`}
                 subtitulo={`${fmtFecha(c.fechaISO)}${c.perro ? ` · 🐾 ${c.perro}` : ""}`}
-                referencia={c.precio > 0 ? c.precio : null}
+                puedeVincular
+                boletasDelCliente={boletasDe(c.clienteNombre)}
+                boletaVinculadaId={c.boletaAdiestramientoId}
+                onVincular={(id) => vincularBoleta(c, id)}
+                entroPorFactura={entroPorCita(c)}
                 valor={montoDe(claveCita(c), c.pagoAdiestrador)}
-                onCambiar={(v) => cambiarMonto(claveCita(c), v)} />
+                onCambiar={(v) => cambiarMonto(claveCita(c), v)}
+                onConfirmar={() => confirmarMontoCita(c)}
+                confirmado={c.pagoAdiestrador > 0} />
             ))}
           </div>
         )}
@@ -237,10 +357,12 @@ export function PagoAdiestramiento({
             {boletasPendientes.map((b) => (
               <FilaPago key={b._dbId}
                 titulo={b.packNombre || `Boleta N°${String(b.numero).padStart(3, "0")}`}
-                subtitulo={`${b.cliente} · ${fmtFecha(b.fechaISO)}`}
-                referencia={b.total}
+                subtitulo={`${b.cliente} · ${fmtFecha(b.fechaISO)} · boleta N°${String(b.numero).padStart(3, "0")}`}
+                entroPorFactura={b.total}
                 valor={montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))}
-                onCambiar={(v) => cambiarMonto(claveBoleta(b), v)} />
+                onCambiar={(v) => cambiarMonto(claveBoleta(b), v)}
+                onConfirmar={() => confirmarMontoBoleta(b)}
+                confirmado={b.montoResponsable != null} />
             ))}
           </div>
         )}
@@ -251,6 +373,11 @@ export function PagoAdiestramiento({
           <div>
             <p style={{ margin: 0, fontSize: 12.5, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Total a pagar a {adiestrador || "—"}</p>
             <p style={{ margin: "4px 0 0", fontSize: 30, fontWeight: 700, color: CREAM, fontFamily: "Georgia, serif" }}>{fmtCLP(total)}</p>
+            {totalEntro > 0 && (
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#9BAAB8" }}>
+                Entró {fmtCLP(totalEntro)} · queda para Howria <b style={{ color: totalEntro - total < 0 ? "#F0A090" : "#A8D8BC" }}>{fmtCLP(totalEntro - total)}</b>
+              </p>
+            )}
           </div>
           <button onClick={() => setCobrando(true)} disabled={total <= 0}
             style={{ ...botonPrincipal, marginTop: 0, width: "auto", padding: "12px 24px", background: total > 0 ? GOLD : "#4A5A6A", color: total > 0 ? NAVY : "#8A99A8", opacity: total > 0 ? 1 : 0.7 }}>

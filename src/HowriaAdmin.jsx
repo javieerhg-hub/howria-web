@@ -541,6 +541,7 @@ function citaToDb(c) {
     // Lo que se le paga AL ADIESTRADOR por esta cita — distinto de
     // "precio", que es lo que pagó el cliente (database/112).
     pago_adiestrador: c.pagoAdiestrador ?? null,
+    boleta_adiestramiento_id: c.boletaAdiestramientoId || null,
     pagado_adiestrador: c.pagadoAdiestrador || false,
     // 0 es un número de clase válido (convención para "Evaluación" en
     // planes_clases) — con "||" se habría perdido y guardado null.
@@ -570,6 +571,7 @@ function dbToCita(row) {
     planId: row.plan_id,
     numeroClase: row.numero_clase,
     pagoAdiestrador: row.pago_adiestrador ?? null,
+    boletaAdiestramientoId: row.boleta_adiestramiento_id || null,
     pagadoAdiestrador: row.pagado_adiestrador || false,
   };
 }
