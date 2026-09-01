@@ -43,6 +43,16 @@ function FilaCalendarioCliente({ item, usuarios, diaVista, hoy, onToggleRealizad
         </div>
       </div>
       <span style={{ display: "inline-block", fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: bgEstado, color: colorEstado, marginBottom: 8 }}>{textoEstado}</span>
+      {/* El detalle del reparto vive detrás de "Más ▾", así que sin esta
+          marca habría que abrir fila por fila para saber cuáles están
+          compartidos — y son justamente los que cambian a quién se le
+          paga. */}
+      {compartidoCon && (
+        <span title={`Compartido con ${compartidoCon} (${porcentajeCompartido ?? 50}%)`}
+          style={{ display: "inline-block", fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#FBF3E0", color: "#8A6A1E", marginBottom: 8, marginLeft: 6 }}>
+          🤝 {porcentajeCompartido ?? 50}%
+        </span>
+      )}
       {estado === "realizado" ? (
         // Ya está marcado — los dos botones grandes de antes se sentían
         // "todavía pendiente de hacer algo" aunque ya no quedaba nada por
