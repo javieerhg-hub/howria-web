@@ -86,3 +86,27 @@ describe("estaProgramadoEnFecha y el estado del cliente", () => {
     expect(estaProgramadoEnFecha(base, miercoles, [])).toBe(true);
   });
 });
+
+describe("días puntuales", () => {
+  const miercoles = new Date(2026, 8, 2); // 2 de septiembre de 2026
+  const jueves = new Date(2026, 8, 3);
+
+  // El caso de Chascona: sin dias fijos, solo fechas que avisa el tutor.
+  it("un cliente sin días fijos aparece en su fecha puntual", () => {
+    const c = { _dbId: "x", tipoServicio: ["paseos"], diasHabituales: [], diasPuntuales: ["2026-09-02"] };
+    expect(estaProgramadoEnFecha(c, miercoles, [])).toBe(true);
+    expect(estaProgramadoEnFecha(c, jueves, [])).toBe(false);
+  });
+
+  // Un cliente puede tener las dos cosas: sus dias de siempre y un extra.
+  it("convive con los días fijos", () => {
+    const c = { _dbId: "x", tipoServicio: ["paseos"], diasHabituales: [3], diasPuntuales: ["2026-09-02"] };
+    expect(estaProgramadoEnFecha(c, miercoles, [])).toBe(true); // por la fecha suelta
+    expect(estaProgramadoEnFecha(c, jueves, [])).toBe(true); // por el día fijo
+  });
+
+  it("un pausado con fechas puntuales tampoco se programa", () => {
+    const c = { _dbId: "x", tipoServicio: ["paseos"], estadoCliente: "pausado", diasPuntuales: ["2026-09-02"] };
+    expect(estaProgramadoEnFecha(c, miercoles, [])).toBe(false);
+  });
+});

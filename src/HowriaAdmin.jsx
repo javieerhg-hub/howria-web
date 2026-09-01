@@ -145,6 +145,7 @@ function clienteToDb(c) {
     peso_kg: c.pesoKg,
     foto_url: c.fotoUrl,
     dias_habituales: c.diasHabituales || [],
+    dias_puntuales: c.diasPuntuales || [],
     hora_habitual: c.horaHabitual || null,
     plan_habitual: c.planHabitual,
     objetivos: c.objetivos,
@@ -187,6 +188,9 @@ function dbToCliente(row) {
     pesoKg: row.peso_kg,
     fotoUrl: row.foto_url,
     diasHabituales: row.dias_habituales || [],
+    // Fechas sueltas ("2026-09-02"), para los clientes que no tienen
+    // días fijos sino los que el tutor avisa mes a mes.
+    diasPuntuales: row.dias_puntuales || [],
     horaHabitual: row.hora_habitual,
     planHabitual: row.plan_habitual,
     objetivos: row.objetivos,
@@ -2123,6 +2127,10 @@ export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
   const dow = (fecha.getDay() + 6) % 7;
   if (cliente.diasHabituales?.includes(dow)) return true;
   const clave = fechaKey(fecha);
+  // Fechas sueltas marcadas a mano en la ficha. Van antes de las
+  // reprogramaciones porque son la programación original del cliente, no
+  // un movimiento de una ya existente.
+  if (cliente.diasPuntuales?.includes(clave)) return true;
   return reprogramaciones.some((r) => r.clienteId === cliente._dbId && r.fechaNueva === clave);
 }
 

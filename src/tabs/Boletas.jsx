@@ -160,9 +160,31 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
     setEmitida(null);
   }
 
+  // Fechas sueltas del cliente que caen en el mes elegido — para el que
+  // no tiene días fijos sino los que el tutor avisa mes a mes. Van como
+  // números de día porque es lo que espera el calendario de la boleta.
+  function diasPuntualesDelMes(cliente, mIdx = mesIdx, a = anio) {
+    const prefijo = `${a}-${String(mIdx + 1).padStart(2, "0")}-`;
+    return (cliente?.diasPuntuales || [])
+      .filter((k) => k.startsWith(prefijo))
+      .map((k) => Number(k.slice(-2)))
+      .sort((x, y) => x - y);
+  }
+
   function seleccionarCliente(id) {
     const c = clientes.find((x) => x.id === Number(id));
     setClienteId(Number(id));
+    // Si el cliente trabaja con fechas sueltas, esas mandan: son las que
+    // el tutor confirmó para ESTE mes, no un patrón que se repite.
+    const puntuales = diasPuntualesDelMes(c);
+    if (puntuales.length > 0) {
+      setValorPaseo(c?.valorPaseoRef ?? 0);
+      setPlanId("PERSONALIZADO");
+      setDias(puntuales);
+      setEmitida(null);
+      setSugerenciaAplicada(false);
+      return;
+    }
     const ultima = c ? ultimaBoletaDe(c.nombre) : null;
     if (ultima) {
       setValorPaseo(ultima.valorPaseo);
@@ -190,6 +212,16 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 
   function cambiarMes(mIdx) {
     setMesIdx(mIdx);
+    // Un cliente de fechas sueltas tiene otras en cada mes: al cambiar de
+    // mes hay que traer las de ese mes, no recalcular un patrón semanal.
+    const puntualesOtroMes = diasPuntualesDelMes(cliente, mIdx);
+    if (puntualesOtroMes.length > 0) {
+      setPlanId("PERSONALIZADO");
+      setDias(puntualesOtroMes);
+      setEmitida(null);
+      setSugerenciaAplicada(false);
+      return;
+    }
     if (planId === "PERSONALIZADO" && diasSemanaPersonalizado.length > 0) {
       setDias(diasSegunPlan(mIdx, anio, diasSemanaPersonalizado));
       setEmitida(null);

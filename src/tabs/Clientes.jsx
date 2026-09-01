@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Search, ArrowUpDown } from "lucide-react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, MESES, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
   comprimirFotoPerfil, tipoServicioComoAlumno, BotonConfirmable,
@@ -51,15 +51,88 @@ function resumenAdiestramiento(cliente, citasAgenda, planesClases, clasesRealiza
   };
 }
 
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], diasPuntuales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+
+// Calendario para marcar fechas sueltas de paseo. Existe para el cliente
+// que no tiene días fijos sino los que el tutor avisa cada mes: sin esto
+// quedaba sin ningún día, o sea invisible en Coordinación, imposible de
+// marcar y por lo tanto imposible de pagarle al paseador.
+//
+// Guarda claves "2026-09-02" y no números de día, porque una fecha suelta
+// pertenece a un mes concreto — a diferencia de los días habituales, que
+// se repiten todas las semanas.
+function CalendarioDiasPuntuales({ seleccionados, onToggle, mesOffset, onMes }) {
+  const base = new Date();
+  const mes = new Date(base.getFullYear(), base.getMonth() + mesOffset, 1);
+  const anio = mes.getFullYear(), mesIdx = mes.getMonth();
+  const total = new Date(anio, mesIdx + 1, 0).getDate();
+  const offset = (new Date(anio, mesIdx, 1).getDay() + 6) % 7;
+  const celdas = [...Array(offset).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
+  const claveDe = (d) => `${anio}-${String(mesIdx + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const enEsteMes = seleccionados.filter((k) => k.startsWith(`${anio}-${String(mesIdx + 1).padStart(2, "0")}`));
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+        <p style={{ ...label, marginBottom: 0 }}>Fechas sueltas (para quien no tiene días fijos)</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button type="button" onClick={() => onMes(mesOffset - 1)} aria-label="Mes anterior"
+            style={{ border: "1px solid #DCD2B4", background: "#fff", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontSize: 13 }}>←</button>
+          <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600, minWidth: 110, textAlign: "center" }}>
+            {MESES[mesIdx]} {anio}
+          </span>
+          <button type="button" onClick={() => onMes(mesOffset + 1)} aria-label="Mes siguiente"
+            style={{ border: "1px solid #DCD2B4", background: "#fff", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontSize: 13 }}>→</button>
+        </div>
+      </div>
+      <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>
+        Marca los días que te avisó el tutor. Se suman a los días de arriba, así que un cliente con días fijos no necesita tocar esto.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+        {DIAS_SEMANA.map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 10.5, color: "#9A9179", fontWeight: 600 }}>{d}</div>)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {celdas.map((d, i) => {
+          if (d === null) return <div key={`v${i}`} />;
+          const clave = claveDe(d);
+          const activo = seleccionados.includes(clave);
+          return (
+            <button key={clave} type="button" onClick={() => onToggle(clave)} aria-pressed={activo}
+              style={{ aspectRatio: "1", borderRadius: 6, cursor: "pointer", fontSize: 12.5,
+                border: activo ? `1.5px solid ${GOLD}` : "1px solid #E4DBC3",
+                background: activo ? NAVY : "#FFFFFF", color: activo ? CREAM : INK, fontWeight: activo ? 600 : 400 }}>
+              {d}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ ...hint, marginTop: 6, marginBottom: 0 }}>
+        {enEsteMes.length === 0 ? "Ninguna fecha marcada este mes." : `${enEsteMes.length} paseo(s) marcado(s) en ${MESES[mesIdx]}.`}
+      </p>
+    </div>
+  );
+}
 
 function FormularioCliente({ inicial, paseadores, entrenadores, responsables, onGuardar, onCancelar }) {
   const [form, setForm] = useState(inicial ?? FORM_VACIO);
+  // Mes que se está mirando en el calendario de fechas sueltas. 0 = el
+  // actual; los cobros del mes que viene se preparan desde el 20, así que
+  // hay que poder adelantarse.
+  const [mesPuntual, setMesPuntual] = useState(0);
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
 
   function toggleDiaHabitual(dow) {
     setForm((f) => ({ ...f, diasHabituales: f.diasHabituales.includes(dow) ? f.diasHabituales.filter((d) => d !== dow) : [...f.diasHabituales, dow].sort() }));
+  }
+  // Fechas sueltas: para el cliente que no tiene días fijos sino los que
+  // el tutor avisa mes a mes. Se guardan como "2026-09-02" para que
+  // estaProgramadoEnFecha pueda compararlas con fechaKey directo.
+  function toggleDiaPuntual(clave) {
+    setForm((f) => {
+      const actuales = f.diasPuntuales || [];
+      return { ...f, diasPuntuales: actuales.includes(clave) ? actuales.filter((d) => d !== clave) : [...actuales, clave].sort() };
+    });
   }
 
   function toggleTipoServicio(tipoId) {
@@ -138,6 +211,13 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
               </button>
             ))}
           </div>
+
+          <CalendarioDiasPuntuales
+            seleccionados={form.diasPuntuales || []}
+            onToggle={toggleDiaPuntual}
+            mesOffset={mesPuntual}
+            onMes={setMesPuntual}
+          />
 
           <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
           <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />
