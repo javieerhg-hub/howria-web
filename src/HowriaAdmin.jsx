@@ -134,7 +134,9 @@ export async function comprimirImagen(file, maxLado = 480, calidad = 0.8) {
 
 function clienteToDb(c) {
   return {
-    nombre: c.nombre,
+    // Sin trim, un "Yanina " con espacio al final no empareja con nada
+    // que se busque por nombre — y hay boletas que se emparejan así.
+    nombre: (c.nombre || "").trim(),
     perro: c.perro,
     telefono: c.telefono,
     email: c.email || null,
@@ -1362,6 +1364,20 @@ export const ESTADOS_PROSPECTO = [
 export const ORIGENES_PROSPECTO = ["Instagram", "Facebook", "WhatsApp", "Referido", "Página web", "Agenda pública", "Otro"];
 
 export const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+// Máximo de perros que una persona pasea junta en un turno. Es un límite
+// de seguridad, no una preferencia: pasado eso no se maneja bien al grupo.
+export const MAX_PERROS_POR_TURNO = 4;
+
+// Cuántos perros trae un cliente. Sale del nombre del perro y no de la
+// tabla mascotas, que está incompleta: "Billy, Taffy y Nala" son 3 perros
+// y no tenía ninguno registrado. Al ser un texto libre el conteo es una
+// lectura, no un dato — por eso donde se usa se muestra el nombre al
+// lado, para poder pillar una separación mal escrita.
+export function contarPerros(texto) {
+  if (!texto || !texto.trim()) return 1;
+  return texto.split(/\s*(?:,|&| y | e )\s*/i).map((p) => p.trim()).filter(Boolean).length || 1;
+}
+
 export const DIAS_SEMANA = ["L","M","X","J","V","S","D"]; // lun..dom
 export const DIAS_SEMANA_LARGO = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 

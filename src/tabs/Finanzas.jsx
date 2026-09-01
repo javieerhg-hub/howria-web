@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dog } from "lucide-react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, TIPOS_SERVICIO, CATEGORIAS_COSTO, grupoDeCategoria,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, CATEGORIAS_COSTO, grupoDeCategoria,
+  MAX_PERROS_POR_TURNO, contarPerros,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, FilaLista, BotonEliminar,
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
@@ -376,6 +377,49 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     [costosGeneralesFiltrados]);
   const cac = clientesNuevos.length > 0 ? gastoMarketing / clientesNuevos.length : null;
 
+  // ---- Ocupación de los turnos ----
+  //
+  // Un turno es una persona, un día de la semana y una hora: el grupo que
+  // sale a pasear junto. El límite son MAX_PERROS_POR_TURNO perros.
+  //
+  // No depende del período elegido arriba: es la foto de cómo está armada
+  // la operación hoy, no de lo que se facturó en un mes.
+  //
+  // El número que importa no es "cuántos perros más caben en total" —eso
+  // supondría que se pueden abrir turnos infinitos y no es cierto, cada
+  // turno es tiempo de una persona— sino cuánto espacio queda en los
+  // grupos QUE YA SALEN. Meter un perro ahí no cuesta un paseo más.
+  const ocupacion = useMemo(() => {
+    if (vistaPersonal) return null;
+    const activos = clientes.filter((c) =>
+      (c.tipoServicio || []).includes("paseos") &&
+      (c.estadoCliente || "activo") === "activo" &&
+      c.paseadorNombre && c.horaHabitual && (c.diasHabituales || []).length);
+    const mapa = {};
+    activos.forEach((c) => (c.diasHabituales || []).forEach((d) => {
+      const clave = `${c.paseadorNombre}|${d}|${c.horaHabitual}`;
+      mapa[clave] = mapa[clave] || { paseador: c.paseadorNombre, dia: d, hora: c.horaHabitual, perros: 0, clientes: [] };
+      mapa[clave].perros += contarPerros(c.perro);
+      mapa[clave].clientes.push(`${c.nombre} (${c.perro})`);
+    }));
+    const turnos = Object.values(mapa).sort((a, b) => b.perros - a.perros || a.dia - b.dia);
+    const perros = turnos.reduce((acc, t) => acc + t.perros, 0);
+    // Los que no tienen horario no se pueden ubicar en ningún turno, y
+    // callarlo haría parecer que la foto está completa cuando no lo está.
+    const sinHorario = clientes.filter((c) =>
+      (c.tipoServicio || []).includes("paseos") &&
+      (c.estadoCliente || "activo") === "activo" &&
+      (!c.horaHabitual || !(c.diasHabituales || []).length));
+    return {
+      turnos,
+      perros,
+      sinHorario,
+      sobreLimite: turnos.filter((t) => t.perros > MAX_PERROS_POR_TURNO),
+      espacioLibre: turnos.reduce((acc, t) => acc + Math.max(0, MAX_PERROS_POR_TURNO - t.perros), 0),
+      ocupacionMedia: turnos.length ? perros / (turnos.length * MAX_PERROS_POR_TURNO) : 0,
+    };
+  }, [vistaPersonal, clientes]);
+
   // ---- Cuánto deja cada persona de terreno ----
   //
   // Lo que cobraron sus clientes en el período contra lo que se le pagó.
@@ -581,6 +625,18 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         : "No has cargado ningún gasto fijo. Míralo al revés: hasta que cargues arriendo, seguro o software, «Queda para Howria» son ingresos menos sueldos, no tu utilidad real.",
     };
   };
+
+  const detalleOcupacion = () => ({
+    titulo: "Ocupación de los turnos",
+    subtitulo: `Un turno es una persona, un día y una hora: el grupo que sale junto. El máximo son ${MAX_PERROS_POR_TURNO} perros. Ordenados del más lleno al más vacío.`,
+    filas: (ocupacion?.turnos || []).map((t) => ({
+      etiqueta: `${t.paseador} · ${DIAS_SEMANA_LARGO[t.dia]} ${t.hora}`,
+      sub: t.clientes.join(" · "),
+      valor: `${t.perros}/${MAX_PERROS_POR_TURNO}`,
+      color: t.perros > MAX_PERROS_POR_TURNO ? RUST : t.perros === MAX_PERROS_POR_TURNO ? "#2F6A46" : "#8A7E5C",
+    })),
+    vacio: "Ningún cliente de paseos tiene días y hora habitual definidos.",
+  });
 
   const detalleClientes = () => ({
     titulo: `Clientes ${etiquetaPeriodo}`,
@@ -1014,6 +1070,33 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               </p>
             </div>
           </div>
+
+          {ocupacion && ocupacion.turnos.length > 0 && (
+            <>
+              <p style={{ ...label, marginBottom: 8 }}>Capacidad de las rutas (hoy, no del período)</p>
+              <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 10 }}>
+                <div {...abre(detalleOcupacion)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Qué tan llenos van</p>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{Math.round(ocupacion.ocupacionMedia * 100)}%</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{ocupacion.perros} perro(s) en {ocupacion.turnos.length} turno(s) de hasta {MAX_PERROS_POR_TURNO}</p>
+                </div>
+                <div {...abre(detalleOcupacion)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Espacio sin salir a pasear más</p>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{ocupacion.espacioLibre} perro(s)</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Caben en grupos que ya salen, sin sumar un paseo</p>
+                </div>
+                <div {...abre(detalleOcupacion)} style={{ background: ocupacion.sobreLimite.length > 0 ? "#F1DCD2" : "#FFFDF7", border: `1px solid ${ocupacion.sobreLimite.length > 0 ? "#E0B9A5" : "#E4DBC3"}`, borderRadius: 10, padding: 16, cursor: "pointer" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Turnos pasados del límite</p>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: ocupacion.sobreLimite.length > 0 ? RUST : "#2F6A46", fontFamily: "Georgia, serif" }}>{ocupacion.sobreLimite.length}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{ocupacion.sobreLimite.length > 0 ? "Más de " + MAX_PERROS_POR_TURNO + " perros juntos" : "Ninguno sobre " + MAX_PERROS_POR_TURNO + " perros"}</p>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 22px" }}>
+                Los perros se cuentan desde el nombre escrito en la ficha, así que "Billy, Taffy y Nala" son 3.
+                {ocupacion.sinHorario.length > 0 && ` ${ocupacion.sinHorario.length} cliente(s) de paseos no tienen días u hora habitual y quedan fuera de esta cuenta: ${ocupacion.sinHorario.map((c) => c.nombre.trim()).join(", ")}.`}
+              </p>
+            </>
+          )}
 
           {margenPorTrabajador.length > 0 && (
             <>
