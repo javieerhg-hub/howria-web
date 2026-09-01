@@ -402,6 +402,173 @@ export function dibujarBoletaAdiestramiento(canvas, emitida, logoImg, huellaImg)
 // Genera el PDF de una boleta (paseo o adiestramiento) al vuelo, sobre un
 // canvas descartable — no hay archivos guardados en ningún lado, se arma
 // desde los datos de la boleta cada vez que se pide.
+// ---------- Liquidación de pago de un paseador -----------------------
+//
+// El comprobante que se le entrega al paseador cuando se le paga: qué
+// perros paseó, cuántas veces cada uno, a qué tarifa, y cuánto suma.
+// Existe para que el pago se pueda revisar y entender sin tener que
+// creerle a un número suelto.
+//
+// Los datos salen de los mismos helpers que alimentan "Detalle del mes"
+// en pantalla (filasDetalleMes / detalleMesCliente en _compartido.jsx),
+// así que el papel y la pantalla no pueden discrepar.
+export function dibujarLiquidacionPaseador(canvas, datos, logoImg, huellaImg) {
+  const { paseador, etiquetaPeriodo, filas, ajuste, ajusteMotivo, total } = datos;
+  const ctx = canvas.getContext("2d");
+  const W = 620;
+  const M = 34;
+  const ALTO_FILA = 30;
+  // Crece con la cantidad de perros; el resto del papel es fijo.
+  const H = 360 + filas.length * ALTO_FILA + (ajuste ? 34 : 0);
+  canvas.width = W;
+  canvas.height = H;
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, W, H);
+
+  if (huellaImg) {
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    const hW = 20, hH = 20 * (huellaImg.height / huellaImg.width);
+    let i = 0;
+    for (let wy = 170; wy < H - 40; wy += 66) {
+      const izquierda = i % 2 === 0;
+      ctx.save();
+      ctx.translate(izquierda ? 16 : W - 16, wy);
+      ctx.rotate(izquierda ? -0.3 : 0.3);
+      ctx.drawImage(huellaImg, -hW / 2, -hH / 2, hW, hH);
+      ctx.restore();
+      i++;
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = NAVY_LOGO;
+  ctx.fillRect(0, 0, W, 120);
+  if (logoImg) {
+    const logoH = 84, logoW = logoImg.width * (logoH / logoImg.height);
+    ctx.drawImage(logoImg, M, 16, logoW, logoH);
+  }
+  ctx.fillStyle = CREAM;
+  ctx.textAlign = "right";
+  ctx.font = "600 18px 'Fraunces', Georgia";
+  ctx.fillText("Liquidación de paseos", W - M, 52);
+  ctx.font = "12.5px 'Inter', Helvetica";
+  ctx.fillText(etiquetaPeriodo, W - M, 74);
+
+  let y = 156;
+  ctx.textAlign = "left";
+  ctx.fillStyle = INK;
+  ctx.font = "700 19px 'Fraunces', Georgia";
+  ctx.fillText(paseador, M, y);
+  ctx.font = "12.5px 'Inter', Helvetica";
+  ctx.fillStyle = "#8A7E5C";
+  ctx.fillText(`Emitida el ${new Date().toLocaleDateString("es-CL")}`, M, y + 20);
+
+  y += 46;
+  ctx.fillStyle = CREAM_SOFT;
+  ctx.fillRect(M, y, W - M * 2, 32);
+  ctx.fillStyle = "#6B6248";
+  ctx.font = "700 11.5px 'Inter', Helvetica";
+  ctx.fillText("PERRO", M + 12, y + 20);
+  ctx.textAlign = "center";
+  ctx.fillText("PASEOS", M + 300, y + 20);
+  ctx.textAlign = "right";
+  ctx.fillText("POR PASEO", W - M - 130, y + 20);
+  ctx.fillText("SUBTOTAL", W - M - 12, y + 20);
+  ctx.textAlign = "left";
+  y += 32;
+
+  filas.forEach((f, idx) => {
+    const fy = y + ALTO_FILA * idx;
+    ctx.strokeStyle = "#EFEAD9";
+    ctx.beginPath(); ctx.moveTo(M, fy); ctx.lineTo(W - M, fy); ctx.stroke();
+    const base = fy + 20;
+
+    ctx.fillStyle = INK;
+    ctx.font = "600 13px 'Inter', Helvetica";
+    // El nombre del perro es lo que el paseador reconoce; el del tutor va
+    // chico al lado, para desambiguar cuando hay perros con el mismo nombre.
+    const texto = f.compartido ? `${f.perro} (compartido)` : f.perro;
+    wrapTextInline(ctx, texto, M + 12, base, 190);
+    ctx.fillStyle = "#8A7E5C";
+    ctx.font = "11px 'Inter', Helvetica";
+    wrapTextInline(ctx, f.cliente, M + 12, base + 12, 190);
+
+    ctx.fillStyle = INK;
+    ctx.font = "600 13px 'Inter', Helvetica";
+    ctx.textAlign = "center";
+    ctx.fillText(String(f.realizados), M + 300, base);
+    ctx.textAlign = "right";
+    ctx.font = "13px 'Inter', Helvetica";
+    ctx.fillText(fmtCLP(f.tarifa), W - M - 130, base);
+    ctx.font = "700 13.5px 'Inter', Helvetica";
+    ctx.fillText(fmtCLP(f.monto), W - M - 12, base);
+    ctx.textAlign = "left";
+  });
+  y += ALTO_FILA * filas.length + 6;
+
+  ctx.strokeStyle = "#DCD2B4";
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
+  y += 24;
+
+  const totalPaseos = filas.reduce((acc, f) => acc + f.realizados, 0);
+  ctx.fillStyle = "#6B6248";
+  ctx.font = "13px 'Inter', Helvetica";
+  ctx.fillText(`${totalPaseos} paseo(s) en total`, M + 12, y);
+
+  if (ajuste) {
+    y += 26;
+    ctx.fillStyle = ajuste < 0 ? RUST : "#2F6A46";
+    ctx.font = "600 13px 'Inter', Helvetica";
+    ctx.fillText(`Ajuste: ${ajusteMotivo || "sin motivo anotado"}`, M + 12, y);
+    ctx.textAlign = "right";
+    ctx.fillText(`${ajuste > 0 ? "+" : ""}${fmtCLP(ajuste)}`, W - M - 12, y);
+    ctx.textAlign = "left";
+  }
+
+  y += 22;
+  const altoTotal = 62;
+  ctx.fillStyle = NAVY_LOGO;
+  ctx.fillRect(M, y, W - M * 2, altoTotal);
+  ctx.fillStyle = CREAM;
+  ctx.font = "600 13.5px 'Inter', Helvetica";
+  ctx.fillText("TOTAL A RECIBIR", M + 16, y + altoTotal - 36);
+  ctx.font = "700 26px 'Fraunces', Georgia";
+  ctx.textAlign = "right";
+  ctx.fillText(fmtCLP(total), W - M - 16, y + altoTotal - 20);
+  ctx.textAlign = "left";
+  y += altoTotal + 26;
+
+  ctx.fillStyle = "#B0A587";
+  ctx.font = "11.5px 'Inter', Helvetica";
+  ctx.textAlign = "center";
+  ctx.fillText("Gracias por tu trabajo — Howria", W / 2, Math.min(y, H - 16));
+  ctx.textAlign = "left";
+}
+
+export async function descargarLiquidacionPaseador(datos) {
+  const logoImg = new Image();
+  const huellaImg = new Image();
+  await Promise.all([
+    new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = LOGO_B64; }),
+    new Promise((resolve) => { huellaImg.onload = resolve; huellaImg.onerror = resolve; huellaImg.src = HUELLA_B64; }),
+  ]);
+  if (document.fonts?.ready) {
+    await Promise.all(["700 19px Fraunces", "600 18px Fraunces", "700 26px Fraunces", "13px Inter", "600 13px Inter"]
+      .map((f) => document.fonts.load(f))).then(() => document.fonts.ready).catch(() => {});
+  }
+  const canvas = document.createElement("canvas");
+  dibujarLiquidacionPaseador(canvas, datos, logoImg, huellaImg);
+  const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
+  doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+  const link = document.createElement("a");
+  link.download = `Liquidacion-${datos.paseador.replace(/\s+/g, "-")}-${datos.etiquetaPeriodo.replace(/\s+/g, "-")}.pdf`;
+  link.href = URL.createObjectURL(doc.output("blob"));
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 export async function descargarPdfBoleta(boleta, tipo, sufijo = "") {
   const logoImg = new Image();
   const huellaImg = new Image();

@@ -6,12 +6,13 @@ import { Banknote } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, tarjeta, sectionTitle, hint, label, input,
   botonPrincipal, botonSecundario, SkeletonLista, FilaLista, BotonEliminar, BotonConfirmable,
-  fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo,
+  fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo, showToast,
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoCompartido } from "../lib/reparto.js";
 import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
 import { CeldaDiaMes, filasDetalleMes, detalleMesCliente } from "./_compartido.jsx";
+import { descargarLiquidacionPaseador } from "./_compartido_pdf.jsx";
 
 
 // El ajuste vive en un modal, no inline en la tabla/tarjeta — no hay
@@ -104,6 +105,7 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
 
 export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
   const [periodo, setPeriodo] = useState("semana");
+  const [generandoPdf, setGenerandoPdf] = useState(null);
   const [periodoOffset, setPeriodoOffset] = useState(0);
   const hoy = new Date();
   const fechaRef = useMemo(() => {
@@ -305,6 +307,54 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     return pagosRegistrados.find((p) => p.paseador === paseador && p.periodo === periodo && p.etiqueta === etiqueta && !p.deshechoEn);
   }
 
+  // Comprobante en PDF de lo que se le paga a un paseador: qué perros
+  // paseó, cuántas veces cada uno y a qué tarifa. Sale de los MISMOS
+  // helpers que alimentan "Detalle del mes" en pantalla, así que el papel
+  // y la pantalla no pueden discrepar.
+  //
+  // Va siempre por MES COMPLETO, aunque arriba se esté mirando una semana:
+  // una liquidación de media semana no le sirve a nadie, y el PDF lleva el
+  // mes escrito en el encabezado para que no quede duda de qué cubre.
+  // Por lo mismo el total se calcula sumando las filas del PDF y no se
+  // toma el de la tabla: así lo que se ve sumado es exactamente el total
+  // que aparece abajo.
+  async function bajarLiquidacion(fila) {
+    if (generandoPdf) return;
+    setGenerandoPdf(fila.paseador);
+    try {
+      const diasEnMes = new Date(anioFactura, mesFactura + 1, 0).getDate();
+      const hoyMedianoche = new Date();
+      hoyMedianoche.setHours(0, 0, 0, 0);
+      const filas = filasDetalleMes(clientes, fila.paseador, registroPaseos, anioFactura, mesFactura, diasEnMes)
+        .map(({ cliente, compartido }) => {
+          const d = detalleMesCliente({ cliente, compartido, paseador: fila.paseador, registroPaseos, anio: anioFactura, mes: mesFactura, diasEnMes, hoyMedianoche });
+          return { perro: cliente.perro || cliente.nombre, cliente: cliente.nombre, compartido, realizados: d.realizados, tarifa: d.tarifa, monto: d.monto };
+        })
+        // Un cliente sin paseos hechos ese mes solo agrega ruido a un
+        // comprobante que el paseador tiene que poder leer de un vistazo.
+        .filter((f) => f.realizados > 0)
+        .sort((a, b) => b.monto - a.monto);
+
+      if (filas.length === 0) {
+        showToast(`${fila.paseador} no tiene paseos marcados en ${MESES[mesFactura]}.`);
+        return;
+      }
+      const totalFilas = filas.reduce((acc, f) => acc + f.monto, 0);
+      await descargarLiquidacionPaseador({
+        paseador: fila.paseador,
+        etiquetaPeriodo: `${MESES[mesFactura]} ${anioFactura}`,
+        filas,
+        ajuste: fila.ajuste || 0,
+        ajusteMotivo: fila.ajusteMotivo || "",
+        total: totalFilas + (fila.ajuste || 0),
+      });
+    } catch {
+      showToast("No se pudo generar la liquidación.");
+    } finally {
+      setGenerandoPdf(null);
+    }
+  }
+
   function marcarPagado(fila) {
     setPagosRegistrados((prev) => [...prev, {
       id: Date.now() + Math.random(),
@@ -403,6 +453,11 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                   <td style={{ padding: "10px", textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                       <button onClick={() => setDetalleAbierto(r.paseador)} style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12 }}>Detalle del mes</button>
+                      <button onClick={() => bajarLiquidacion(r)} disabled={generandoPdf === r.paseador}
+                        title="Comprobante en PDF para entregarle al paseador"
+                        style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12, opacity: generandoPdf === r.paseador ? 0.5 : 1 }}>
+                        {generandoPdf === r.paseador ? "Generando..." : "Liquidación PDF"}
+                      </button>
                       <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "7px 12px", fontSize: 12 }}>Descargar</button>
                       {pagado ? (
                         <>
@@ -460,6 +515,10 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button onClick={() => setDetalleAbierto(r.paseador)} style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5 }}>Detalle del mes</button>
+                <button onClick={() => bajarLiquidacion(r)} disabled={generandoPdf === r.paseador}
+                  style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5, opacity: generandoPdf === r.paseador ? 0.5 : 1 }}>
+                  {generandoPdf === r.paseador ? "Generando..." : "Liquidación PDF"}
+                </button>
                 <button onClick={() => descargarResumen(r)} style={{ ...botonSecundario, padding: "8px 14px", fontSize: 12.5 }}>Descargar</button>
                 {pagado ? (
                   <>
