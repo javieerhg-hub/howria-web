@@ -1,6 +1,6 @@
 // Pestaña Finanzas — ingresos, gráfico y desgloses por período. Ver
 // src/HowriaAdmin.jsx (React.lazy) por la lista completa de pestañas.
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dog } from "lucide-react";
 import {
@@ -11,6 +11,77 @@ import {
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable, periodoDeBoleta } from "../lib/calculosBoletas.js";
 import { resumenPaseadorEnRango } from "../lib/pagos.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
+
+// Ventana con el respaldo de una cifra. Cada tarjeta de Finanzas puede
+// abrir una: el número solo dice cuánto, y para confiar en él hay que
+// poder ver de dónde sale sin salir de la pantalla.
+//
+// Acepta dos formas. `filas` es una lista (las boletas que suman, las
+// personas a las que se debe). `formula` es una resta paso a paso, para
+// las cifras que no son una suma de cosas sino una cuenta — "queda para
+// Howria" o el margen.
+function ModalDetalleFinanzas({ detalle, onCerrar }) {
+  useEffect(() => {
+    function alEscape(e) { if (e.key === "Escape") onCerrar(); }
+    window.addEventListener("keydown", alEscape);
+    return () => window.removeEventListener("keydown", alEscape);
+  }, [onCerrar]);
+  if (!detalle) return null;
+  const { titulo, subtitulo, total, filas = [], formula = [], vacio } = detalle;
+
+  return (
+    <div onClick={onCerrar} className="howria-modal-fondo" style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 320, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={titulo} className="howria-modal-caja"
+        style={{ background: "#FFFFFF", borderRadius: 14, padding: 24, maxWidth: 520, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: "0 0 2px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>{titulo}</h3>
+            {subtitulo && <p style={{ margin: 0, fontSize: 12.5, color: "#8A7E5C" }}>{subtitulo}</p>}
+          </div>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
+        </div>
+
+        {formula.length > 0 && (
+          <div style={{ margin: "18px 0 0", display: "grid", gap: 8 }}>
+            {formula.map((f, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, paddingBottom: 8, borderBottom: f.esTotal ? "none" : "1px solid #EDE4CE" }}>
+                <span style={{ fontSize: f.esTotal ? 14 : 13, color: f.esTotal ? NAVY : "#5C5442", fontWeight: f.esTotal ? 700 : 400 }}>
+                  {f.signo ? `${f.signo} ` : ""}{f.etiqueta}
+                </span>
+                <span style={{ fontSize: f.esTotal ? 15 : 13.5, fontWeight: f.esTotal ? 700 : 600, color: f.color || NAVY, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{f.valor}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {filas.length > 0 && (
+          <div style={{ margin: "18px 0 0", display: "grid", gap: 6 }}>
+            {filas.map((f, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid #EDE4CE" }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13.5, color: NAVY, fontWeight: 600 }}>{f.etiqueta}</p>
+                  {f.sub && <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>{f.sub}</p>}
+                </div>
+                {f.valor != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: f.color || NAVY, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{f.valor}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {filas.length === 0 && formula.length === 0 && (
+          <p style={{ margin: "18px 0 0", fontSize: 13.5, color: "#8A7E5C" }}>{vacio || "No hay nada que mostrar en este período."}</p>
+        )}
+
+        {total != null && filas.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1.5px solid ${NAVY}`, display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>Total</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: NAVY, fontVariantNumeric: "tabular-nums" }}>{total}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function variacion(actual, anterior) {
   if (anterior === 0) return actual > 0 ? 100 : 0;
@@ -39,6 +110,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const [montoCosto, setMontoCosto] = useState("");
   const [fechaCosto, setFechaCosto] = useState(() => fechaKey(new Date()));
   const [categoriaCosto, setCategoriaCosto] = useState("insumos");
+  const [detalle, setDetalle] = useState(null);
 
   function agregarCosto() {
     if (!descCosto.trim() || !Number(montoCosto)) return;
@@ -357,16 +429,170 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // los paseos hechos menos lo ya registrado como pagado. Es una
   // aproximación de paseos (el adiestramiento se acuerda caso a caso y
   // vive en Pago adiestramiento), y por eso nunca baja de cero.
-  const porPagarTrabajadores = useMemo(() => {
-    if (vistaPersonal) return 0;
+  // Devuelve el total Y el desglose por persona: el total solo dice
+  // cuánto, y para actuar hace falta saber a quién.
+  const deudaTrabajadores = useMemo(() => {
+    if (vistaPersonal) return { total: 0, filas: [] };
     const hoyLocal = new Date();
     const fin = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
     const paseadores = [...new Set(clientesProp.map((c) => c.paseadorNombre).filter(Boolean))];
-    const trabajado = paseadores.reduce((acc, p) => acc + resumenPaseadorEnRango({
-      clientes: clientesProp, registroPaseos, reprogramaciones, paseador: p, desde: actualDesde, hasta: fin,
-    }).totales.monto, 0);
-    return Math.max(trabajado - costosPeriodo, 0);
-  }, [vistaPersonal, clientesProp, registroPaseos, reprogramaciones, actualDesde, actualHasta, costosPeriodo]);
+    const filas = paseadores.map((p) => {
+      const trabajado = resumenPaseadorEnRango({
+        clientes: clientesProp, registroPaseos, reprogramaciones, paseador: p, desde: actualDesde, hasta: fin,
+      }).totales;
+      const pagado = pagosRegistrados
+        .filter((x) => !x.deshechoEn && x.paseador === p)
+        .filter((x) => {
+          const fISO = x.periodoDesdeISO || x.fechaPagoISO;
+          if (!fISO) return false;
+          const f = new Date(fISO.length <= 10 ? `${fISO}T00:00:00` : fISO);
+          return f >= actualDesde && (!actualHasta || f <= actualHasta);
+        })
+        .reduce((acc, x) => acc + Number(x.monto || 0), 0);
+      return { nombre: p, trabajado: trabajado.monto, paseos: trabajado.realizados, pagado, debe: Math.max(trabajado.monto - pagado, 0) };
+    }).filter((f) => f.debe > 0).sort((a, b) => b.debe - a.debe);
+    return { total: filas.reduce((acc, f) => acc + f.debe, 0), filas };
+  }, [vistaPersonal, clientesProp, registroPaseos, reprogramaciones, actualDesde, actualHasta, pagosRegistrados]);
+  const porPagarTrabajadores = deudaTrabajadores.total;
+
+  // ---- El respaldo de cada cifra ----
+  //
+  // Se arman al hacer click y no de entrada: son listas que casi siempre
+  // nadie mira, y calcularlas todas en cada render sería pagar por algo
+  // que no se usa.
+  const fechaCorta = (iso) => new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+  const filaDeBoleta = (b) => ({
+    etiqueta: b.cliente || b.clienteNombre || "(sin cliente)",
+    sub: `${b._tipo === "adiestramiento" ? "Adiestramiento" : "Paseos"} · ${b._periodo ? fechaCorta(b._periodo) : "sin fecha"}`,
+    valor: fmtCLP(b.total),
+  });
+
+  // Hacer una tarjeta clicable sin convertirla en <button>: conserva el
+  // estilo que ya tenía y sigue funcionando con teclado.
+  const abre = (armar) => ({
+    role: "button",
+    tabIndex: 0,
+    title: "Ver de dónde sale este número",
+    onClick: () => setDetalle(armar()),
+    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetalle(armar()); } },
+  });
+
+  const detalleEntro = () => ({
+    titulo: `Entró ${etiquetaPeriodo}`,
+    subtitulo: "Boletas que el cliente ya pagó. Una boleta de paseos cuenta en el mes que cubre, no en el que se emitió.",
+    filas: cobradasPeriodo.map(filaDeBoleta),
+    total: fmtCLP(entro),
+    vacio: "Ninguna boleta de este período está marcada como pagada todavía.",
+  });
+
+  const detalleSalio = () => {
+    const pagos = pagosRegistrados
+      .filter((p) => !p.deshechoEn)
+      .filter((p) => {
+        const fISO = p.periodoDesdeISO || p.fechaPagoISO;
+        if (!fISO) return false;
+        const f = new Date(fISO.length <= 10 ? `${fISO}T00:00:00` : fISO);
+        return f >= actualDesde && (!actualHasta || f <= actualHasta);
+      })
+      .map((p) => ({ etiqueta: p.paseador, sub: `Pago de trabajador · ${p.etiqueta || p.periodo || ""}`, valor: fmtCLP(p.monto) }));
+    const responsables = filtradas
+      .filter((b) => b._tipo === "adiestramiento" && b.pagadoAResponsable)
+      .map((b) => ({ etiqueta: b.cliente || b.clienteNombre, sub: "Parte del responsable en adiestramiento", valor: fmtCLP(montoParaResponsable(b)) }));
+    const otros = costosGeneralesFiltrados.map((c) => ({
+      etiqueta: c.descripcion,
+      sub: `${CATEGORIAS_COSTO.find((x) => x.id === c.categoria)?.nombre || "Otros"} · ${grupoDeCategoria(c.categoria) === "directo" ? "costo directo" : "gasto fijo"}`,
+      valor: fmtCLP(c.monto),
+    }));
+    return {
+      titulo: `Salió ${etiquetaPeriodo}`,
+      subtitulo: "Solo pagos ya registrados en la app. Lo que todavía se debe está en «Debes a trabajadores».",
+      filas: [...pagos, ...responsables, ...otros],
+      total: fmtCLP(salio),
+      vacio: "Todavía no hay ningún pago ni costo registrado en este período.",
+    };
+  };
+
+  const detalleQueda = () => ({
+    titulo: "Queda para Howria",
+    subtitulo: `La cuenta completa de ${tituloPeriodo}.`,
+    formula: [
+      { etiqueta: `Entró (${cobradasPeriodo.length} boleta(s) pagada(s))`, valor: fmtCLP(entro) },
+      { signo: "−", etiqueta: "Sueldos de terreno ya pagados", valor: fmtCLP(costosPeriodo), color: RUST },
+      { signo: "−", etiqueta: "Parte de responsables en adiestramiento", valor: fmtCLP(costoResponsablesAdiestramiento), color: RUST },
+      { signo: "−", etiqueta: "Otros costos del negocio", valor: fmtCLP(costosGeneralesPeriodo), color: RUST },
+      { etiqueta: "Queda para Howria", valor: fmtCLP(queda), esTotal: true, color: queda >= 0 ? "#2F6A46" : RUST },
+    ],
+  });
+
+  const detalleLista = (titulo, subtitulo, lista, totalNum, vacio) => () => ({
+    titulo, subtitulo, filas: lista.map(filaDeBoleta), total: fmtCLP(totalNum), vacio,
+  });
+
+  const detalleDeuda = () => ({
+    titulo: "Debes a trabajadores",
+    subtitulo: "Paseos hechos en el período que todavía no registras como pagados. Es una estimación de paseos: el adiestramiento se acuerda caso a caso.",
+    filas: deudaTrabajadores.filas.map((f) => ({
+      etiqueta: f.nombre,
+      sub: `${f.paseos} paseo(s) hechos por ${fmtCLP(f.trabajado)} · ya pagado ${fmtCLP(f.pagado)}`,
+      valor: fmtCLP(f.debe),
+      color: RUST,
+    })),
+    total: fmtCLP(porPagarTrabajadores),
+    vacio: "No hay paseos pendientes de pago en este período.",
+  });
+
+  const detalleMargen = () => ({
+    titulo: "Margen bruto",
+    subtitulo: "Qué parte de lo cobrado sobrevive al costo de operar. No incluye los gastos fijos: esos van después, en «Queda para Howria».",
+    formula: [
+      { etiqueta: "Cobrado", valor: fmtCLP(entro) },
+      { signo: "−", etiqueta: "Sueldos de terreno", valor: fmtCLP(costosPeriodo + costoResponsablesAdiestramiento), color: RUST },
+      { signo: "−", etiqueta: "Insumos y transporte", valor: fmtCLP(costosDirectosSueltos), color: RUST },
+      { etiqueta: "Margen bruto", valor: margenBruto == null ? "—" : `${fmtCLP(entro - costoDirecto)} (${Math.round(margenBruto * 100)}%)`, esTotal: true, color: "#2F6A46" },
+    ],
+  });
+
+  const detalleCostos = (grupo) => () => {
+    const items = costosGeneralesFiltrados.filter((c) => (grupoDeCategoria(c.categoria) === "directo") === (grupo === "directo"));
+    const sueldos = grupo === "directo"
+      ? [{ etiqueta: "Sueldos de terreno", sub: "Pagos ya registrados a paseadores y responsables", valor: fmtCLP(costosPeriodo + costoResponsablesAdiestramiento) }]
+      : [];
+    return {
+      titulo: grupo === "directo" ? "Costo directo" : "Gastos fijos",
+      subtitulo: grupo === "directo"
+        ? "Lo que sube cuando atiendes más perros."
+        : "Lo que se paga igual aunque no salga ningún paseo.",
+      filas: [...sueldos, ...items.map((c) => ({
+        etiqueta: c.descripcion,
+        sub: `${CATEGORIAS_COSTO.find((x) => x.id === c.categoria)?.nombre || "Otros"} · ${new Date(c.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}`,
+        valor: fmtCLP(c.monto),
+      }))],
+      total: fmtCLP(grupo === "directo" ? costoDirecto : costosFijos),
+      vacio: grupo === "directo"
+        ? "Sin sueldos ni insumos cargados en este período."
+        : "No has cargado ningún gasto fijo. Míralo al revés: hasta que cargues arriendo, seguro o software, «Queda para Howria» son ingresos menos sueldos, no tu utilidad real.",
+    };
+  };
+
+  const detalleClientes = () => ({
+    titulo: `Clientes ${etiquetaPeriodo}`,
+    subtitulo: "Quiénes entraron y quiénes se fueron en el período.",
+    filas: [
+      ...clientesNuevos.map((c) => ({ etiqueta: c.nombre, sub: `Entró el ${fechaCorta(c.creadoEn)}${c.perro ? ` · 🐾 ${c.perro}` : ""}`, valor: "nuevo", color: "#2F6A46" })),
+      ...clientesDeBaja.map((c) => ({ etiqueta: c.nombre, sub: `Se fue el ${fechaCorta(c.bajaEn)}${c.perro ? ` · 🐾 ${c.perro}` : ""}`, valor: "baja", color: RUST })),
+    ],
+    vacio: "Nadie entró ni se fue en este período.",
+  });
+
+  const detalleCac = () => ({
+    titulo: "Costo por cliente nuevo",
+    subtitulo: "Cuánto costó en marketing traer a cada cliente que entró.",
+    formula: [
+      { etiqueta: "Gasto en marketing del período", valor: fmtCLP(gastoMarketing) },
+      { signo: "÷", etiqueta: `Clientes que entraron`, valor: String(clientesNuevos.length) },
+      { etiqueta: "Costo por cliente nuevo", valor: cac == null ? "—" : fmtCLP(cac), esTotal: true },
+    ],
+  });
 
   const porCliente = useMemo(() => {
     const mapa = {};
@@ -677,7 +903,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       )}
 
       <div className="howria-finanzas-caja" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 12 }}>
-            <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
+            <div {...abre(detalleEntro)} style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18, cursor: "pointer" }}>
               <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Entró {etiquetaPeriodo}</p>
               <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(entro)}</p>
               <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#9BAAB8" }}>{cobradasPeriodo.length} boleta(s) pagada(s)</p>
@@ -687,7 +913,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 </p>
               )}
             </div>
-            <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
+            <div {...abre(detalleSalio)} style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, cursor: "pointer" }}>
               <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Salió {etiquetaPeriodo}</p>
               <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(salio)}</p>
               <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
@@ -699,14 +925,14 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 </button>
               )}
             </div>
-            <div style={{ background: queda >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18 }}>
+            <div {...abre(detalleQueda)} style={{ background: queda >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18, cursor: "pointer" }}>
               <p style={{ margin: "0 0 6px", fontSize: 12, color: queda >= 0 ? "#2F6A46" : RUST, textTransform: "uppercase", letterSpacing: 0.5 }}>Queda para Howria</p>
               <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: queda >= 0 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(queda)}</p>
               <p style={{ margin: "6px 0 0", fontSize: 11.5, color: queda >= 0 ? "#2F6A46" : RUST }}>Lo que entró menos lo que salió</p>
             </div>
           </div>
           <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 20px" }}>
-            Solo cuenta plata que se movió de verdad: boletas ya pagadas por el cliente, y pagos ya registrados en la app. Lo emitido sin cobrar y el trabajo sin pagar van abajo.
+            Solo cuenta plata que se movió de verdad: boletas ya pagadas por el cliente, y pagos ya registrados en la app. Lo emitido sin cobrar y el trabajo sin pagar van abajo. Toca cualquier recuadro para ver de dónde sale el número.
           </p>
 
           <p style={{ ...label, marginBottom: 8 }}>En camino {etiquetaPeriodo}</p>
@@ -716,18 +942,18 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 sin enviar, y leído rápido parecen contradecirse: el aviso
                 es de todos los borradores y esta tarjeta solo del período. */}
             {borradoresPeriodo.length > 0 && (
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleLista("Por emitir", "Boletas en borrador del período: trabajo hecho que todavía no le cobraste a nadie.", borradoresPeriodo, porEmitir, "No hay borradores de este período."))} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Por emitir {etiquetaPeriodo}</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porEmitir)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{borradoresPeriodo.length} boleta(s) en borrador</p>
             </div>
             )}
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleLista("Te deben", "Boletas ya emitidas que el cliente no ha pagado.", porCobrarPeriodo, porCobrar, "Nadie te debe boletas de este período."))} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Te deben</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porCobrar)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{porCobrarPeriodo.length} boleta(s) emitida(s) sin pagar</p>
             </div>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleDeuda)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Debes a trabajadores</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(porPagarTrabajadores)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Paseos hechos que aún no registras como pagados</p>
@@ -736,7 +962,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
           <p style={{ ...label, marginBottom: 8 }}>Rentabilidad {etiquetaPeriodo}</p>
           <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 10 }}>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleMargen)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Margen bruto</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: margenBruto == null ? "#8A7E5C" : margenBruto >= 0.3 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>
                 {margenBruto == null ? "—" : `${Math.round(margenBruto * 100)}%`}
@@ -745,12 +971,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 {margenBruto == null ? "Sin nada cobrado todavía" : `Queda ${fmtCLP(entro - costoDirecto)} después del costo de operar`}
               </p>
             </div>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleCostos("directo"))} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Costo directo</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costoDirecto)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Sueldos de terreno {fmtCLP(costosPeriodo + costoResponsablesAdiestramiento)} + insumos y transporte {fmtCLP(costosDirectosSueltos)}</p>
             </div>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleCostos("fijo"))} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Gastos fijos</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosFijos)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Se pagan igual aunque no salga ningún paseo</p>
@@ -762,7 +988,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
           <p style={{ ...label, marginBottom: 8 }}>Clientes {etiquetaPeriodo}</p>
           <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 26 }}>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleClientes)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Entraron / se fueron</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>+{clientesNuevos.length} / −{clientesDeBaja.length}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{activosHoy} activos hoy</p>
@@ -772,7 +998,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: churn > 5 ? RUST : "#2F6A46", fontFamily: "Georgia, serif" }}>{churn.toFixed(1)}%</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Solo cuenta las bajas marcadas de ahora en adelante</p>
             </div>
-            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+            <div {...abre(detalleCac)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Costo por cliente nuevo</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{cac == null ? "—" : fmtCLP(cac)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
@@ -804,6 +1030,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           )}
         </>
       )}
+
+      <ModalDetalleFinanzas detalle={detalle} onCerrar={() => setDetalle(null)} />
 
       <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 2}, 1fr)`, gap: 14, marginBottom: 26 }}>
         {vistaPersonal && (
