@@ -487,7 +487,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
   const detalleEntro = () => ({
     titulo: `Entró ${etiquetaPeriodo}`,
-    subtitulo: "Boletas que el cliente ya pagó. El ciclo se cuenta por la fecha de emisión: cierra el día 5, y lo emitido después ya es del ciclo siguiente.",
+    subtitulo: "Boletas que el cliente ya pagó, agrupadas por el mes que cubren — el que se elige al emitirlas, no el día en que se emitieron.",
     filas: cobradasPeriodo.map(filaDeBoleta),
     total: fmtCLP(entro),
     vacio: "Ninguna boleta de este período está marcada como pagada todavía.",
@@ -651,17 +651,6 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   }, [clientes, mesActualIdx, anioActualN]);
   const facturadoEsteMes = todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === mesActualIdx && b._periodo.getFullYear() === anioActualN).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
-
-  // Qué boletas entran en el ciclo que se está mirando. Se muestra
-  // porque el ciclo no coincide con el mes calendario y sin decirlo nadie
-  // adivina por qué una boleta del 31 de agosto aparece en septiembre.
-  const ventanaCiclo = useMemo(() => {
-    if (periodo !== "mes") return null;
-    const desde = new Date(actualDesde.getFullYear(), actualDesde.getMonth() - 1, 6);
-    const hasta = new Date(actualDesde.getFullYear(), actualDesde.getMonth(), 5);
-    const fmt = (d) => d.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
-    return `boletas emitidas del ${fmt(desde)} al ${fmt(hasta)}`;
-  }, [periodo, actualDesde]);
 
   const etiquetaPeriodo = periodo === "semana" || periodo === "personalizado"
     ? { semana: "esta semana", personalizado: "en el rango elegido" }[periodo]
@@ -883,10 +872,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       <div className="no-imprimir" style={{ display: "flex", gap: 10, alignItems: "center", margin: "0 0 22px" }}>
         <button onClick={() => setOffsetPeriodo((n) => n - 1)} aria-label={periodo === "mes" ? "Mes anterior" : "Año anterior"}
           style={{ ...botonSecundario, width: "auto", margin: 0, padding: "6px 14px", flex: "none" }}>←</button>
-        <div style={{ minWidth: 190, textAlign: "center" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: NAVY, display: "block" }}>{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)}</span>
-          {ventanaCiclo && <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{ventanaCiclo}</span>}
-        </div>
+        <span style={{ fontSize: 15, fontWeight: 600, color: NAVY, minWidth: 190, textAlign: "center" }}>{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)}</span>
         <button onClick={() => setOffsetPeriodo((n) => n + 1)} aria-label={periodo === "mes" ? "Mes siguiente" : "Año siguiente"}
           style={{ ...botonSecundario, width: "auto", margin: 0, padding: "6px 14px", flex: "none" }}>→</button>
         {offsetPeriodo !== 0 && (

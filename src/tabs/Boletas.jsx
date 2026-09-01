@@ -15,6 +15,7 @@ import {
 import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento,
+  cicloDeFecha,
 } from "../lib/calculosBoletas.js";
 import { dibujarBoleta, dibujarBoletaAdiestramiento } from "./_compartido_pdf.jsx";
 
@@ -363,6 +364,14 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 
   if (paraConfirmar) {
     const p = paraConfirmar;
+    // El ciclo que se está facturando: el cobro de un mes se genera entre
+    // el 20 del anterior y el 5 de ese mes. Solo sirve para AVISAR, nunca
+    // para decidir — Howria emite boletas de dos meses distintos el mismo
+    // día (unas por adelantado, otras por los días ya caminados), así que
+    // adivinar el mes sería adivinar mal la mitad de las veces.
+    const cicloSugerido = cicloDeFecha(new Date());
+    const mesElegidoIdx = MESES.indexOf(String(p.mes || "").toLowerCase());
+    const calzaConElCiclo = cicloSugerido && mesElegidoIdx === cicloSugerido.getMonth() && Number(p.anio) === cicloSugerido.getFullYear();
     return (
       <div className="howria-card" style={{ ...tarjeta, maxWidth: 560, margin: "0 auto" }}>
         <h2 style={sectionTitle}>Confirmar antes de emitir</h2>
@@ -370,7 +379,23 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
 
         <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 16, marginTop: 14, fontSize: 14, color: INK, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Cliente</span><b>{p.cliente}{p.perro ? ` · 🐾 ${p.perro}` : ""}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Período</span><b>{p.mes} {p.anio}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ color: "#8A7E5C" }}>¿A qué mes corresponde?</span>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select
+                value={mesElegidoIdx >= 0 ? mesElegidoIdx : ""}
+                onChange={(e) => setParaConfirmar({ ...p, mes: MESES[Number(e.target.value)] })}
+                style={{ ...input, marginBottom: 0, width: "auto", padding: "6px 10px", fontSize: 13.5 }}>
+                {MESES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+              </select>
+              <select
+                value={p.anio}
+                onChange={(e) => setParaConfirmar({ ...p, anio: Number(e.target.value) })}
+                style={{ ...input, marginBottom: 0, width: "auto", padding: "6px 10px", fontSize: 13.5 }}>
+                {[p.anio - 1, p.anio, p.anio + 1].map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Plan</span><b>{p.planNombre} · {p.cantidad} paseo(s)</b></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#8A7E5C" }}>Valor por paseo</span><b>{fmtCLP(p.valorPaseo)}</b></div>
           {p.diasConRecargo > 0 && (
@@ -392,6 +417,21 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
             <span>Total</span><span>{fmtCLP(p.total)}</span>
           </div>
         </div>
+
+        {/* El mes decide en qué período aparece la boleta en Finanzas y es
+            lo que el cliente lee en el documento. Es también donde se
+            cuela el error más caro: dejar el que venía por omisión. */}
+        {!calzaConElCiclo && cicloSugerido && (
+          <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#8A6A1E", background: "#F3E3B4", border: "1px solid #E0CB84", borderRadius: 8, padding: "10px 12px" }}>
+            Estamos facturando el ciclo de <b>{MESES[cicloSugerido.getMonth()]} {cicloSugerido.getFullYear()}</b> y esta boleta dice <b>{p.mes} {p.anio}</b>.
+            Está bien si le estás cobrando los paseos que ya hizo — solo confírmalo antes de emitir.
+          </p>
+        )}
+        {(p.dias || []).length > 0 && (
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>
+            Cubre {p.cantidad} día(s) de {p.mes}: del {Math.min(...p.dias)} al {Math.max(...p.dias)}.
+          </p>
+        )}
 
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button onClick={confirmarEmision} disabled={generando}
