@@ -5,6 +5,7 @@
     { "source": "/agendar", "destination": "/index.html" },
     { "source": "/agendaadiestrador", "destination": "/index.html" },
     { "source": "/cachorros", "destination": "/index.html" },
+    { "source": "/confirmar-cita", "destination": "/index.html" },
     { "source": "/pago-exitoso", "destination": "/index.html" },
     { "source": "/pago-fallido", "destination": "/index.html" }
   ]

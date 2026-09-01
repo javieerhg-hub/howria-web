@@ -540,6 +540,7 @@ function citaToDb(c) {
     plan_id: c.planId || null,
     // Lo que se le paga AL ADIESTRADOR por esta cita — distinto de
     // "precio", que es lo que pagó el cliente (database/112).
+    tema: c.tema || null,
     pago_adiestrador: c.pagoAdiestrador ?? null,
     boleta_adiestramiento_id: c.boletaAdiestramientoId || null,
     pagado_adiestrador: c.pagadoAdiestrador || false,
@@ -570,6 +571,8 @@ function dbToCita(row) {
     emailEnviado: row.email_enviado || false,
     planId: row.plan_id,
     numeroClase: row.numero_clase,
+    tema: row.tema || null,
+    confirmadaClienteEn: row.confirmada_cliente_en || null,
     pagoAdiestrador: row.pago_adiestrador ?? null,
     boletaAdiestramientoId: row.boleta_adiestramiento_id || null,
     pagadoAdiestrador: row.pagado_adiestrador || false,

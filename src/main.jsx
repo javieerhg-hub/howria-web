@@ -18,6 +18,7 @@ const AgendarPublico = React.lazy(() => import("./AgendarPublico.jsx"));
 // Instagram/WhatsApp y termina en un único botón que abre WhatsApp.
 const Cachorros = React.lazy(() => import("./Cachorros.jsx"));
 // Vuelta de la pasarela de pago: son páginas de cierre, no de trámite.
+const ConfirmarCita = React.lazy(() => import("./ConfirmarCita.jsx"));
 const PagoExitoso = React.lazy(() => import("./PagoResultado.jsx").then((m) => ({ default: m.PagoExitoso })));
 const PagoFallido = React.lazy(() => import("./PagoResultado.jsx").then((m) => ({ default: m.PagoFallido })));
 
@@ -25,6 +26,7 @@ const pathname = window.location.pathname;
 const esAdmin = pathname.startsWith("/admin");
 const esAgendar = pathname.startsWith("/agendar") || pathname.startsWith("/agendaadiestrador");
 const esCachorros = pathname.startsWith("/cachorros");
+const esConfirmarCita = pathname.startsWith("/confirmar-cita");
 const esPagoExitoso = pathname.startsWith("/pago-exitoso");
 const esPagoFallido = pathname.startsWith("/pago-fallido");
 
@@ -53,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       {esAdmin ? <HowriaAdminBundle />
         : esAgendar ? <AgendarPublico />
         : esCachorros ? <Cachorros />
+        : esConfirmarCita ? <ConfirmarCita />
         : esPagoExitoso ? <PagoExitoso />
         : esPagoFallido ? <PagoFallido />
         : <Home />}

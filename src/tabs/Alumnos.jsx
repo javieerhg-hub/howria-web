@@ -8,6 +8,7 @@ import {
   ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirImagen, clienteEstaCerrado, tipoServicioComoAlumno,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, fechaISOaInputLocal, SeccionPlegable } from "./_compartido.jsx";
+import { supabase } from "../lib/supabaseClient.js";
 // Alumnos incrusta el calendario del mes como una de sus vistas ("Ver
 // calendario") — mismos datos, mismo componente que usa la pestaña
 // Calendario independiente.
@@ -218,12 +219,24 @@ function FilaChecklist({ etiqueta, existente, citaProgramada, onMarcarRapido, on
         )}
         {existente?.notas && <p style={{ margin: "3px 0 0", fontSize: 11, color: "#8A7E5C" }}>{existente.notas}</p>}
         {!existente && citaProgramada && (
-          <p style={{ margin: "3px 0 0", fontSize: 11, color: "#1E5A7A" }}>
-            📅 Agendada {new Date(citaProgramada.fechaISO).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" })}{" "}
-            {new Date(citaProgramada.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-            {" · "}
-            <button onClick={onCancelarAgenda} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 11, padding: 0 }}>quitar</button>
-          </p>
+          <>
+            <p style={{ margin: "3px 0 0", fontSize: 11, color: "#1E5A7A" }}>
+              📅 Agendada {new Date(citaProgramada.fechaISO).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" })}{" "}
+              {new Date(citaProgramada.fechaISO).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+              {" · "}
+              {/* Si el cliente ya apretó el botón del correo se ve acá: es la
+                  diferencia entre una hora que está puesta y una que la
+                  persona efectivamente dijo que puede. */}
+              {citaProgramada.confirmadaClienteEn
+                ? <span style={{ color: "#2F6A46", fontWeight: 600 }}>✓ la confirmó</span>
+                : <span style={{ color: "#8A7E5C" }}>sin confirmar</span>}
+              {" · "}
+              <button onClick={onCancelarAgenda} style={{ border: "none", background: "none", color: RUST, cursor: "pointer", fontSize: 11, padding: 0 }}>quitar</button>
+            </p>
+            {citaProgramada.tema && (
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#8A7E5C" }}>Tema: {citaProgramada.tema}</p>
+            )}
+          </>
         )}
       </div>
       {!existente && (
@@ -253,6 +266,8 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
   const [notasForm, setNotasForm] = useState("");
   const [agendando, setAgendando] = useState(null);
   const [fechaAgendaForm, setFechaAgendaForm] = useState("");
+  const [temaAgendaForm, setTemaAgendaForm] = useState("");
+  const [agendaEnVuelo, setAgendaEnVuelo] = useState(false);
 
   const total = (plan.numClases || 0) + (plan.incluyeEvaluacion ? 1 : 0);
   const hechas = clasesDelPlan.length;
@@ -298,29 +313,70 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
     const cita = citaDe(numero);
     setAgendando(numero);
     setFechaAgendaForm(cita ? fechaISOaInputLocal(cita.fechaISO) : "");
+    setTemaAgendaForm(cita?.tema || "");
   }
-  function guardarAgenda() {
+  // Agendar pasa por el servidor y no por un setCitas directo: además de
+  // crear la cita, le manda al cliente el correo con el botón para
+  // confirmar, y ese correo necesita el token que la fila recién tiene
+  // cuando está guardada. Un 502 significa que la cita SÍ quedó y solo
+  // falló el correo, así que igual hay que reflejarla en pantalla.
+  async function guardarAgenda() {
+    if (agendaEnVuelo) return;
     if (!fechaAgendaForm || !cliente?.adiestradorNombre || !setCitas) return;
     if (new Date(fechaAgendaForm).getTime() <= Date.now()) {
       showToast("La fecha y hora deben ser en el futuro.");
       return;
     }
-    if (hayChoqueHorario(citasAgenda, cliente.adiestradorNombre, fechaAgendaForm)) {
+    const existenteCita = citaDe(agendando);
+    if (hayChoqueHorario(citasAgenda.filter((c) => !existenteCita || c._dbId !== existenteCita._dbId), cliente.adiestradorNombre, fechaAgendaForm)) {
       showToast(`${cliente.adiestradorNombre} ya tiene otra cita agendada en ese horario.`);
       return;
     }
-    const existenteCita = citaDe(agendando);
-    if (existenteCita?._dbId) {
-      setCitas((prev) => prev.map((c) => (c._dbId === existenteCita._dbId ? { ...c, fechaISO: new Date(fechaAgendaForm).toISOString() } : c)));
-    } else {
-      setCitas((prev) => [...prev, {
-        id: Date.now(), clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
-        email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
-        tipo: "clase", adiestrador: cliente.adiestradorNombre, fechaISO: new Date(fechaAgendaForm).toISOString(),
-        estado: "agendada", origen: "staff", notas: "", planId: plan._dbId, numeroClase: agendando,
-      }]);
+    const iso = new Date(fechaAgendaForm).toISOString();
+    const tema = temaAgendaForm.trim();
+    setAgendaEnVuelo(true);
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch("/api/agendar-clase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({
+          citaId: existenteCita?._dbId || null, clienteId: cliente._dbId,
+          planId: plan._dbId, numeroClase: agendando,
+          adiestrador: cliente.adiestradorNombre, fechaISO: iso, tema,
+        }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok && resp.status !== 502) {
+        showToast(resultado.error || "No se pudo agendar la clase.");
+        return;
+      }
+      const fila = resultado.cita;
+      if (existenteCita?._dbId) {
+        setCitas((prev) => prev.map((c) => (c._dbId === existenteCita._dbId
+          ? { ...c, fechaISO: iso, tema, confirmadaClienteEn: null } : c)));
+      } else if (fila) {
+        // Llega con _dbId, así que el hook de sincronización no lo vuelve
+        // a insertar (y realtime, si alcanza a avisar antes, lo reconoce
+        // por ese mismo id en vez de duplicarlo).
+        setCitas((prev) => [...prev, {
+          id: Date.now(), _dbId: fila.id,
+          clienteId: cliente._dbId, clienteNombre: cliente.nombre, perro: cliente.perro,
+          email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
+          tipo: "clase", adiestrador: cliente.adiestradorNombre, fechaISO: iso,
+          estado: "agendada", origen: "staff", notas: "", tema, confirmadaClienteEn: null,
+          planId: plan._dbId, numeroClase: agendando,
+        }]);
+      }
+      setAgendando(null);
+      if (resp.status === 502) showToast(resultado.error);
+      else if (resultado.aviso) showToast(resultado.aviso);
+      else showToast("Clase agendada — le llegó el correo para confirmar.", "exito");
+    } catch {
+      showToast("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setAgendaEnVuelo(false);
     }
-    setAgendando(null);
   }
   function cancelarAgenda(numero) {
     const cita = citaDe(numero);
@@ -401,12 +457,26 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
               Fecha y hora de {agendando === 0 ? "la evaluación" : `la clase ${agendando}`}{cliente?.adiestradorNombre ? ` con ${cliente.adiestradorNombre}` : ""}
             </label>
             {cliente?.adiestradorNombre ? (
-              <input type="datetime-local" value={fechaAgendaForm} onChange={(e) => setFechaAgendaForm(e.target.value)} style={{ ...input, marginBottom: 8, maxWidth: 220 }} />
+              <>
+                <input type="datetime-local" value={fechaAgendaForm} onChange={(e) => setFechaAgendaForm(e.target.value)} style={{ ...input, marginBottom: 8, maxWidth: 220 }} />
+                <input
+                  placeholder={agendando === 0 ? "Tema de la evaluación (opcional)" : "Tema de la clase — ej: llamado y correa suelta"}
+                  value={temaAgendaForm}
+                  onChange={(e) => setTemaAgendaForm(e.target.value)}
+                  maxLength={90}
+                  style={{ ...input, marginBottom: 8 }}
+                />
+                <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>
+                  {cliente.email
+                    ? <>Le llega un correo a <strong>{cliente.email}</strong> con un botón para confirmar.</>
+                    : "Este alumno no tiene correo en su ficha — la clase queda agendada, pero tendrás que avisarle tú."}
+                </p>
+              </>
             ) : (
               <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>Este alumno no tiene entrenador asignado — asígnalo en "Editar ficha" antes de agendar.</p>
             )}
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={guardarAgenda} disabled={!cliente?.adiestradorNombre} style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0, opacity: cliente?.adiestradorNombre ? 1 : 0.5, cursor: cliente?.adiestradorNombre ? "pointer" : "not-allowed" }}>Guardar</button>
+              <button onClick={guardarAgenda} disabled={!cliente?.adiestradorNombre || agendaEnVuelo} style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0, opacity: cliente?.adiestradorNombre && !agendaEnVuelo ? 1 : 0.5, cursor: cliente?.adiestradorNombre && !agendaEnVuelo ? "pointer" : "not-allowed" }}>{agendaEnVuelo ? "Agendando…" : "Guardar y avisar"}</button>
               <button onClick={() => setAgendando(null)} style={botonSecundario}>Cancelar</button>
             </div>
           </div>
