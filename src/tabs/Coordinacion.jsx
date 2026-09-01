@@ -540,7 +540,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           horaProgramada.setHours(h, m, 0, 0);
           atrasado = ahora > horaProgramada;
         }
-        return { cliente: c, estado, nota: registro?.nota || "", atrasado };
+        // El reparto tiene que viajar con el item: la fila lo usa para
+        // mostrar la insignia 🤝 y el modal para abrirse con lo que ya
+        // había. Sin esto la insignia nunca aparecía y, peor, abrir
+        // "Compartir" sobre un paseo ya repartido mostraba "Sin
+        // compartir" — guardar ahí borraba el reparto sin avisar, o sea
+        // le cambiaba el pago a alguien en silencio.
+        return {
+          cliente: c, estado, nota: registro?.nota || "", atrasado,
+          compartidoCon: registro?.compartidoCon || null,
+          porcentajeCompartido: registro?.porcentajeCompartido ?? null,
+        };
       })
       .sort((a, b) => (a.cliente.horaHabitual || "99:99").localeCompare(b.cliente.horaHabitual || "99:99"));
   }
