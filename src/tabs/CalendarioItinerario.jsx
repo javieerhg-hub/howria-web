@@ -213,7 +213,7 @@ function ModalItinerarioDia({ fechaLabel, diaKey, grupos, citasAgenda, setCitas,
 // (distancia mínima antes de activar el arrastre) que ya usa MapaRutas,
 // así que un simple clic sigue abriendo el detalle normal y solo un
 // arrastre de verdad mueve el horario.
-function BloqueItinerario({ it, top, alto, tono, arrastrable, resaltado, onVerDetalle }) {
+function BloqueItinerario({ it, top, alto, tono, arrastrable, resaltado, onVerDetalle, onSeparar }) {
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({ id: it.id, disabled: !arrastrable });
   const { setNodeRef: setDropRef } = useDroppable({ id: it.id, disabled: it.tipo !== "paseo" });
   const setNodeRef = (nodo) => { setDragRef(nodo); setDropRef(nodo); };
@@ -230,6 +230,22 @@ function BloqueItinerario({ it, top, alto, tono, arrastrable, resaltado, onVerDe
       <div style={{ fontWeight: 700 }}>{horaDesdeMinutos(it._inicioMin)}–{horaDesdeMinutos(it._finMin)}</div>
       <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🐾 {it.perro}{!it.esManada && ` · ${it.clienteNombre}`}</div>
       {it.esManada && <div style={{ fontStyle: "italic", opacity: 0.85 }}>en manada</div>}
+      {/* Separar va DENTRO del bloque y no en el modal de detalle porque
+          es la vuelta atrás de un gesto que se hace acá mismo, y suele
+          ser un error de arrastre que uno quiere deshacer al toque.
+          onPointerDown detiene la propagación para que tocarlo no
+          arranque un arrastre del bloque. */}
+      {it.esManada && onSeparar && (
+        <span role="button" tabIndex={0}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onSeparar(it); }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); onSeparar(it); } }}
+          title="Separar la manada" aria-label="Separar la manada"
+          style={{ position: "absolute", top: 2, right: 3, padding: "1px 5px", borderRadius: 5, fontSize: 10,
+            fontWeight: 700, background: "rgba(255,255,255,0.75)", color: INK, cursor: "pointer", lineHeight: 1.4 }}>
+          separar
+        </span>
+      )}
       {it._estimado && !it.esManada && <div style={{ fontStyle: "italic", opacity: 0.8 }}>estimado</div>}
     </button>
   );
@@ -274,6 +290,11 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
   for (let h = horaGridInicio; h < horaGridFin; h++) horas.push(h);
   const altoGrid = horas.length * PX_POR_HORA;
 
+  // Hora que tenía cada cliente ANTES de entrar a una manada, para poder
+  // devolvérsela al separar. Es un ref y no estado porque no cambia lo
+  // que se dibuja, solo se consulta al separar.
+  const horasPreviasRef = useRef({});
+
   function idsDe(it) {
     return it.esManada ? it.miembros.map((m) => m.clienteId) : [it.clienteId];
   }
@@ -297,9 +318,41 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
     if (!setClientes) return;
     const horaDestino = horaDesdeMinutos(destino._inicioMin);
     const ids = [...idsDe(activo), ...idsDe(destino)];
-    setClientes((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, horaHabitual: horaDestino } : c)));
+    // Unir SOBRESCRIBE la hora habitual de cada cliente, y esa hora es el
+    // único rastro de que estaban separados: sin guardarla, separar
+    // después no tiene a qué volver. Se anota antes de pisarla.
+    setClientes((prev) => prev.map((c) => {
+      if (!ids.includes(c.id)) return c;
+      if (!(c.id in horasPreviasRef.current)) horasPreviasRef.current[c.id] = c.horaHabitual || null;
+      return { ...c, horaHabitual: horaDestino };
+    }));
     const nombres = [...nombresDe(activo), ...nombresDe(destino)];
-    showToast(`${nombres.join(" y ")} ahora salen en manada a las ${horaDestino}.`, "exito");
+    showToast(`${nombres.join(" y ")} ahora salen en manada a las ${horaDestino}. Podés separarlos con el botón del bloque.`, "exito");
+  }
+
+  // Deshace la manada. Si se unió en esta misma sesión, cada perro vuelve
+  // exactamente a la hora que tenía antes (incluido "sin hora", que lo
+  // devuelve a bloque estimado). Si no se sabe —por ejemplo si se recargó
+  // la página—, se los separa dejando al primero en la hora del grupo y
+  // corriendo al resto media hora cada uno, que al menos los despega y
+  // deja arrastrarlos donde corresponda.
+  function separarManada(it) {
+    if (!setClientes || !it.esManada) return;
+    const miembros = it.miembros;
+    const recordadas = miembros.filter((m) => m.clienteId in horasPreviasRef.current);
+    const seRecuerdaTodo = recordadas.length === miembros.length;
+
+    setClientes((prev) => prev.map((c) => {
+      const idx = miembros.findIndex((m) => m.clienteId === c.id);
+      if (idx === -1) return c;
+      if (seRecuerdaTodo) return { ...c, horaHabitual: horasPreviasRef.current[c.id] };
+      return { ...c, horaHabitual: horaDesdeMinutos(it._inicioMin + idx * 30) };
+    }));
+
+    miembros.forEach((m) => { delete horasPreviasRef.current[m.clienteId]; });
+    showToast(seRecuerdaTodo
+      ? "Manada separada — cada perro volvió a su hora anterior."
+      : "Manada separada — quedaron a media hora de distancia; arrastrá cada uno a su horario.", "exito");
   }
 
   function onDragStart() {
@@ -393,7 +446,8 @@ function GrillaHorariaDia({ grupos, onVerDetalle, diaKey, citasAgenda = [], setC
                       tono={TIPOS_CALENDARIO_VISTA.find((t) => t.id === it.tipo)}
                       arrastrable={arrastrable}
                       resaltado={holdTargetId === it.id}
-                      onVerDetalle={onVerDetalle} />
+                      onVerDetalle={onVerDetalle}
+                      onSeparar={setClientes ? separarManada : undefined} />
                     {puedeConfigurar && (
                       editandoHoraId === it.id ? (
                         <input type="time" step={300} autoFocus defaultValue={horaDesdeMinutos(it._inicioMin)}
