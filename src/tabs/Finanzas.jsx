@@ -277,22 +277,26 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return Object.entries(mapa).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total);
   }, [filtradas]);
 
+  // Siempre por MES, nunca por día. Una boleta de paseos cubre el mes
+  // entero, así que su período es el día 1: agrupar por día dejaba todo
+  // el mes apilado en una sola barra. Por mes sí dice algo — se ve la
+  // tendencia, que es para lo que sirve un gráfico acá.
+  //
+  // En la vista de año son los 12 meses; en la de mes, los últimos 6
+  // terminando en el que se está mirando, para tener con qué comparar.
   const dataGrafico = useMemo(() => {
+    const totalDelMes = (anio, mes) => todasLasBoletasVenta
+      .filter((b) => b._periodo && b._periodo.getMonth() === mes && b._periodo.getFullYear() === anio)
+      .reduce((acc, b) => acc + b.total, 0);
+
     if (periodo === "año") {
-      return MESES.map((m, i) => ({
-        etiqueta: m.slice(0, 3),
-        total: todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === i && b._periodo.getFullYear() === actualDesde.getFullYear()).reduce((acc, b) => acc + b.total, 0),
-      }));
+      return MESES.map((m, i) => ({ etiqueta: m.slice(0, 3), total: totalDelMes(actualDesde.getFullYear(), i) }));
     }
-    const mapa = {};
-    filtradas.forEach((b) => {
-      const f = b._periodo;
-      if (!f) return;
-      const clave = f.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" });
-      mapa[clave] = (mapa[clave] || 0) + b.total;
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(actualDesde.getFullYear(), actualDesde.getMonth() - 5 + i, 1);
+      return { etiqueta: MESES[d.getMonth()].slice(0, 3), total: totalDelMes(d.getFullYear(), d.getMonth()) };
     });
-    return Object.entries(mapa).map(([etiqueta, total]) => ({ etiqueta, total }));
-  }, [filtradas, periodo, todasLasBoletasVenta, actualDesde]);
+  }, [periodo, todasLasBoletasVenta, actualDesde]);
 
   const clientesSinBoletaEsteMes = useMemo(() => {
     return clientes.filter((c) => !todasLasBoletas.some((b) => (
@@ -307,7 +311,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     });
   }, [filtradas, clientes]);
 
-  const mesActualIdx = hoy.getMonth(), anioActualN = hoy.getFullYear();
+  // Sigue el mes que se está mirando, no el del calendario: parado en
+  // agosto, proyectar septiembre no dice nada de agosto.
+  const mesActualIdx = actualDesde.getMonth(), anioActualN = actualDesde.getFullYear();
   const proyeccionMes = useMemo(() => {
     return clientes.filter((c) => (c.estadoCliente || "activo") === "activo")
       .reduce((acc, c) => acc + diasSegunPlan(mesActualIdx, anioActualN, c.diasHabituales || []).length * Number(c.valorPaseoRef || 0), 0);
@@ -708,14 +714,16 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </p>
       )}
 
+      {periodo !== "año" && (
       <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
-        <p style={{ ...label, marginBottom: 2 }}>Proyección del mes en curso (si se factura todo el plan habitual de cada cliente activo)</p>
-        <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Siempre es el mes calendario actual — no cambia con el período elegido arriba.</p>
+        <p style={{ ...label, marginBottom: 2 }}>Proyección de {tituloPeriodo} (si se factura todo el plan habitual de cada cliente activo)</p>
+        <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Sirve para pillar lo que falta emitir: el plan habitual de los clientes activos contra lo que ya facturaste.</p>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(proyeccionMes)}</p>
-          <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>Ya facturado este mes: {fmtCLP(facturadoEsteMes)} ({porcentajeFacturado}%)</p>
+          <p style={{ margin: 0, fontSize: 13, color: "#8A7E5C" }}>Ya facturado: {fmtCLP(facturadoEsteMes)} ({porcentajeFacturado}%)</p>
         </div>
       </div>
+      )}
 
       <p style={label}>Ingresos por tipo de servicio {etiquetaPeriodo} (un cliente puede contar en más de un tipo)</p>
       <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 26 }}>
@@ -727,7 +735,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         ))}
       </div>
 
-      <p style={label}>Ingresos {periodo === "año" ? "por mes" : "por día"}</p>
+      <p style={label}>Ingresos por mes {periodo === "año" ? `de ${tituloPeriodo}` : "(los últimos 6)"}</p>
       <div style={{ width: "100%", height: 220, marginBottom: 30 }}>
         <ResponsiveContainer>
           <BarChart data={dataGrafico}>
