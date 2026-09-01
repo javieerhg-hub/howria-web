@@ -304,19 +304,33 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     [costosGeneralesFiltrados]);
   const cac = clientesNuevos.length > 0 ? gastoMarketing / clientesNuevos.length : null;
 
-  // ---- Cuánto deja cada paseador ----
+  // ---- Cuánto deja cada persona de terreno ----
   //
   // Lo que cobraron sus clientes en el período contra lo que se le pagó.
-  // Es aproximado y hay que decirlo: los ingresos se atribuyen por el
-  // paseador que el cliente tiene HOY, así que una reasignación reciente
-  // mueve el histórico de lugar.
+  //
+  // Mira las dos puntas del negocio, no solo paseos: una boleta de paseo
+  // se le atribuye al paseador del cliente y una de adiestramiento a su
+  // adiestrador. Con solo paseos la tabla mentía feo — en agosto 2026
+  // $1.155.000 de $1.231.200 fueron adiestramiento y no aparecían.
+  //
+  // Es aproximado y hay que decirlo: se atribuye por quien atiende al
+  // cliente HOY, así que una reasignación reciente mueve el histórico.
   const margenPorTrabajador = useMemo(() => {
     if (vistaPersonal) return [];
-    const nombres = [...new Set(clientes.map((c) => c.paseadorNombre).filter(Boolean))];
+    const nombres = [...new Set([
+      ...clientes.map((c) => c.paseadorNombre),
+      ...clientes.map((c) => c.adiestradorNombre),
+    ].filter(Boolean))];
     return nombres.map((nombre) => {
-      const suyos = clientes.filter((c) => c.paseadorNombre === nombre);
+      const suyos = clientes.filter((c) => c.paseadorNombre === nombre || c.adiestradorNombre === nombre);
       const genero = cobradasPeriodo
-        .filter((b) => suyos.some((c) => esBoletaDeCliente(b, c)))
+        .filter((b) => {
+          // Cada boleta cuenta para quien hace ESE servicio: si un cliente
+          // tiene paseador y adiestrador distintos, su boleta de paseo no
+          // es del adiestrador ni al revés.
+          const campo = b._tipo === "adiestramiento" ? "adiestradorNombre" : "paseadorNombre";
+          return clientes.some((c) => c[campo] === nombre && esBoletaDeCliente(b, c));
+        })
         .reduce((acc, b) => acc + Number(b.total || 0), 0);
       const pagado = pagosRegistrados
         .filter((p) => !p.deshechoEn && p.paseador === nombre)
@@ -761,9 +775,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
           {margenPorTrabajador.length > 0 && (
             <>
-              <p style={{ ...label, marginBottom: 2 }}>Cuánto deja cada paseador {etiquetaPeriodo}</p>
+              <p style={{ ...label, marginBottom: 2 }}>Cuánto deja cada persona de terreno {etiquetaPeriodo}</p>
               <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>
-                Lo que cobraron sus clientes contra lo que se le pagó. Aproximado: los ingresos se atribuyen al paseador que el cliente tiene hoy, así que una reasignación reciente mueve el histórico.
+                Paseos y adiestramiento juntos: cada boleta cuenta para quien hace ese servicio. Aproximado — se atribuye por quien atiende al cliente hoy, así que una reasignación reciente mueve el histórico.
               </p>
               <div style={{ display: "grid", gap: 6, marginBottom: 26 }}>
                 {margenPorTrabajador.map((f) => (
