@@ -7,10 +7,11 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
-  comprimirImagen, tipoServicioComoAlumno,
+  comprimirImagen, tipoServicioComoAlumno, BotonConfirmable,
 } from "../HowriaAdmin.jsx";
+import { supabase } from "../lib/supabaseClient.js";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
-import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
+import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, fechaISOaInputLocal, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
 
 // Los dos negocios de Howria. Un cliente cae en uno o en otro (hoy
 // ninguno hace las dos cosas, pero el filtro soporta que lo haga: en ese
@@ -358,7 +359,71 @@ function InterruptorEval({ activo, onClick, siText, noText, colorSi }) {
   );
 }
 
-function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, packsClases = [], onComproPack }) {
+function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, packsClases = [], onComproPack, citasAgenda = [] }) {
+  // Cita sobre la que se está eligiendo hora nueva, y la hora elegida.
+  const [reprogramandoId, setReprogramandoId] = useState(null);
+  const [nuevaFechaHora, setNuevaFechaHora] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  // Cancelar y reprogramar pasan por el servidor y no por un cambio de
+  // estado local: además de mover la cita, le avisan al cliente por
+  // correo. Un 502 significa que la cita SÍ cambió y solo falló el
+  // correo, así que igual hay que reflejarlo en pantalla.
+  async function llamarApi(ruta, cuerpo, alExito) {
+    if (enviando) return;
+    setEnviando(true);
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch(ruta, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify(cuerpo),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok && resp.status !== 502) {
+        showToast(resultado.error || "No se pudo completar la acción.");
+        return;
+      }
+      alExito();
+      if (resp.status === 502) showToast(resultado.error);
+      else if (resultado.aviso) showToast(resultado.aviso);
+      else showToast("Listo — se le avisó al cliente por correo.", "exito");
+    } catch {
+      showToast("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  function cancelarCita(cita) {
+    // Una cita que nunca se confirmó se "rechaza"; una confirmada se
+    // "cancela". El correo que recibe el cliente es distinto en cada
+    // caso (ver api/cancelar-cita.js), por eso no es lo mismo.
+    const accion = cita.estado === "pendiente" ? "rechazar" : "cancelar";
+    llamarApi("/api/cancelar-cita", { citaId: cita._dbId, accion }, () => {
+      const estadoNuevo = accion === "rechazar" ? "rechazada" : "cancelada";
+      setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, estado: estadoNuevo } : c)));
+    });
+  }
+
+  function reprogramarCita(cita) {
+    if (!nuevaFechaHora) return;
+    if (new Date(nuevaFechaHora).getTime() <= Date.now()) {
+      showToast("La fecha nueva tiene que ser en el futuro.");
+      return;
+    }
+    if (hayChoqueHorario(citasAgenda.filter((c) => c.id !== cita.id), cita.adiestrador, nuevaFechaHora, cita.duracionMin || 60)) {
+      showToast(`${cita.adiestrador} ya tiene otra cita en ese horario.`);
+      return;
+    }
+    const iso = new Date(nuevaFechaHora).toISOString();
+    llamarApi("/api/reprogramar-cita", { citaId: cita._dbId, fechaNueva: iso }, () => {
+      setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, fechaISO: iso } : c)));
+      setReprogramandoId(null);
+      setNuevaFechaHora("");
+    });
+  }
+
   const hechas = citasEvaluacion.filter((c) => c.estado === "realizada").length;
   const pagadas = citasEvaluacion.filter((c) => c.pagada).length;
 
@@ -406,6 +471,42 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, pac
                 <InterruptorEval activo={!!cita.pagada} onClick={() => togglePagada(cita)}
                   siText="✓ Pagada" noText="Marcar como pagada" colorSi={GOLD} />
               </div>
+
+              {/* Solo mientras la cita sigue viva. Una ya realizada o
+                  cancelada no se mueve ni se cancela de nuevo. */}
+              {["pendiente", "agendada"].includes(cita.estado) && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                  <BotonConfirmable onConfirm={() => cancelarCita(cita)}
+                    label={cita.estado === "pendiente" ? "Rechazar hora" : "Cancelar cita"} colorConfirmar={RUST}
+                    style={{ border: "1px solid #DCD2B4", background: "#FFFFFF", color: RUST, borderRadius: 20, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", minHeight: 38 }} />
+                  {/* Reprogramar solo tiene sentido en una cita ya
+                      confirmada: una pendiente todavía no tiene hora
+                      comprometida con nadie, ahí se confirma o se rechaza. */}
+                  {cita.estado === "agendada" && (
+                    <button type="button" disabled={enviando}
+                      onClick={() => {
+                        setReprogramandoId(reprogramandoId === cita.id ? null : cita.id);
+                        setNuevaFechaHora(fechaISOaInputLocal(cita.fechaISO));
+                      }}
+                      style={{ border: "1px solid #DCD2B4", background: "#FFFFFF", color: NAVY, borderRadius: 20, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", minHeight: 38, opacity: enviando ? 0.5 : 1 }}>
+                      {reprogramandoId === cita.id ? "Cerrar" : "Reprogramar cita"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {reprogramandoId === cita.id && (
+                <div style={{ marginTop: 10, padding: 12, background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 8 }}>
+                  <label style={label} htmlFor={`reprogramar-${cita.id}`}>Nueva fecha y hora</label>
+                  <input id={`reprogramar-${cita.id}`} type="datetime-local" value={nuevaFechaHora}
+                    onChange={(e) => setNuevaFechaHora(e.target.value)} style={{ ...input, marginBottom: 10, maxWidth: 240 }} />
+                  <p style={{ ...hint, margin: "0 0 10px" }}>Al guardar se le manda un correo al cliente con la hora nueva y la anterior tachada.</p>
+                  <button onClick={() => reprogramarCita(cita)} disabled={!nuevaFechaHora || enviando}
+                    style={{ ...botonPrincipal, marginTop: 0, width: "auto", padding: "8px 18px", opacity: !nuevaFechaHora || enviando ? 0.45 : 1 }}>
+                    {enviando ? "Guardando..." : "Guardar y avisar"}
+                  </button>
+                </div>
+              )}
               {cita.pagada && cita.pagadaEn && (
                 <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>Pagó el {cita.pagadaEn}</p>
               )}
@@ -718,6 +819,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
       <SeccionEvaluacion cliente={cliente}
         citasEvaluacion={citasCliente.filter((c) => c.tipo === "evaluacion").sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO))}
         setCitas={setCitas}
+        citasAgenda={citasAgenda}
         packsClases={packsClases}
         onComproPack={(pack) => {
           // El cliente deja de estar "en evaluación" y pasa a ser alumno.
