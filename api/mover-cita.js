@@ -37,7 +37,11 @@ function fechaEnChile(iso) {
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
 
-function renderCorreo(cita, fechaNueva) {
+// `revivida` = la cita estaba cancelada y se le puso hora nueva. Es un
+// mensaje distinto: al cliente no se le movió una hora que tenía, se le
+// devolvió una que le habíamos quitado. Mostrarle la fecha vieja tachada
+// ahí no aporta — esa hora ya la sabe cancelada.
+function renderCorreo(cita, fechaNueva, revivida = false) {
   const antes = fechaEnChile(cita.fecha_hora);
   const ahora = fechaEnChile(fechaNueva);
   const tipoNombre = NOMBRES_TIPO[cita.tipo] || cita.tipo;
@@ -56,16 +60,18 @@ function renderCorreo(cita, fechaNueva) {
             </tr>
             <tr>
               <td style="padding:32px 28px;">
-                <h1 style="margin:0 0 6px; font-family:Georgia, serif; font-size:20px; color:${NAVY};">Tu cita cambió de hora 🐾</h1>
+                <h1 style="margin:0 0 6px; font-family:Georgia, serif; font-size:20px; color:${NAVY};">${revivida ? "Volvimos a agendar tu cita" : "Tu cita cambió de hora"} 🐾</h1>
                 <p style="margin:0 0 20px; font-size:14px; color:#5C5442; line-height:1.6;">
-                  Hola ${cita.cliente_nombre.split(" ")[0]}, movimos tu ${tipoNombre.toLowerCase()} con ${cita.adiestrador} a una hora nueva. Toma nota:
+                  ${revivida
+                    ? `Hola ${cita.cliente_nombre.split(" ")[0]}, habíamos cancelado tu ${tipoNombre.toLowerCase()} con ${cita.adiestrador} y ya tenemos hora nueva. Toma nota:`
+                    : `Hola ${cita.cliente_nombre.split(" ")[0]}, movimos tu ${tipoNombre.toLowerCase()} con ${cita.adiestrador} a una hora nueva. Toma nota:`}
                 </p>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM_SOFT}; border-radius:8px;">
                   <tr>
                     <td style="padding:16px 18px;">
-                      <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Antes era</p>
-                      <p style="margin:0 0 14px; font-size:14px; color:#8A7E5C; text-decoration:line-through;">${antes}</p>
-                      <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Ahora es</p>
+                      ${revivida ? "" : `<p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Antes era</p>
+                      <p style="margin:0 0 14px; font-size:14px; color:#8A7E5C; text-decoration:line-through;">${antes}</p>`}
+                      <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">${revivida ? "Quedó para" : "Ahora es"}</p>
                       <p style="margin:0 0 14px; font-size:16px; font-weight:bold; color:${NAVY};">${ahora}</p>
                       <p style="margin:0 0 4px; font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#8A7E5C;">Tipo</p>
                       <p style="margin:0; font-size:15px; color:${NAVY};">${tipoNombre}${cita.perro ? ` · 🐾 ${cita.perro}` : ""}</p>
@@ -148,10 +154,19 @@ async function manejarReprogramar(req, res) {
     res.status(403).json({ error: "Esta cita no es tuya" });
     return;
   }
-  if (cita.estado !== "agendada") {
-    res.status(409).json({ error: "Solo se puede reprogramar una cita confirmada." });
+  // Se reprograma una cita confirmada (mover la hora) o una cancelada /
+  // rechazada (volver a agendarla, que es lo que se hace cuando el
+  // cliente vuelve a aparecer). Una realizada no: ya pasó.
+  const REPROGRAMABLES = ["agendada", "cancelada", "rechazada"];
+  if (!REPROGRAMABLES.includes(cita.estado)) {
+    res.status(409).json({
+      error: cita.estado === "pendiente"
+        ? "Esta cita todavía no está confirmada — confirmala en el horario que sirva."
+        : "Una cita ya realizada no se puede reprogramar.",
+    });
     return;
   }
+  const revivida = cita.estado !== "agendada";
 
   // Choque de horario del mismo adiestrador. El navegador ya avisa antes
   // de llegar acá, pero se revalida en el servidor: es lo único que ve
@@ -175,9 +190,14 @@ async function manejarReprogramar(req, res) {
 
   const { data: actualizada, error: updErr } = await admin
     .from("citas_agenda")
-    .update({ fecha_hora: new Date(fechaNueva).toISOString() })
+    // Una cancelada vuelve a "agendada": si no, quedaría con hora nueva
+    // pero seguiría apareciendo en el historial en vez de en las próximas.
+    // La confirmación del cliente se limpia porque confirmó OTRA hora.
+    .update({ fecha_hora: new Date(fechaNueva).toISOString(), estado: "agendada", confirmada_cliente_en: null })
     .eq("id", citaId)
-    .eq("estado", "agendada")
+    // Guard atómico contra dos personas moviendola a la vez: solo cambia
+    // si seguía en el estado que leímos recién.
+    .eq("estado", cita.estado)
     .select("id")
     .maybeSingle();
   if (updErr || !actualizada) {
@@ -197,8 +217,8 @@ async function manejarReprogramar(req, res) {
     return;
   }
 
-  const asunto = "Tu cita con Howria cambió de hora";
-  const html = renderCorreo(cita, fechaNueva);
+  const asunto = revivida ? "Volvimos a agendar tu cita con Howria" : "Tu cita con Howria cambió de hora";
+  const html = renderCorreo(cita, fechaNueva, revivida);
 
   const resendResp = await fetch("https://api.resend.com/emails", {
     method: "POST",

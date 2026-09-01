@@ -40,6 +40,10 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const [busquedaCita, setBusquedaCita] = useState("");
   const [historialDesde, setHistorialDesde] = useState("");
   const [historialHasta, setHistorialHasta] = useState("");
+  // Reprogramar una cita del historial: id de la que se está moviendo y
+  // la fecha nueva que se escribió.
+  const [reprogramandoId, setReprogramandoId] = useState(null);
+  const [fechaReprograma, setFechaReprograma] = useState("");
   const [limiteHistorial, setLimiteHistorial] = useState(20);
   const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
   const [tipo, setTipo] = useState("evaluacion");
@@ -119,6 +123,51 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       else showToast(accion === "rechazar" ? "Hora rechazada — se le avisó al cliente." : "Cita cancelada — se le avisó al cliente.", "exito");
     } catch {
       showToast("No se pudo cancelar la cita — revisa tu conexión.");
+    } finally {
+      setCancelandoId(null);
+    }
+  }
+
+  // Volver a agendar una cita cancelada o rechazada. Es el mismo endpoint
+  // que mover una confirmada de hora (api/mover-cita.js): allá se da
+  // cuenta de que venía cancelada, la devuelve a "agendada" y le manda al
+  // cliente un correo distinto — no le movimos una hora que tenía, le
+  // devolvimos una que le habíamos quitado.
+  async function reprogramarDelHistorial(cita) {
+    if (reprogramandoId !== cita.id || !fechaReprograma || cancelandoId) return;
+    if (new Date(fechaReprograma).getTime() <= Date.now()) {
+      showToast("La fecha nueva tiene que ser en el futuro.");
+      return;
+    }
+    if (hayChoqueHorario(citas.filter((c) => c.id !== cita.id), cita.adiestrador, fechaReprograma, cita.duracionMin || 60)) {
+      showToast(`${cita.adiestrador} ya tiene otra cita en ese horario.`);
+      return;
+    }
+    setCancelandoId(cita.id);
+    const iso = new Date(fechaReprograma).toISOString();
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch("/api/mover-cita", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ citaId: cita._dbId, fechaNueva: iso }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      // 502 = la cita SÍ quedó reagendada y solo falló el correo.
+      if (!resp.ok && resp.status !== 502) {
+        showToast(resultado.error || "No se pudo reprogramar la cita.");
+        return;
+      }
+      // Vuelve a "agendada", así que sale del historial y aparece en
+      // "Próximas" sola.
+      setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, fechaISO: iso, estado: "agendada", confirmadaClienteEn: null } : c)));
+      setReprogramandoId(null);
+      setFechaReprograma("");
+      if (resp.status === 502) showToast(resultado.error);
+      else if (resultado.aviso) showToast(resultado.aviso);
+      else showToast("Cita reagendada — se le avisó al cliente por correo.", "exito");
+    } catch {
+      showToast("No se pudo conectar — revisa tu conexión.");
     } finally {
       setCancelandoId(null);
     }
@@ -385,8 +434,37 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                 </div>
                 <p style={{ margin: "8px 0 0", color: "#8A7E5C", fontSize: 12.5 }}>{c.adiestrador} · {new Date(c.fechaISO).toLocaleDateString("es-CL")}</p>
                 {c.notas && <p style={{ margin: "6px 0 0", color: "#5C5442", fontSize: 13 }}>{c.notas}</p>}
+                {/* Una cita cancelada o rechazada se puede volver a agendar
+                    — pasa a menudo: el cliente se cae y despues reaparece.
+                    Una realizada no: ya ocurrio. */}
+                {c._dbId && reprogramandoId === c.id && (
+                  <div style={{ marginTop: 8, background: "#EAF2F6", borderRadius: 6, padding: 10 }}>
+                    <label style={{ fontSize: 12, color: "#6B6248", display: "block", marginBottom: 6 }} htmlFor={`reagendar-${c.id}`}>
+                      Hora nueva para {c.clienteNombre} con {c.adiestrador}
+                    </label>
+                    <input id={`reagendar-${c.id}`} type="datetime-local" value={fechaReprograma}
+                      onChange={(e) => setFechaReprograma(e.target.value)}
+                      style={{ ...input, marginBottom: 8, maxWidth: 220 }} />
+                    <p style={{ ...hint, marginTop: 0, marginBottom: 8 }}>
+                      Le llega un correo avisandole que volvimos a agendar su cita.
+                    </p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => reprogramarDelHistorial(c)} disabled={!fechaReprograma || cancelandoId === c.id}
+                        style={{ ...botonPrincipal, width: "auto", padding: "7px 14px", marginTop: 0, opacity: !fechaReprograma || cancelandoId === c.id ? 0.5 : 1 }}>
+                        {cancelandoId === c.id ? "Reagendando..." : "Reagendar y avisar"}
+                      </button>
+                      <button onClick={() => { setReprogramandoId(null); setFechaReprograma(""); }} style={{ ...botonSecundario, width: "auto", padding: "7px 14px", margin: 0 }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
                 {c._dbId && (
-                  <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    {["cancelada", "rechazada"].includes(c.estado) && reprogramandoId !== c.id && (
+                      <button onClick={() => { setReprogramandoId(c.id); setFechaReprograma(""); }}
+                        style={{ border: "1px solid #C9A24B", background: "none", color: "#8A6A1E", borderRadius: 6, padding: "5px 10px", fontSize: 11.5, cursor: "pointer" }}>
+                        Reprogramar
+                      </button>
+                    )}
                     <BotonEliminar onConfirm={() => eliminarCita(setCitas, c._dbId)} label="Eliminar" style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "5px 10px", fontSize: 11.5, cursor: "pointer" }} />
                   </div>
                 )}
