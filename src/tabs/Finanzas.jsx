@@ -412,7 +412,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       (!c.horaHabitual || !(c.diasHabituales || []).length));
     return {
       turnos,
-      perros,
+      // Cupos ocupados en la semana, no perros distintos: un perro que
+      // sale 3 días ocupa 3. Decir "156 perros" hacía parecer que Howria
+      // tiene el triple de los que tiene.
+      cuposOcupados: perros,
+      cuposTotales: turnos.length * MAX_PERROS_POR_TURNO,
       sinHorario,
       sobreLimite: turnos.filter((t) => t.perros > MAX_PERROS_POR_TURNO),
       espacioLibre: turnos.reduce((acc, t) => acc + Math.max(0, MAX_PERROS_POR_TURNO - t.perros), 0),
@@ -1078,12 +1082,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 <div {...abre(detalleOcupacion)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
                   <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Qué tan llenos van</p>
                   <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{Math.round(ocupacion.ocupacionMedia * 100)}%</p>
-                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{ocupacion.perros} perro(s) en {ocupacion.turnos.length} turno(s) de hasta {MAX_PERROS_POR_TURNO}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{ocupacion.cuposOcupados} de {ocupacion.cuposTotales} cupos de la semana, en {ocupacion.turnos.length} turno(s)</p>
                 </div>
                 <div {...abre(detalleOcupacion)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
                   <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Espacio sin salir a pasear más</p>
-                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{ocupacion.espacioLibre} perro(s)</p>
-                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Caben en grupos que ya salen, sin sumar un paseo</p>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{ocupacion.espacioLibre} cupos</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Libres en la semana, en grupos que ya salen</p>
                 </div>
                 <div {...abre(detalleOcupacion)} style={{ background: ocupacion.sobreLimite.length > 0 ? "#F1DCD2" : "#FFFDF7", border: `1px solid ${ocupacion.sobreLimite.length > 0 ? "#E0B9A5" : "#E4DBC3"}`, borderRadius: 10, padding: 16, cursor: "pointer" }}>
                   <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Turnos pasados del límite</p>
@@ -1092,7 +1096,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 </div>
               </div>
               <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 22px" }}>
-                Los perros se cuentan desde el nombre escrito en la ficha, así que "Billy, Taffy y Nala" son 3.
+                Un cupo es un perro en un paseo: el que sale tres días ocupa tres. Los perros se cuentan desde el nombre escrito en la ficha, así que "Billy, Taffy y Nala" son 3.
                 {ocupacion.sinHorario.length > 0 && ` ${ocupacion.sinHorario.length} cliente(s) de paseos no tienen días u hora habitual y quedan fuera de esta cuenta: ${ocupacion.sinHorario.map((c) => c.nombre.trim()).join(", ")}.`}
               </p>
             </>
