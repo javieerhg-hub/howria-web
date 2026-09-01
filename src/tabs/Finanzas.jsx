@@ -321,7 +321,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       ...clientes.map((c) => c.paseadorNombre),
       ...clientes.map((c) => c.adiestradorNombre),
     ].filter(Boolean))];
-    return nombres.map((nombre) => {
+    const filas = nombres.map((nombre) => {
       const suyos = clientes.filter((c) => c.paseadorNombre === nombre || c.adiestradorNombre === nombre);
       const genero = cobradasPeriodo
         .filter((b) => {
@@ -343,7 +343,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         .reduce((acc, p) => acc + Number(p.monto || 0), 0);
       return { nombre, genero, pagado, margen: genero - pagado, clientes: suyos.length };
     }).filter((f) => f.genero > 0 || f.pagado > 0).sort((a, b) => b.margen - a.margen);
-  }, [vistaPersonal, clientes, cobradasPeriodo, pagosRegistrados, actualDesde, actualHasta]);
+    const atribuido = filas.reduce((acc, f) => acc + f.genero, 0);
+    // Boletas de clientes sin paseador ni adiestrador asignado. Sin esta
+    // fila la tabla no cuadraba con lo cobrado y esa plata desaparecía
+    // sin que nada lo dijera.
+    const sinAsignar = entro - atribuido;
+    return sinAsignar > 0
+      ? [...filas, { nombre: "Sin asignar", genero: sinAsignar, pagado: 0, margen: sinAsignar, clientes: 0, esSinAsignar: true }]
+      : filas;
+  }, [vistaPersonal, clientes, cobradasPeriodo, pagosRegistrados, actualDesde, actualHasta, entro]);
 
   // Trabajo del período que todavía no se le pagó a nadie: lo que suman
   // los paseos hechos menos lo ya registrado como pagado. Es una
@@ -777,14 +785,16 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
             <>
               <p style={{ ...label, marginBottom: 2 }}>Cuánto deja cada persona de terreno {etiquetaPeriodo}</p>
               <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>
-                Paseos y adiestramiento juntos: cada boleta cuenta para quien hace ese servicio. Aproximado — se atribuye por quien atiende al cliente hoy, así que una reasignación reciente mueve el histórico.
+                Paseos y adiestramiento juntos: cada boleta cuenta para quien hace ese servicio. Un margen negativo casi siempre significa que las boletas de sus clientes todavía no se cobran, no que la persona cueste más de lo que genera. Aproximado — se atribuye por quien atiende al cliente hoy, así que una reasignación reciente mueve el histórico.
               </p>
               <div style={{ display: "grid", gap: 6, marginBottom: 26 }}>
                 {margenPorTrabajador.map((f) => (
                   <div key={f.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 8, padding: "10px 14px" }}>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{f.nombre}</p>
-                      <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>{f.clientes} cliente(s) · cobrado {fmtCLP(f.genero)} · pagado {fmtCLP(f.pagado)}</p>
+                      <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>
+                      {f.esSinAsignar ? "Clientes sin paseador ni adiestrador asignado" : `${f.clientes} cliente(s) · cobrado ${fmtCLP(f.genero)} · pagado ${fmtCLP(f.pagado)}`}
+                    </p>
                     </div>
                     <p style={{ margin: 0, fontSize: 16, fontWeight: 700, fontFamily: "Georgia, serif", color: f.margen >= 0 ? "#2F6A46" : RUST }}>{fmtCLP(f.margen)}</p>
                   </div>
