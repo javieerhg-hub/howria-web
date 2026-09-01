@@ -1101,10 +1101,28 @@ function useFaseDiaPaseador(sessionVersion) {
   // decidir si ya avisó hoy, así que no necesita re-renderizar nada.
   const avisosEnviadosRef = useRef({});
 
+  // La fase y la ausencia son SIEMPRE del día de hoy, pero se cargaban
+  // una sola vez al abrir la sesión. Coordinación es la pantalla que el
+  // coordinador deja abierta todo el día (lo dice su propio código), así
+  // que al pasar la medianoche seguía mostrando lo de ayer: alguien
+  // ausente ayer aparecía como "Ausente hoy" y su fase quedaba congelada.
+  //
+  // Este estado guarda el día que se cargó y cambia cuando cambia el día,
+  // lo que vuelve a disparar la carga de abajo. Se revisa cada minuto, el
+  // mismo intervalo que ya usa Coordinación para recalcular "atrasado".
+  const [diaCargado, setDiaCargado] = useState(() => fechaKey(new Date()));
+  useEffect(() => {
+    const id = setInterval(() => {
+      const ahora = fechaKey(new Date());
+      setDiaCargado((prev) => (prev === ahora ? prev : ahora));
+    }, 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (sessionVersion == null) return;
     (async () => {
-      const { data, error } = await supabase.from("fase_dia_paseador").select("*").eq("fecha", fechaKey(new Date()));
+      const { data, error } = await supabase.from("fase_dia_paseador").select("*").eq("fecha", diaCargado);
       if (!error && data) {
         const mapa = {}, mapaAusencias = {};
         data.forEach((r) => {
@@ -1118,14 +1136,14 @@ function useFaseDiaPaseador(sessionVersion) {
         showToast(`No se pudo cargar el estado del equipo: ${error.message}`);
       }
     })();
-  }, [sessionVersion]);
+  }, [sessionVersion, diaCargado]);
 
   useEffect(() => {
     const canal = supabase
       .channel("fase_dia_paseador-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "fase_dia_paseador" }, (payload) => {
         const fila = payload.eventType === "DELETE" ? payload.old : payload.new;
-        if (fila.fecha !== fechaKey(new Date())) return;
+        if (fila.fecha !== diaCargado) return;
         if (payload.eventType === "DELETE") {
           setFasesState((prev) => { const copia = { ...prev }; delete copia[fila.paseador_nombre]; return copia; });
           setAusenciasState((prev) => { const copia = { ...prev }; delete copia[fila.paseador_nombre]; return copia; });
@@ -1136,7 +1154,7 @@ function useFaseDiaPaseador(sessionVersion) {
       })
       .subscribe();
     return () => { supabase.removeChannel(canal); };
-  }, [sessionVersion]);
+  }, [sessionVersion, diaCargado]);
 
   function actualizarFaseDia(paseadorNombre, fase) {
     const anterior = fases[paseadorNombre];
