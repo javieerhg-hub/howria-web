@@ -18,7 +18,18 @@ function variacion(actual, anterior) {
 }
 
 export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, nombreUsuario, user, onVerPagos, onVerBoletas }) {
-  const [periodo, setPeriodo] = useState("semana");
+  // Arranca en el mes: con facturación mensual por adelantado, el mes es
+  // la unidad real del negocio.
+  const [periodo, setPeriodo] = useState("mes");
+  // A cuántos meses (o años) de distancia del actual se está mirando.
+  // 0 = el de ahora, -1 = el anterior. Reemplaza al rango personalizado
+  // como forma de mirar un período pasado.
+  const [offsetPeriodo, setOffsetPeriodo] = useState(0);
+  function cambiarPeriodo(id) {
+    setPeriodo(id);
+    // Un -1 en meses no significa lo mismo en años: se vuelve al actual.
+    setOffsetPeriodo(0);
+  }
   const [rangoDesde, setRangoDesde] = useState("");
   const [rangoHasta, setRangoHasta] = useState("");
   const hoy = new Date();
@@ -110,26 +121,43 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // período anterior con el que comparar (no hay un "rango equivalente
   // anterior" bien definido), así que anteriorDesde/anteriorHasta quedan
   // en null y la tarjeta de variación se oculta para ese caso.
-  const { actualDesde, actualHasta, anteriorDesde, anteriorHasta } = useMemo(() => {
+  // Se sacan como números sueltos porque `hoy` es un Date nuevo en cada
+  // render y como dependencia rehace el useMemo siempre.
+  const anioHoy = hoy.getFullYear();
+  const mesHoy = hoy.getMonth();
+
+  const { actualDesde, actualHasta, anteriorDesde, anteriorHasta, tituloPeriodo } = useMemo(() => {
     if (periodo === "personalizado") {
       const desde = rangoDesde ? new Date(`${rangoDesde}T00:00:00`) : new Date(0);
-      const hasta = rangoHasta ? new Date(`${rangoHasta}T23:59:59`) : hoy;
-      return { actualDesde: desde, actualHasta: hasta, anteriorDesde: null, anteriorHasta: null };
+      const hasta = rangoHasta ? new Date(`${rangoHasta}T23:59:59`) : new Date();
+      return { actualDesde: desde, actualHasta: hasta, anteriorDesde: null, anteriorHasta: null, tituloPeriodo: "el rango elegido" };
     }
     if (periodo === "semana") {
-      const inicioActual = inicioSemana(hoy);
+      const inicioActual = inicioSemana(new Date(anioHoy, mesHoy, new Date().getDate()));
       const inicioAnterior = new Date(inicioActual); inicioAnterior.setDate(inicioAnterior.getDate() - 7);
-      return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
+      return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual, tituloPeriodo: "esta semana" };
     }
     if (periodo === "mes") {
-      const inicioActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      const inicioAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-      return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
+      const inicioActual = new Date(anioHoy, mesHoy + offsetPeriodo, 1);
+      // Ahora el mes se cierra: antes actualHasta era null ("hasta hoy"),
+      // que servía mirando el mes en curso pero dejaba entrar los meses
+      // siguientes al mirar uno pasado.
+      const finActual = new Date(inicioActual.getFullYear(), inicioActual.getMonth() + 1, 0, 23, 59, 59, 999);
+      const inicioAnterior = new Date(inicioActual.getFullYear(), inicioActual.getMonth() - 1, 1);
+      return {
+        actualDesde: inicioActual, actualHasta: finActual,
+        anteriorDesde: inicioAnterior, anteriorHasta: inicioActual,
+        tituloPeriodo: `${MESES[inicioActual.getMonth()]} ${inicioActual.getFullYear()}`,
+      };
     }
-    const inicioActual = new Date(hoy.getFullYear(), 0, 1);
-    const inicioAnterior = new Date(hoy.getFullYear() - 1, 0, 1);
-    return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
-  }, [periodo, rangoDesde, rangoHasta]);
+    const anio = anioHoy + offsetPeriodo;
+    const inicioActual = new Date(anio, 0, 1);
+    return {
+      actualDesde: inicioActual, actualHasta: new Date(anio, 11, 31, 23, 59, 59, 999),
+      anteriorDesde: new Date(anio - 1, 0, 1), anteriorHasta: inicioActual,
+      tituloPeriodo: String(anio),
+    };
+  }, [periodo, rangoDesde, rangoHasta, offsetPeriodo, anioHoy, mesHoy]);
 
   const enPeriodo = (b, desde, hasta) => {
     const f = b._periodo;
@@ -248,7 +276,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     if (periodo === "año") {
       return MESES.map((m, i) => ({
         etiqueta: m.slice(0, 3),
-        total: todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === i && b._periodo.getFullYear() === hoy.getFullYear()).reduce((acc, b) => acc + b.total, 0),
+        total: todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === i && b._periodo.getFullYear() === actualDesde.getFullYear()).reduce((acc, b) => acc + b.total, 0),
       }));
     }
     const mapa = {};
@@ -259,13 +287,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       mapa[clave] = (mapa[clave] || 0) + b.total;
     });
     return Object.entries(mapa).map(([etiqueta, total]) => ({ etiqueta, total }));
-  }, [filtradas, periodo, todasLasBoletasVenta]);
+  }, [filtradas, periodo, todasLasBoletasVenta, actualDesde]);
 
   const clientesSinBoletaEsteMes = useMemo(() => {
     return clientes.filter((c) => !todasLasBoletas.some((b) => (
-      esBoletaDeCliente(b, c) && b._periodo && b._periodo.getMonth() === hoy.getMonth() && b._periodo.getFullYear() === hoy.getFullYear()
+      esBoletaDeCliente(b, c) && b._periodo && b._periodo.getMonth() === actualDesde.getMonth() && b._periodo.getFullYear() === actualDesde.getFullYear()
     )));
-  }, [clientes, todasLasBoletas]);
+  }, [clientes, todasLasBoletas, actualDesde]);
 
   const porTipoServicio = useMemo(() => {
     return TIPOS_SERVICIO.map((t) => {
@@ -282,7 +310,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const facturadoEsteMes = todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === mesActualIdx && b._periodo.getFullYear() === anioActualN).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
 
-  const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año", personalizado: "en el rango elegido" }[periodo];
+  const etiquetaPeriodo = periodo === "semana" || periodo === "personalizado"
+    ? { semana: "esta semana", personalizado: "en el rango elegido" }[periodo]
+    : `en ${tituloPeriodo}`;
   const etiquetaAnterior = { semana: "semana anterior", mes: "mes anterior", año: "año anterior" }[periodo];
 
   function imprimirInforme() {
@@ -483,8 +513,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       </div>
 
       <div className="no-imprimir" style={{ display: "flex", gap: 8, margin: "16px 0 12px", flexWrap: "wrap" }}>
-        {[["semana", "Informe semanal"], ["mes", "Informe mensual"], ["año", "Informe anual"], ["personalizado", "Personalizado"]].map(([id, nombre]) => (
-          <button key={id} onClick={() => setPeriodo(id)}
+        {[["mes", "Por mes"], ["año", "Por año"]].map(([id, nombre]) => (
+          <button key={id} onClick={() => cambiarPeriodo(id)}
             style={{ padding: "8px 16px", borderRadius: 20, fontSize: 13, cursor: "pointer",
               border: periodo === id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
               background: periodo === id ? NAVY : "#FFFFFF", color: periodo === id ? CREAM : INK,
@@ -493,13 +523,22 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </button>
         ))}
       </div>
-      {periodo === "personalizado" && (
-        <div className="no-imprimir" style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 24px", flexWrap: "wrap" }}>
-          <input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Desde" />
-          <span style={{ fontSize: 13, color: "#8A7E5C" }}>hasta</span>
-          <input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Hasta" />
-        </div>
-      )}
+      {/* Reemplaza al rango personalizado: con facturación mensual el mes
+          es la unidad, y moverse entre meses es todo lo que hace falta
+          para mirar atrás. Hacia adelante también se puede — los cobros
+          del mes que viene se emiten desde el 28. */}
+      <div className="no-imprimir" style={{ display: "flex", gap: 10, alignItems: "center", margin: "0 0 22px" }}>
+        <button onClick={() => setOffsetPeriodo((n) => n - 1)} aria-label={periodo === "mes" ? "Mes anterior" : "Año anterior"}
+          style={{ ...botonSecundario, width: "auto", margin: 0, padding: "6px 14px", flex: "none" }}>←</button>
+        <span style={{ fontSize: 15, fontWeight: 600, color: NAVY, minWidth: 150, textAlign: "center", textTransform: "capitalize" }}>{tituloPeriodo}</span>
+        <button onClick={() => setOffsetPeriodo((n) => n + 1)} aria-label={periodo === "mes" ? "Mes siguiente" : "Año siguiente"}
+          style={{ ...botonSecundario, width: "auto", margin: 0, padding: "6px 14px", flex: "none" }}>→</button>
+        {offsetPeriodo !== 0 && (
+          <button onClick={() => setOffsetPeriodo(0)} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 600, padding: 0 }}>
+            Volver a {periodo === "mes" ? "este mes" : "este año"}
+          </button>
+        )}
+      </div>
       {/* La caja del período: entró, salió, queda. Es lo que Javier pidió
           poder mirar de un vistazo, y el número que manda es el de CAJA —
           plata cobrada de verdad, no boletas emitidas. Lo que está en
@@ -711,7 +750,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </div>
 
         <div>
-          <p style={{ ...label, marginBottom: 2 }}>Clientes sin boleta este mes</p>
+          <p style={{ ...label, marginBottom: 2 }}>Clientes sin boleta {periodo === "mes" ? `de ${tituloPeriodo}` : "este mes"}</p>
           <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Siempre es el mes calendario actual — no cambia con el período elegido arriba.</p>
           {clientesSinBoletaEsteMes.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>Todos los clientes tienen boleta generada este mes.</p>
