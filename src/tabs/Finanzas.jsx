@@ -8,7 +8,7 @@ import {
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, FilaLista, BotonEliminar,
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
-import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable } from "../lib/calculosBoletas.js";
+import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable, periodoDeBoleta } from "../lib/calculosBoletas.js";
 import { resumenPaseadorEnRango } from "../lib/pagos.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
 
@@ -93,9 +93,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     : boletasAdiestramientoProp;
   const pagosRegistrados = vistaPersonal ? [] : pagosRegistradosProp;
 
+  // _periodo es el mes que la boleta CUBRE, no el día en que se emitió —
+  // ver periodoDeBoleta. Todo lo que filtra por fechas en esta pestaña usa
+  // _periodo, para que el informe de septiembre muestre el servicio de
+  // septiembre aunque se haya cobrado el 31 de agosto.
   const todasLasBoletas = useMemo(() => [
-    ...boletasEmitidas.map((b) => ({ ...b, _tipo: "paseo" })),
-    ...boletasAdiestramiento.map((b) => ({ ...b, _tipo: "adiestramiento", cantidad: 0, descuento: (b.descuentoPackMonto || 0) })),
+    ...boletasEmitidas.map((b) => ({ ...b, _tipo: "paseo", _periodo: periodoDeBoleta(b) })),
+    ...boletasAdiestramiento.map((b) => ({ ...b, _tipo: "adiestramiento", cantidad: 0, descuento: (b.descuentoPackMonto || 0), _periodo: periodoDeBoleta(b) })),
   ], [boletasEmitidas, boletasAdiestramiento]);
   // Solo lo aceptado/pagado cuenta como venta real — un borrador sin
   // revisar o una boleta cancelada no deben sumar en ningún ingreso.
@@ -127,11 +131,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return { actualDesde: inicioActual, actualHasta: null, anteriorDesde: inicioAnterior, anteriorHasta: inicioActual };
   }, [periodo, rangoDesde, rangoHasta]);
 
+  const enPeriodo = (b, desde, hasta) => {
+    const f = b._periodo;
+    return !!f && f >= desde && (!hasta || f <= hasta);
+  };
   const filtradas = useMemo(() =>
-    todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
+    todasLasBoletasVenta.filter((b) => enPeriodo(b, actualDesde, actualHasta)),
     [todasLasBoletasVenta, actualDesde, actualHasta]);
   const anteriores = useMemo(() =>
-    anteriorDesde ? todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f >= anteriorDesde && f < anteriorHasta; }) : [],
+    anteriorDesde ? todasLasBoletasVenta.filter((b) => !!b._periodo && b._periodo >= anteriorDesde && b._periodo < anteriorHasta) : [],
     [todasLasBoletasVenta, anteriorDesde, anteriorHasta]);
 
   const actual = calcularTotales(filtradas);
@@ -191,7 +199,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // cuentan como venta (esVenta). Acá hacen falta TODAS las del período,
   // porque los borradores son justamente lo que no se veía en ningún lado.
   const delPeriodo = useMemo(() =>
-    todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
+    todasLasBoletas.filter((b) => enPeriodo(b, actualDesde, actualHasta)),
     [todasLasBoletas, actualDesde, actualHasta]);
   const sumaTotales = (lista) => lista.reduce((acc, b) => acc + Number(b.total || 0), 0);
 
@@ -240,12 +248,13 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     if (periodo === "año") {
       return MESES.map((m, i) => ({
         etiqueta: m.slice(0, 3),
-        total: todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === i && f.getFullYear() === hoy.getFullYear(); }).reduce((acc, b) => acc + b.total, 0),
+        total: todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === i && b._periodo.getFullYear() === hoy.getFullYear()).reduce((acc, b) => acc + b.total, 0),
       }));
     }
     const mapa = {};
     filtradas.forEach((b) => {
-      const f = new Date(b.fechaISO);
+      const f = b._periodo;
+      if (!f) return;
       const clave = f.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" });
       mapa[clave] = (mapa[clave] || 0) + b.total;
     });
@@ -253,10 +262,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   }, [filtradas, periodo, todasLasBoletasVenta]);
 
   const clientesSinBoletaEsteMes = useMemo(() => {
-    return clientes.filter((c) => !todasLasBoletas.some((b) => {
-      const f = new Date(b.fechaISO);
-      return esBoletaDeCliente(b, c) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
-    }));
+    return clientes.filter((c) => !todasLasBoletas.some((b) => (
+      esBoletaDeCliente(b, c) && b._periodo && b._periodo.getMonth() === hoy.getMonth() && b._periodo.getFullYear() === hoy.getFullYear()
+    )));
   }, [clientes, todasLasBoletas]);
 
   const porTipoServicio = useMemo(() => {
@@ -271,7 +279,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return clientes.filter((c) => (c.estadoCliente || "activo") === "activo")
       .reduce((acc, c) => acc + diasSegunPlan(mesActualIdx, anioActualN, c.diasHabituales || []).length * Number(c.valorPaseoRef || 0), 0);
   }, [clientes, mesActualIdx, anioActualN]);
-  const facturadoEsteMes = todasLasBoletasVenta.filter((b) => { const f = new Date(b.fechaISO); return f.getMonth() === mesActualIdx && f.getFullYear() === anioActualN; }).reduce((acc, b) => acc + b.total, 0);
+  const facturadoEsteMes = todasLasBoletasVenta.filter((b) => b._periodo && b._periodo.getMonth() === mesActualIdx && b._periodo.getFullYear() === anioActualN).reduce((acc, b) => acc + b.total, 0);
   const porcentajeFacturado = proyeccionMes ? Math.round((facturadoEsteMes / proyeccionMes) * 100) : 0;
 
   const etiquetaPeriodo = { semana: "esta semana", mes: "este mes", año: "este año", personalizado: "en el rango elegido" }[periodo];

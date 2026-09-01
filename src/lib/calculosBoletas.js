@@ -97,6 +97,27 @@ export function calcularBoletaAdiestramiento({
   return { subtotalClases, montoDescuentoPct, montoDescuento, montoEvaluacion, total };
 }
 
+// Howria cobra POR ADELANTADO: los cobros se generan entre el 28 y el 5
+// del mes siguiente, y cubren el mes que viene. Una boleta creada el 31
+// de agosto es, casi siempre, el servicio de septiembre.
+//
+// Por eso una boleta no pertenece al mes en que se emitió sino al mes que
+// CUBRE, que es lo que guardan mes/anio. Usar la fecha de emisión hacía
+// que septiembre apareciera vacío y agosto inflado con trabajo ajeno:
+// medido en producción, 23 boletas de septiembre por $3.085.553 estaban
+// contadas en agosto.
+//
+// Las de adiestramiento no tienen mes/anio — una evaluación o un pack se
+// cobran cuando ocurren, no por adelantado — así que ahí la fecha de
+// emisión sí es el período correcto.
+const MESES_PERIODO = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+export function periodoDeBoleta(boleta) {
+  const idx = MESES_PERIODO.indexOf(String(boleta.mes || "").trim().toLowerCase());
+  if (idx >= 0 && boleta.anio) return new Date(Number(boleta.anio), idx, 1);
+  return boleta.fechaISO ? new Date(boleta.fechaISO) : null;
+}
+
 export function calcularTotales(lista) {
   const ingresos = lista.reduce((acc, b) => acc + b.total, 0);
   const paseos = lista.reduce((acc, b) => acc + (b.cantidad || 0), 0);

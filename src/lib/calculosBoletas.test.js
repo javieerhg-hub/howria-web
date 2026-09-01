@@ -3,6 +3,7 @@ import {
   esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
   esVenta, esPorCobrar, montoParaResponsable,
+  periodoDeBoleta,
 } from "./calculosBoletas.js";
 
 describe("esFinDeSemanaOFeriado", () => {
@@ -234,5 +235,39 @@ describe("montoParaResponsable", () => {
 
   it("un reparto de 0 (todo para Howria) se respeta, no cae al total", () => {
     expect(montoParaResponsable({ _tipo: "adiestramiento", total: 220000, montoResponsable: 0 })).toBe(0);
+  });
+});
+
+// Howria cobra por adelantado: los cobros salen entre el 28 y el 5 y
+// cubren el mes siguiente. Dónde cae una boleta define en qué mes se ve
+// la plata, así que conviene tenerlo fijado.
+describe("periodoDeBoleta", () => {
+  it("usa el mes que cubre, no el día en que se emitió", () => {
+    const b = { mes: "septiembre", anio: 2026, fechaISO: "2026-08-31T22:00:00-04:00" };
+    const p = periodoDeBoleta(b);
+    expect(p.getMonth()).toBe(8); // septiembre
+    expect(p.getFullYear()).toBe(2026);
+    expect(p.getDate()).toBe(1);
+  });
+
+  it("no le importa cómo venga escrito el mes", () => {
+    expect(periodoDeBoleta({ mes: "  Septiembre ", anio: 2026 }).getMonth()).toBe(8);
+  });
+
+  // Las de adiestramiento no se cobran por adelantado: una evaluación se
+  // paga cuando ocurre, así que ahí la fecha de emisión sí es su período.
+  it("cae en la fecha de emisión cuando no hay mes que cubra", () => {
+    const p = periodoDeBoleta({ fechaISO: "2026-08-20T15:00:00-04:00" });
+    expect(p.getMonth()).toBe(7); // agosto
+    expect(p.getDate()).toBe(20);
+  });
+
+  it("devuelve null si no hay ni mes ni fecha", () => {
+    expect(periodoDeBoleta({})).toBe(null);
+  });
+
+  it("ignora un mes que no existe y cae en la fecha", () => {
+    const p = periodoDeBoleta({ mes: "brumario", anio: 2026, fechaISO: "2026-08-20T15:00:00-04:00" });
+    expect(p.getMonth()).toBe(7);
   });
 });
