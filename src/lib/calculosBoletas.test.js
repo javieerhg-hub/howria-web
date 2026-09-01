@@ -3,7 +3,7 @@ import {
   esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
   calcularBoletaPaseos, calcularBoletaAdiestramiento, calcularTotales,
   esVenta, esPorCobrar, montoParaResponsable,
-  periodoDeBoleta,
+  periodoDeBoleta, cicloDeFecha,
 } from "./calculosBoletas.js";
 
 describe("esFinDeSemanaOFeriado", () => {
@@ -241,33 +241,38 @@ describe("montoParaResponsable", () => {
 // Howria cobra por adelantado: los cobros salen entre el 28 y el 5 y
 // cubren el mes siguiente. Dónde cae una boleta define en qué mes se ve
 // la plata, así que conviene tenerlo fijado.
-describe("periodoDeBoleta", () => {
-  it("usa el mes que cubre, no el día en que se emitió", () => {
-    const b = { mes: "septiembre", anio: 2026, fechaISO: "2026-08-31T22:00:00-04:00" };
-    const p = periodoDeBoleta(b);
+describe("cicloDeFecha y periodoDeBoleta", () => {
+  // Howria factura por ciclo: el cobro de un mes se genera entre el 20 del
+  // mes anterior y el 5 de ese mes. El ciclo cierra el dia 5.
+  it("una boleta de fin de mes es del ciclo siguiente", () => {
+    const p = periodoDeBoleta({ fechaISO: "2026-08-31T22:00:00-04:00" });
     expect(p.getMonth()).toBe(8); // septiembre
-    expect(p.getFullYear()).toBe(2026);
     expect(p.getDate()).toBe(1);
   });
 
-  it("no le importa cómo venga escrito el mes", () => {
-    expect(periodoDeBoleta({ mes: "  Septiembre ", anio: 2026 }).getMonth()).toBe(8);
+  it("el dia 5 todavia es del ciclo que cierra", () => {
+    expect(cicloDeFecha("2026-09-05T18:00:00-04:00").getMonth()).toBe(8);
   });
 
-  // Las de adiestramiento no se cobran por adelantado: una evaluación se
-  // paga cuando ocurre, así que ahí la fecha de emisión sí es su período.
-  it("cae en la fecha de emisión cuando no hay mes que cubra", () => {
-    const p = periodoDeBoleta({ fechaISO: "2026-08-20T15:00:00-04:00" });
-    expect(p.getMonth()).toBe(7); // agosto
-    expect(p.getDate()).toBe(20);
+  it("el dia 6 ya es del ciclo siguiente", () => {
+    expect(cicloDeFecha("2026-09-06T09:00:00-04:00").getMonth()).toBe(9); // octubre
   });
 
-  it("devuelve null si no hay ni mes ni fecha", () => {
+  // Diciembre tiene que saltar de anio, no quedarse en el mes 12.
+  it("cruza el anio", () => {
+    const p = cicloDeFecha("2026-12-28T10:00:00-03:00");
+    expect(p.getMonth()).toBe(0);
+    expect(p.getFullYear()).toBe(2027);
+  });
+
+  // El mes elegido a mano ya NO manda: era donde se colaba el error de
+  // dejar en agosto una boleta emitida el 31 de agosto.
+  it("ignora el mes escrito a mano y usa la fecha de emision", () => {
+    const p = periodoDeBoleta({ mes: "agosto", anio: 2026, fechaISO: "2026-08-31T22:00:00-04:00" });
+    expect(p.getMonth()).toBe(8); // septiembre, no agosto
+  });
+
+  it("devuelve null si no hay fecha", () => {
     expect(periodoDeBoleta({})).toBe(null);
-  });
-
-  it("ignora un mes que no existe y cae en la fecha", () => {
-    const p = periodoDeBoleta({ mes: "brumario", anio: 2026, fechaISO: "2026-08-20T15:00:00-04:00" });
-    expect(p.getMonth()).toBe(7);
   });
 });

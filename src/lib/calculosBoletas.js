@@ -97,25 +97,36 @@ export function calcularBoletaAdiestramiento({
   return { subtotalClases, montoDescuentoPct, montoDescuento, montoEvaluacion, total };
 }
 
-// Howria cobra POR ADELANTADO: los cobros se generan entre el 28 y el 5
-// del mes siguiente, y cubren el mes que viene. Una boleta creada el 31
-// de agosto es, casi siempre, el servicio de septiembre.
+// Howria no factura por mes calendario sino por CICLO, y cobra por
+// adelantado: el cobro de un mes se genera entre el 20 del mes anterior y
+// el 5 de ese mes. Una boleta emitida el 31 de agosto es el servicio de
+// septiembre.
 //
-// Por eso una boleta no pertenece al mes en que se emitió sino al mes que
-// CUBRE, que es lo que guardan mes/anio. Usar la fecha de emisión hacía
-// que septiembre apareciera vacío y agosto inflado con trabajo ajeno:
-// medido en producción, 23 boletas de septiembre por $3.085.553 estaban
-// contadas en agosto.
+// El ciclo se deduce de CUÁNDO SE EMITIÓ y no del mes que alguien eligió
+// al crearla. Ese mes existe (boletas.mes/anio) pero se elige a mano en un
+// desplegable, y ahí se cuela el error: al revisar en producción había 6
+// boletas emitidas a fines de agosto marcadas como "agosto", escondidas en
+// un mes que ya cerró. Justo las que no se veían.
 //
-// Las de adiestramiento no tienen mes/anio — una evaluación o un pack se
-// cobran cuando ocurren, no por adelantado — así que ahí la fecha de
-// emisión sí es el período correcto.
-const MESES_PERIODO = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+// La regla, sin huecos: un ciclo cierra el día 5. Todo lo emitido desde el
+// día 6 en adelante pertenece al ciclo siguiente.
+//
+//   ciclo de septiembre = emitidas entre el 6 de agosto y el 5 de septiembre
+//
+// El grueso cae entre el 20 y el 5, que es cuando se hace la facturación;
+// lo emitido antes del 20 (una boleta atrasada, un extra a mitad de mes)
+// cae igual en el ciclo que está abierto en ese momento.
+export function cicloDeFecha(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  // Hasta el 5 el ciclo del mes en curso sigue abierto; desde el 6 ya se
+  // está facturando el mes siguiente.
+  const mes = d.getDate() <= 5 ? d.getMonth() : d.getMonth() + 1;
+  return new Date(d.getFullYear(), mes, 1);
+}
 
 export function periodoDeBoleta(boleta) {
-  const idx = MESES_PERIODO.indexOf(String(boleta.mes || "").trim().toLowerCase());
-  if (idx >= 0 && boleta.anio) return new Date(Number(boleta.anio), idx, 1);
-  return boleta.fechaISO ? new Date(boleta.fechaISO) : null;
+  return boleta.fechaISO ? cicloDeFecha(boleta.fechaISO) : null;
 }
 
 export function calcularTotales(lista) {
