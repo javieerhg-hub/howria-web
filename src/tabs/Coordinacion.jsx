@@ -6,7 +6,7 @@ import { CalendarClock, CheckCircle2 } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
-  estaProgramadoEnFecha,
+  estaProgramadoEnFecha, esClienteDePaseosActivo,
   textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";
@@ -652,10 +652,10 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const canceladosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
   const pendientesHoy = clientesHoyFiltrados.length - realizadosHoy - canceladosHoy;
 
-  // Los alumnos de solo adiestramiento no son carga de paseos, aunque les
-  // hayan quedado días habituales guardados — mismo criterio que
-  // estaProgramadoEnFecha (sin tipoServicio = paseos, por compatibilidad).
-  const clientesDePaseos = clientes.filter((c) => !c.tipoServicio?.length || c.tipoServicio.includes("paseos"));
+  // Misma regla que el detalle del día, compartida a propósito: acá
+  // faltaba excluir a los pausados, así que el resumen de la semana los
+  // contaba y el día no.
+  const clientesDePaseos = clientes.filter(esClienteDePaseosActivo);
 
   const fechasSemana = Array.from({ length: 7 }, (_, i) => { const f = new Date(inicioSemana); f.setDate(f.getDate() + i); return f; });
   const resumenSemana = fechasSemana.map((fecha, i) => {
