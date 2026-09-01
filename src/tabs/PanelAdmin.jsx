@@ -6,7 +6,7 @@ import { supabase, crearCuentaAcceso } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, DIAS_SEMANA_LARGO, ROLES_APP, TODOS_LOS_TABS,
   PASOS_CAPACITACION, tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
-  Spinner, BotonEliminar, ModalConfirmacion, fmtCLP, slugEmailUsuario, showToast, comprimirImagen,
+  Spinner, BotonEliminar, ModalConfirmacion, fmtCLP, slugEmailUsuario, showToast, comprimirFotoPerfil,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan } from "../lib/calculosBoletas.js";
 
@@ -51,7 +51,7 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
   async function subirFotoNuevo(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFotoUrlNuevo(await comprimirImagen(file));
+    setFotoUrlNuevo(await comprimirFotoPerfil(file));
   }
 
   function toggleClienteNuevo(id) {

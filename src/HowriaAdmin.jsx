@@ -96,6 +96,17 @@ class LimiteDeError extends React.Component {
 // completa en cada carga de la pestaña correspondiente, fotos grandes
 // hacen más lenta la app para todo el mundo. Si el navegador no soporta
 // createImageBitmap, se cae de vuelta a guardar el archivo tal cual.
+// Las fotos de perfil (cliente, perro, usuario) se muestran SIEMPRE en
+// circulitos: el mas grande de la app es de 76 px. Guardarlas a 480 px
+// hacia que cada una pesara ~21 KB, y como viajan dentro de la fila del
+// cliente, las 52 sumaban 1 MB en cada inicio de sesion.
+//
+// 240 px deja el circulo de 76 px nitido hasta en pantallas 3x, que es
+// mas de lo que necesita cualquier telefono actual.
+export async function comprimirFotoPerfil(file) {
+  return comprimirImagen(file, 240, 0.72);
+}
+
 export async function comprimirImagen(file, maxLado = 480, calidad = 0.8) {
   try {
     const bitmap = await createImageBitmap(file);

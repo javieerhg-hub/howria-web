@@ -7,7 +7,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, TIPOS_SERVICIO, ESTADOS_CLIENTE,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
-  comprimirImagen, tipoServicioComoAlumno, BotonConfirmable,
+  comprimirFotoPerfil, tipoServicioComoAlumno, BotonConfirmable,
 } from "../HowriaAdmin.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
@@ -74,7 +74,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
   async function subirFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const fotoUrl = await comprimirImagen(file);
+    const fotoUrl = await comprimirFotoPerfil(file);
     setForm((f) => ({ ...f, fotoUrl }));
   }
 
