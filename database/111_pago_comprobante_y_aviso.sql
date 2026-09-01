@@ -34,7 +34,11 @@ alter table pagos_trabajadores add column if not exists detalle jsonb;
 -- por columna, así que dejarlo escribir aunque fuera "para marcar como
 -- visto" le habilitaría también cambiarse el monto. Por eso lo de
 -- "visto" vive en su propia tabla, más abajo.
+-- Se borran las DOS: la vieja por nombre, y la nueva por si esta
+-- migracion ya se corrio antes (create policy no tiene "if not exists",
+-- asi que sin este drop correrla dos veces falla).
 drop policy if exists "pagos_trabajadores_select_coord_admin" on pagos_trabajadores;
+drop policy if exists "pagos_trabajadores_select" on pagos_trabajadores;
 create policy "pagos_trabajadores_select" on pagos_trabajadores for select using (
   mi_rol() in ('coordinador', 'administrador') or paseador_nombre = mi_nombre()
 );
