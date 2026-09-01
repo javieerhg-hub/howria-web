@@ -1732,8 +1732,14 @@ export function dbToCorreo(row) {
     remitente: row.remitente,
     destinatario: row.destinatario,
     asunto: row.asunto,
-    cuerpoTexto: row.cuerpo_texto,
-    cuerpoHtml: row.cuerpo_html,
+    // undefined = no se pidió en esta carga (ver COLUMNAS_CORREO_LIVIANO),
+    // que es lo normal: el cuerpo se trae al abrir el correo. Distinto de
+    // null, que es "se pidió y este correo no tiene".
+    cuerpoTexto: "cuerpo_texto" in row ? row.cuerpo_texto : undefined,
+    cuerpoHtml: "cuerpo_html" in row ? row.cuerpo_html : undefined,
+    // Adelanto ya calculado y acotado en la base (database/115), para que
+    // la lista no dependa del cuerpo.
+    vistaPrevia: row.vista_previa || null,
     clienteId: row.cliente_id,
     prospectoId: row.prospecto_id,
     leido: row.leido,
@@ -1750,6 +1756,22 @@ export function dbToCorreo(row) {
 // api/responder-correo.js — el navegador nunca inserta filas acá, pero sí
 // necesita el setter para marcar "leído" y para reflejar al toque una
 // respuesta recién enviada, sin esperar el próximo refetch completo.
+// Todo lo de un correo MENOS el cuerpo. El cuerpo es casi todo el peso
+// (141 KB entre 40 correos, medido en producción) y solo hace falta
+// cuando alguien abre UNO. El adelanto de la tarjeta sale de
+// vista_previa, que la base calcula sola (database/115).
+const COLUMNAS_CORREO_LIVIANO = "id, direccion, remitente, destinatario, asunto, cliente_id, prospecto_id, leido, archivado, categoria, creado_en, vista_previa";
+
+// Trae el cuerpo de un correo recién cuando alguien lo abre.
+export async function cargarCuerpoCorreo(id) {
+  const { data, error } = await supabase.from("correos").select("cuerpo_texto, cuerpo_html").eq("id", id).maybeSingle();
+  if (error) {
+    showToast("No se pudo cargar el correo.");
+    return null;
+  }
+  return { cuerpoTexto: data?.cuerpo_texto ?? null, cuerpoHtml: data?.cuerpo_html ?? null };
+}
+
 function useCorreos(sessionVersion) {
   const [correos, setCorreos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -1758,7 +1780,7 @@ function useCorreos(sessionVersion) {
     if (sessionVersion == null) return;
     let activo = true;
     setCargando(true);
-    supabase.from("correos").select("*").order("creado_en", { ascending: false }).then(({ data, error }) => {
+    supabase.from("correos").select(COLUMNAS_CORREO_LIVIANO).order("creado_en", { ascending: false }).then(({ data, error }) => {
       if (!activo) return;
       if (error) showToast(`No se pudo cargar el correo: ${error.message}`);
       else if (data) setCorreos(data.map(dbToCorreo));

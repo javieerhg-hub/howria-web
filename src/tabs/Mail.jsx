@@ -13,6 +13,7 @@ import { supabase } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, RUST, tarjeta, sectionTitle, hint, input, botonPrincipal,
   botonSecundario, Skeleton, SkeletonLista, BotonConfirmable, showToast, dbToCorreo,
+  cargarCuerpoCorreo,
 } from "../HowriaAdmin.jsx";
 
 function fmtFechaCorreo(iso) {
@@ -41,9 +42,12 @@ function contraparteDe(m) {
   return (m.direccion === "entrante" ? m.remitente : m.destinatario)?.toLowerCase() || "desconocido";
 }
 
-// Texto plano para el adelanto de la tarjeta. Muchos correos vienen solo
-// en HTML, así que se le sacan las etiquetas en vez de mostrar vacío.
+// Texto plano para el adelanto de la tarjeta. Sale de vista_previa, que
+// la base calcula al guardar el correo (database/115) — así la lista no
+// necesita el cuerpo, que es lo pesado. El cálculo a mano queda de
+// respaldo para un correo abierto, que sí tiene el cuerpo cargado.
 function vistaPrevia(m) {
+  if (m.vistaPrevia) return m.vistaPrevia;
   const crudo = m.cuerpoTexto || (m.cuerpoHtml || "").replace(/<[^>]*>/g, " ");
   return crudo.replace(/\s+/g, " ").trim().slice(0, 140);
 }
@@ -119,6 +123,10 @@ function envolverHtmlCorreo(html, px) {
 // permiso hereda el origen del panel — o sea, el HTML de un correo
 // cualquiera quedaría corriendo dentro de Howria. No vale la pena.
 function CuerpoCorreo({ mensaje, px }) {
+  // undefined en los dos = el cuerpo todavía no llega (ver abrir()).
+  if (mensaje.cuerpoHtml === undefined && mensaje.cuerpoTexto === undefined) {
+    return <p style={{ margin: 0, fontSize: px, color: "#8A7E5C" }}>Cargando el correo…</p>;
+  }
   if (mensaje.cuerpoHtml) {
     return (
       <iframe
@@ -242,6 +250,14 @@ export function Mail({ correos, setCorreos, cargando, clientes, prospectos, onVe
     setRespuesta("");
     setErrorEnvio("");
     if (yaAbierto) return;
+    // El cuerpo no viaja en la carga de la lista: se pide al abrir. Se
+    // guarda en el correo ya cargado, así volver a abrirlo no lo repite.
+    if (m.cuerpoHtml === undefined && m.cuerpoTexto === undefined) {
+      cargarCuerpoCorreo(m.id).then((cuerpo) => {
+        if (!cuerpo) return;
+        setCorreos((prev) => prev.map((c) => (c.id === m.id ? { ...c, ...cuerpo } : c)));
+      });
+    }
     if (m.direccion !== "entrante" || m.leido) return;
     supabase.from("correos").update({ leido: true }).eq("id", m.id).then(({ error }) => {
       if (error) { showToast("No se pudo marcar como leído."); return; }
