@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dog } from "lucide-react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, TIPOS_SERVICIO,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, TIPOS_SERVICIO, CATEGORIAS_COSTO, grupoDeCategoria,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, FilaLista, BotonEliminar,
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
@@ -38,10 +38,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const [descCosto, setDescCosto] = useState("");
   const [montoCosto, setMontoCosto] = useState("");
   const [fechaCosto, setFechaCosto] = useState(() => fechaKey(new Date()));
+  const [categoriaCosto, setCategoriaCosto] = useState("insumos");
 
   function agregarCosto() {
     if (!descCosto.trim() || !Number(montoCosto)) return;
-    setCostosNegocio((prev) => [...prev, { id: Date.now() + Math.random(), descripcion: descCosto.trim(), monto: Number(montoCosto), fecha: fechaCosto, creadoPor: nombreUsuario }]);
+    setCostosNegocio((prev) => [...prev, { id: Date.now() + Math.random(), descripcion: descCosto.trim(), monto: Number(montoCosto), fecha: fechaCosto, creadoPor: nombreUsuario, categoria: categoriaCosto }]);
     setDescCosto(""); setMontoCosto(""); setFechaCosto(fechaKey(new Date())); setMostrarFormCosto(false);
   }
   function eliminarCosto(costo) {
@@ -255,6 +256,80 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // contra lo facturado: si no, el porcentaje compararía dos cosas
   // distintas entre sí.
   const varEntro = variacion(entro, sumaTotales(anteriores.filter((b) => b.estado === "pagada")));
+
+  // ---- Rentabilidad ----
+  //
+  // El margen bruto necesita separar el costo DIRECTO (el que sube cuando
+  // atiendes más perros) del FIJO (el que se paga igual aunque no salga
+  // ningún paseo). El sueldo de terreno es el directo más grande y no
+  // vive en costos_negocio sino en pagos_trabajadores, por eso se suma
+  // aparte. Ver CATEGORIAS_COSTO.
+  const costosDirectosSueltos = useMemo(() =>
+    costosGeneralesFiltrados.filter((c) => grupoDeCategoria(c.categoria) === "directo").reduce((acc, c) => acc + Number(c.monto || 0), 0),
+    [costosGeneralesFiltrados]);
+  const costosFijos = useMemo(() =>
+    costosGeneralesFiltrados.filter((c) => grupoDeCategoria(c.categoria) !== "directo").reduce((acc, c) => acc + Number(c.monto || 0), 0),
+    [costosGeneralesFiltrados]);
+  const costoDirecto = costosPeriodo + costoResponsablesAdiestramiento + costosDirectosSueltos;
+  // Sobre lo COBRADO, igual que todo el resto de la caja: un margen
+  // calculado sobre boletas que nadie pagó todavía no es un margen.
+  const margenBruto = entro > 0 ? (entro - costoDirecto) / entro : null;
+
+  // ---- Recurrente vs puntual ----
+  //
+  // Los paseos son suscripción (se repiten solos mes a mes); una
+  // evaluación o un pack se venden una vez. Saber cuánto de tu mes es
+  // recurrente dice cuánto puedes contar el mes que viene sin vender nada
+  // nuevo.
+  const ingresoRecurrente = useMemo(() => cobradasPeriodo.filter((b) => b._tipo === "paseo").reduce((acc, b) => acc + Number(b.total || 0), 0), [cobradasPeriodo]);
+  const ingresoPuntual = entro - ingresoRecurrente;
+
+  // ---- Clientes: entran, se van, cuánto cuesta traerlos ----
+  const enRango = (iso) => {
+    if (!iso) return false;
+    const f = new Date(iso);
+    return f >= actualDesde && (!actualHasta || f <= actualHasta);
+  };
+  const clientesNuevos = useMemo(() => clientes.filter((c) => enRango(c.creadoEn)), [clientes, actualDesde, actualHasta]);
+  const clientesDeBaja = useMemo(() => clientes.filter((c) => enRango(c.bajaEn)), [clientes, actualDesde, actualHasta]);
+  const activosHoy = useMemo(() => clientes.filter((c) => (c.estadoCliente || "activo") === "activo").length, [clientes]);
+  // Sobre la base con la que se empezó el período (los que siguen activos
+  // más los que se fueron), no sobre la de hoy: si no, un mes con muchas
+  // bajas dividiría por una base ya achicada y el porcentaje saldría bajo.
+  const churn = activosHoy + clientesDeBaja.length > 0
+    ? (clientesDeBaja.length / (activosHoy + clientesDeBaja.length)) * 100
+    : 0;
+  const gastoMarketing = useMemo(() =>
+    costosGeneralesFiltrados.filter((c) => c.categoria === "marketing").reduce((acc, c) => acc + Number(c.monto || 0), 0),
+    [costosGeneralesFiltrados]);
+  const cac = clientesNuevos.length > 0 ? gastoMarketing / clientesNuevos.length : null;
+
+  // ---- Cuánto deja cada paseador ----
+  //
+  // Lo que cobraron sus clientes en el período contra lo que se le pagó.
+  // Es aproximado y hay que decirlo: los ingresos se atribuyen por el
+  // paseador que el cliente tiene HOY, así que una reasignación reciente
+  // mueve el histórico de lugar.
+  const margenPorTrabajador = useMemo(() => {
+    if (vistaPersonal) return [];
+    const nombres = [...new Set(clientes.map((c) => c.paseadorNombre).filter(Boolean))];
+    return nombres.map((nombre) => {
+      const suyos = clientes.filter((c) => c.paseadorNombre === nombre);
+      const genero = cobradasPeriodo
+        .filter((b) => suyos.some((c) => esBoletaDeCliente(b, c)))
+        .reduce((acc, b) => acc + Number(b.total || 0), 0);
+      const pagado = pagosRegistrados
+        .filter((p) => !p.deshechoEn && p.paseador === nombre)
+        .filter((p) => {
+          const fISO = p.periodoDesdeISO || p.fechaPagoISO;
+          if (!fISO) return false;
+          const f = new Date(fISO.length <= 10 ? `${fISO}T00:00:00` : fISO);
+          return f >= actualDesde && (!actualHasta || f <= actualHasta);
+        })
+        .reduce((acc, p) => acc + Number(p.monto || 0), 0);
+      return { nombre, genero, pagado, margen: genero - pagado, clientes: suyos.length };
+    }).filter((f) => f.genero > 0 || f.pagado > 0).sort((a, b) => b.margen - a.margen);
+  }, [vistaPersonal, clientes, cobradasPeriodo, pagosRegistrados, actualDesde, actualHasta]);
 
   // Trabajo del período que todavía no se le pagó a nadie: lo que suman
   // los paseos hechos menos lo ya registrado como pagado. Es una
@@ -636,6 +711,73 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Paseos hechos que aún no registras como pagados</p>
             </div>
           </div>
+
+          <p style={{ ...label, marginBottom: 8 }}>Rentabilidad {etiquetaPeriodo}</p>
+          <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 10 }}>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Margen bruto</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: margenBruto == null ? "#8A7E5C" : margenBruto >= 0.3 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>
+                {margenBruto == null ? "—" : `${Math.round(margenBruto * 100)}%`}
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
+                {margenBruto == null ? "Sin nada cobrado todavía" : `Queda ${fmtCLP(entro - costoDirecto)} después del costo de operar`}
+              </p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Costo directo</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costoDirecto)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Sueldos de terreno {fmtCLP(costosPeriodo + costoResponsablesAdiestramiento)} + insumos y transporte {fmtCLP(costosDirectosSueltos)}</p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Gastos fijos</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosFijos)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Se pagan igual aunque no salga ningún paseo</p>
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 22px" }}>
+            Del dinero cobrado, {fmtCLP(ingresoRecurrente)} viene de paseos (se repite solo el mes que viene) y {fmtCLP(ingresoPuntual)} de evaluaciones y clases, que hay que volver a vender.
+          </p>
+
+          <p style={{ ...label, marginBottom: 8 }}>Clientes {etiquetaPeriodo}</p>
+          <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 26 }}>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Entraron / se fueron</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>+{clientesNuevos.length} / −{clientesDeBaja.length}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{activosHoy} activos hoy</p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>% que se fue</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: churn > 5 ? RUST : "#2F6A46", fontFamily: "Georgia, serif" }}>{churn.toFixed(1)}%</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Solo cuenta las bajas marcadas de ahora en adelante</p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Costo por cliente nuevo</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{cac == null ? "—" : fmtCLP(cac)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
+                {cac == null ? "Sin clientes nuevos en el período" : `${fmtCLP(gastoMarketing)} de marketing entre ${clientesNuevos.length}`}
+              </p>
+            </div>
+          </div>
+
+          {margenPorTrabajador.length > 0 && (
+            <>
+              <p style={{ ...label, marginBottom: 2 }}>Cuánto deja cada paseador {etiquetaPeriodo}</p>
+              <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>
+                Lo que cobraron sus clientes contra lo que se le pagó. Aproximado: los ingresos se atribuyen al paseador que el cliente tiene hoy, así que una reasignación reciente mueve el histórico.
+              </p>
+              <div style={{ display: "grid", gap: 6, marginBottom: 26 }}>
+                {margenPorTrabajador.map((f) => (
+                  <div key={f.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 8, padding: "10px 14px" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{f.nombre}</p>
+                      <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>{f.clientes} cliente(s) · cobrado {fmtCLP(f.genero)} · pagado {fmtCLP(f.pagado)}</p>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 16, fontWeight: 700, fontFamily: "Georgia, serif", color: f.margen >= 0 ? "#2F6A46" : RUST }}>{fmtCLP(f.margen)}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -674,11 +816,25 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </div>
           {mostrarFormCosto && (
             <>
-              <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginTop: 14 }}>
-                <input placeholder="Descripción (ej: arriendo agosto)" value={descCosto} onChange={(e) => setDescCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+              <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+                <input placeholder="Descripción (ej: bolsas biodegradables)" value={descCosto} onChange={(e) => setDescCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
+                {/* La categoría no es decoración: es lo que decide si el
+                    gasto entra en el margen bruto (directo) o queda como
+                    gasto fijo. Ver CATEGORIAS_COSTO. */}
+                <select value={categoriaCosto} onChange={(e) => setCategoriaCosto(e.target.value)} style={{ ...input, marginBottom: 0 }}>
+                  {CATEGORIAS_COSTO.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre} · {c.grupo === "directo" ? "directo" : "fijo"}</option>
+                  ))}
+                </select>
                 <input type="number" placeholder="Monto" min="0" value={montoCosto} onChange={(e) => setMontoCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
                 <input type="date" value={fechaCosto} onChange={(e) => setFechaCosto(e.target.value)} style={{ ...input, marginBottom: 0 }} />
               </div>
+              <p style={{ ...hint, marginTop: 8, marginBottom: 0 }}>
+                {CATEGORIAS_COSTO.find((c) => c.id === categoriaCosto)?.ayuda}
+                {grupoDeCategoria(categoriaCosto) === "directo"
+                  ? " — sube cuando atiendes más perros, así que baja el margen bruto."
+                  : " — se paga igual aunque no salga ningún paseo."}
+              </p>
               <button onClick={agregarCosto} disabled={!descCosto.trim() || !Number(montoCosto)}
                 style={{ ...botonPrincipal, width: "auto", marginTop: 12, padding: "10px 20px", opacity: !descCosto.trim() || !Number(montoCosto) ? 0.6 : 1 }}>
                 Guardar costo
@@ -691,7 +847,10 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid #E4DBC3" }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 13, color: NAVY, fontWeight: 600 }}>{c.descripcion}</p>
-                    <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>{new Date(c.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: "#8A7E5C" }}>
+                      {new Date(c.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                      {" · "}{CATEGORIAS_COSTO.find((x) => x.id === c.categoria)?.nombre || "Otros"}
+                    </p>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
                     <b style={{ color: RUST, fontSize: 13.5 }}>{fmtCLP(c.monto)}</b>

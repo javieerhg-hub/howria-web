@@ -173,6 +173,9 @@ function dbToCliente(row) {
     // vuelta (no está en clienteToDb); sirve para marcar los recién
     // ingresados en las listas — ver textoClienteEnLista.
     creadoEn: row.created_at || null,
+    // Cuándo se dio de baja, para poder medir cuántos se van al mes. La
+    // pone un trigger (database/117), tampoco se manda de vuelta.
+    bajaEn: row.baja_en || null,
     nombre: row.nombre,
     perro: row.perro,
     telefono: row.telefono,
@@ -518,10 +521,10 @@ export async function cargarComprobantePago(dbId) {
 }
 
 function costoNegocioToDb(c) {
-  return { descripcion: c.descripcion, monto: c.monto, fecha: c.fecha, creado_por: c.creadoPor || null };
+  return { descripcion: c.descripcion, monto: c.monto, fecha: c.fecha, creado_por: c.creadoPor || null, categoria: c.categoria || "otros" };
 }
 function dbToCostoNegocio(row) {
-  return { descripcion: row.descripcion, monto: row.monto, fecha: row.fecha, creadoPor: row.creado_por, creadoEn: row.creado_en };
+  return { descripcion: row.descripcion, monto: row.monto, fecha: row.fecha, creadoPor: row.creado_por, creadoEn: row.creado_en, categoria: row.categoria || "otros" };
 }
 
 function objetivoSemanalToDb(o) {
@@ -1273,6 +1276,27 @@ export const TIPOS_SERVICIO = [
   { id: "clases", nombre: "Clases de adiestramiento" },
   { id: "evaluacion", nombre: "Evaluación" },
 ];
+
+// En qué se va la plata que no son sueldos. El "grupo" es lo que
+// permite calcular el margen bruto: DIRECTO es lo que sube cuando
+// atiendes más perros (bolsas, bencina) y FIJO es lo que se paga igual
+// aunque no salga ningún paseo (software, seguro, contador).
+//
+// Los sueldos de paseadores y adiestradores no están acá: viven en
+// pagos_trabajadores y son el costo directo más grande de todos.
+export const CATEGORIAS_COSTO = [
+  { id: "insumos", nombre: "Insumos", grupo: "directo", ayuda: "Bolsas, correas, arneses, premios" },
+  { id: "transporte", nombre: "Transporte", grupo: "directo", ayuda: "Bencina, micro, mantención del auto" },
+  { id: "marketing", nombre: "Marketing", grupo: "fijo", ayuda: "Pauta en redes, folletos" },
+  { id: "software", nombre: "Software", grupo: "fijo", ayuda: "Licencias y herramientas" },
+  { id: "seguros", nombre: "Seguros y salud", grupo: "fijo", ayuda: "Responsabilidad civil, veterinario" },
+  { id: "administracion", nombre: "Administración", grupo: "fijo", ayuda: "Teléfono, internet, contador" },
+  { id: "otros", nombre: "Otros", grupo: "fijo", ayuda: "Lo que no cae en ninguna de arriba" },
+];
+
+export function grupoDeCategoria(id) {
+  return CATEGORIAS_COSTO.find((c) => c.id === id)?.grupo || "fijo";
+}
 
 export const NIVELES_ENERGIA = [
   { id: "baja", nombre: "Baja" },
