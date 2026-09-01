@@ -903,6 +903,19 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   // Paseos y adiestramiento se gestionan distinto, así que la lista se
   // mira de a un negocio por vez. Se recuerda, como el resto de filtros.
   const [negocio, setNegocio] = useState(filtrosGuardados.negocio || "paseos");
+  // Cliente al que se le esta preguntando si pasa a alumno. Se confirma
+  // antes de aplicar: cambia en que pestañas aparece y de que listas sale.
+  const [alumnoPendiente, setAlumnoPendiente] = useState(null);
+
+  function pasarAAlumno(c) {
+    // tipoServicioComoAlumno saca "evaluacion" y agrega "clases" SIN
+    // pisar los otros servicios: si ademas hace paseos, los conserva.
+    setClientes((prev) => prev.map((x) => (x.id === c.id
+      ? { ...x, tipoServicio: tipoServicioComoAlumno(x.tipoServicio), estadoCliente: "activo", triagePendiente: false }
+      : x)));
+    setAlumnoPendiente(null);
+    showToast(`${c.nombre} ahora es alumno de Howria.`, "exito");
+  }
   const [soloEvaluacion, setSoloEvaluacion] = useState(filtrosGuardados.soloEvaluacion || false);
   const [orden, setOrden] = useState(filtrosGuardados.orden || "nombre-asc");
 
@@ -1118,6 +1131,9 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
                       líneas apretadas contra la etiqueta. */}
                   <div style={{ display: "flex", justifyContent: "flex-end", flexWrap: "wrap", gap: 4, marginBottom: 8, minHeight: 19 }}>
                     <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: estado.bg, color: estado.color }}>{estado.nombre}</span>
+                    {c.tipoServicio?.includes("clases") && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: "#D8ECDE", color: "#2F6A46" }}>Alumno</span>
+                    )}
                     {c.tipoServicio?.includes("evaluacion") && (
                       <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#D6E6EE", color: "#1E5A7A" }}>Evaluación</span>
                     )}
@@ -1157,6 +1173,38 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
                       );
                     })()}
                   </div>
+
+                  {/* Atajo para lo que hoy obliga a entrar a la ficha y
+                      abrir "Editar": marcar que la persona dejo de estar
+                      solo evaluandose y ya es alumna. Va dentro de una
+                      tarjeta que es un boton, asi que el clic se detiene
+                      acá para no abrir el perfil de paso. */}
+                  {!esVistaPaseos && !c.tipoServicio?.includes("clases") && (
+                    <div onClick={(e) => { e.stopPropagation(); e.preventDefault(); }} style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #EDE4CE" }}>
+                      {alumnoPendiente === c.id ? (
+                        <div>
+                          <p style={{ margin: "0 0 6px", fontSize: 11.5, color: RUST, lineHeight: 1.35 }}>
+                            ¿Marcar a {c.nombre} como alumno? Pasa a la pestaña Alumnos y deja de contar como evaluación pendiente.
+                          </p>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => pasarAAlumno(c)}
+                              style={{ border: "none", background: "#2F6A46", color: "#fff", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", minHeight: 36 }}>
+                              Sí, es alumno
+                            </button>
+                            <button onClick={() => setAlumnoPendiente(null)}
+                              style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", minHeight: 36 }}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => setAlumnoPendiente(c.id)}
+                          style={{ border: "1px solid #DCD2B4", background: "#FFFFFF", color: "#2F6A46", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
+                          Pasar a alumno
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
