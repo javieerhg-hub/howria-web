@@ -417,7 +417,7 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, pac
       return;
     }
     const iso = new Date(nuevaFechaHora).toISOString();
-    llamarApi("/api/reprogramar-cita", { citaId: cita._dbId, fechaNueva: iso }, () => {
+    llamarApi("/api/mover-cita", { citaId: cita._dbId, fechaNueva: iso }, () => {
       setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, fechaISO: iso } : c)));
       setReprogramandoId(null);
       setNuevaFechaHora("");

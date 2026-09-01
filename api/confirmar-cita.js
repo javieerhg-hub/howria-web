@@ -1,6 +1,20 @@
-// Función serverless de Vercel (no pasa por Vite): el adiestrador/staff la
-// llama desde el panel al hacer clic en "Confirmar" sobre una cita
-// pendiente. Verifica quién llama con la service role key (nunca expuesta
+// Función serverless de Vercel (no pasa por Vite). Dos confirmaciones
+// distintas de una misma cita, en un archivo porque el plan Hobby de
+// Vercel permite máximo 12 funciones serverless por deploy y cada
+// archivo de api/ cuenta como una:
+//
+//   1. La del EQUIPO — el adiestrador/staff la llama desde el panel al
+//      hacer clic en "Confirmar" sobre una cita pendiente. Pide sesión.
+//   2. La del CLIENTE — la persona llega desde el botón del correo a la
+//      página /confirmar-cita. No pide sesión: la llave es el token de
+//      la cita. Solo puede escribir confirmada_cliente_en, y solo en la
+//      fila de ese token.
+//
+// La rama pública va primero y siempre retorna, así que nunca cae en la
+// verificación de sesión de la otra.
+//
+// Sobre (1): el adiestrador/staff la llama desde el panel al hacer clic
+// en "Confirmar" sobre una cita pendiente. Verifica quién llama con la service role key (nunca expuesta
 // al navegador), vuelve a leer la cita desde la base (no confía en nada
 // que mande el cliente) y, si corresponde, envía el correo de confirmación
 // con diseño Howria vía Resend.
@@ -84,6 +98,11 @@ function renderCorreoConfirmacion(cita) {
 }
 
 export default async function handler(req, res) {
+  // Rama pública: si viene un token de cita, es el cliente desde el
+  // correo, no alguien del equipo con sesión abierta.
+  const tokenPublico = req.method === "GET" ? req.query?.t : req.body?.token;
+  if (tokenPublico) return manejarConfirmacionCliente(req, res, tokenPublico);
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método no permitido" });
     return;
@@ -207,4 +226,90 @@ export default async function handler(req, res) {
   });
 
   res.status(200).json({ ok: true });
+}
+
+function clienteAdmin() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+// Solo lo que la persona necesita ver para reconocer su cita. Nada de
+// ids internos, precios ni datos de otros: la URL es adivinable por
+// quien reciba el correo reenviado.
+function paraElCliente(cita) {
+  return {
+    clienteNombre: cita.cliente_nombre,
+    perro: cita.perro,
+    // La evaluación incluida en un plan se guarda con tipo "clase" y
+    // numero_clase 0 (así la trata el checklist de Alumnos). Al cliente
+    // hay que nombrarla por lo que es.
+    tipo: cita.numero_clase === 0 ? NOMBRES_TIPO.evaluacion : (NOMBRES_TIPO[cita.tipo] || cita.tipo),
+    tema: cita.tema || null,
+    adiestrador: cita.adiestrador,
+    fechaTexto: new Intl.DateTimeFormat("es-CL", {
+      timeZone: ZONA_CHILE,
+      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+    }).format(new Date(cita.fecha_hora)),
+    estado: cita.estado,
+    yaConfirmada: !!cita.confirmada_cliente_en,
+  };
+}
+
+async function manejarConfirmacionCliente(req, res, token) {
+  const db = clienteAdmin();
+  if (!db) {
+    res.status(500).json({ error: "Falta configuración del servidor" });
+    return;
+  }
+
+  // Un token con forma rara ni siquiera llega a consultar la base.
+  if (!/^[0-9a-f-]{36}$/i.test(String(token))) {
+    res.status(400).json({ error: "Enlace inválido" });
+    return;
+  }
+
+  const { data: cita, error } = await db
+    .from("citas_agenda")
+    .select("id, cliente_nombre, perro, tipo, tema, adiestrador, fecha_hora, estado, confirmada_cliente_en, numero_clase")
+    .eq("token_confirmacion", token)
+    .maybeSingle();
+
+  if (error || !cita) {
+    res.status(404).json({ error: "No encontramos esta cita. Puede que el enlace ya no sirva." });
+    return;
+  }
+
+  if (req.method === "GET") {
+    res.status(200).json({ cita: paraElCliente(cita) });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Método no permitido" });
+    return;
+  }
+
+  if (cita.estado === "cancelada" || cita.estado === "rechazada") {
+    res.status(409).json({ error: "Esta hora fue cancelada. Escríbenos y coordinamos otra." });
+    return;
+  }
+  // Confirmar dos veces no es un error: la persona puede volver a abrir
+  // el correo. Se responde igual que la primera vez.
+  if (cita.confirmada_cliente_en) {
+    res.status(200).json({ ok: true, cita: paraElCliente(cita) });
+    return;
+  }
+
+  const { error: updErr } = await db
+    .from("citas_agenda")
+    .update({ confirmada_cliente_en: new Date().toISOString() })
+    .eq("id", cita.id);
+  if (updErr) {
+    res.status(500).json({ error: "No pudimos guardar tu confirmación. Intenta de nuevo." });
+    return;
+  }
+
+  res.status(200).json({ ok: true, cita: { ...paraElCliente(cita), yaConfirmada: true } });
 }

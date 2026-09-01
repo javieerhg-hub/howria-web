@@ -101,7 +101,7 @@ export default function ConfirmarCita() {
   useEffect(() => {
     if (!token) { setError("El enlace está incompleto."); setCargando(false); return; }
     let activo = true;
-    fetch(`/api/cita-publica?t=${encodeURIComponent(token)}`)
+    fetch(`/api/confirmar-cita?t=${encodeURIComponent(token)}`)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!activo) return;
@@ -117,7 +117,7 @@ export default function ConfirmarCita() {
     if (confirmando) return;
     setConfirmando(true);
     try {
-      const resp = await fetch("/api/cita-publica", {
+      const resp = await fetch("/api/confirmar-cita", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),

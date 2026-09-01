@@ -337,10 +337,11 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
     setAgendaEnVuelo(true);
     try {
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/agendar-clase", {
+      const resp = await fetch("/api/mover-cita", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({
+          accion: "agendar",
           citaId: existenteCita?._dbId || null, clienteId: cliente._dbId,
           planId: plan._dbId, numeroClase: agendando,
           adiestrador: cliente.adiestradorNombre, fechaISO: iso, tema,
