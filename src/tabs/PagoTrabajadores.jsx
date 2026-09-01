@@ -6,7 +6,7 @@ import { Banknote } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, tarjeta, sectionTitle, hint, label, input,
   botonPrincipal, botonSecundario, SkeletonLista, FilaLista, BotonEliminar, BotonConfirmable,
-  fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo, showToast,
+  fmtCLP, fechaKey, esBoletaDeCliente, rangoPeriodo, showToast, comprimirImagen,
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoCompartido } from "../lib/reparto.js";
@@ -103,7 +103,7 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
   );
 }
 
-export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario }) {
+export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario, reclamosPago = [], resolverReclamoPago }) {
   const [periodo, setPeriodo] = useState("semana");
   const [generandoPdf, setGenerandoPdf] = useState(null);
   const [periodoOffset, setPeriodoOffset] = useState(0);
@@ -318,22 +318,32 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
   // Por lo mismo el total se calcula sumando las filas del PDF y no se
   // toma el de la tabla: así lo que se ve sumado es exactamente el total
   // que aparece abajo.
+  // Detalle por perro del mes: qué perro, cuántos paseos, a qué tarifa.
+  // Lo usan el PDF y el registro del pago, para que el papel diga
+  // exactamente lo mismo que quedó guardado.
+  function armarFilasLiquidacion(paseador) {
+    const diasEnMes = new Date(anioFactura, mesFactura + 1, 0).getDate();
+    const hoyMedianoche = new Date();
+    hoyMedianoche.setHours(0, 0, 0, 0);
+    return filasDetalleMes(clientes, paseador, registroPaseos, anioFactura, mesFactura, diasEnMes)
+      .map(({ cliente, compartido }) => {
+        const d = detalleMesCliente({ cliente, compartido, paseador, registroPaseos, anio: anioFactura, mes: mesFactura, diasEnMes, hoyMedianoche });
+        return { perro: cliente.perro || cliente.nombre, cliente: cliente.nombre, compartido, realizados: d.realizados, tarifa: d.tarifa, monto: d.monto };
+      })
+      .filter((f) => f.realizados > 0)
+      .sort((a, b) => b.monto - a.monto);
+  }
+
   async function bajarLiquidacion(fila) {
     if (generandoPdf) return;
     setGenerandoPdf(fila.paseador);
     try {
-      const diasEnMes = new Date(anioFactura, mesFactura + 1, 0).getDate();
-      const hoyMedianoche = new Date();
-      hoyMedianoche.setHours(0, 0, 0, 0);
-      const filas = filasDetalleMes(clientes, fila.paseador, registroPaseos, anioFactura, mesFactura, diasEnMes)
-        .map(({ cliente, compartido }) => {
-          const d = detalleMesCliente({ cliente, compartido, paseador: fila.paseador, registroPaseos, anio: anioFactura, mes: mesFactura, diasEnMes, hoyMedianoche });
-          return { perro: cliente.perro || cliente.nombre, cliente: cliente.nombre, compartido, realizados: d.realizados, tarifa: d.tarifa, monto: d.monto };
-        })
-        // Un cliente sin paseos hechos ese mes solo agrega ruido a un
-        // comprobante que el paseador tiene que poder leer de un vistazo.
-        .filter((f) => f.realizados > 0)
-        .sort((a, b) => b.monto - a.monto);
+      // Si el pago ya se registró, se usa el detalle GUARDADO en ese
+      // momento y no uno recalculado: una liquidación es un comprobante y
+      // tiene que decir lo mismo dentro de seis meses, aunque los datos
+      // de origen hayan cambiado desde entonces.
+      const yaPago = yaPagado(fila.paseador);
+      const filas = yaPago?.detalle?.length ? yaPago.detalle : armarFilasLiquidacion(fila.paseador);
 
       if (filas.length === 0) {
         showToast(`${fila.paseador} no tiene paseos marcados en ${MESES[mesFactura]}.`);
@@ -355,8 +365,44 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     }
   }
 
-  function marcarPagado(fila) {
+  // Marcar pagado ya no es directo: primero hay que adjuntar el
+  // comprobante de la transferencia. Sin eso no se registra el pago —
+  // decisión explícita de Javier, para que la contabilidad siempre tenga
+  // respaldo de lo que salió.
+  const [cobrando, setCobrando] = useState(null);   // fila que se está pagando
+  const [comprobante, setComprobante] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+
+  async function elegirComprobante(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendo(true);
+    try {
+      // 1200px y no los 480 que se usan para fotos de perros: a ese
+      // tamaño los montos de una transferencia salen borrosos y el
+      // comprobante deja de servir como respaldo.
+      setComprobante(await comprimirImagen(file, 1200, 0.75));
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  function cerrarCobro() {
+    setCobrando(null);
+    setComprobante(null);
+  }
+
+  function confirmarPago() {
+    if (!cobrando || !comprobante) return;
+    marcarPagado(cobrando, comprobante);
+    cerrarCobro();
+  }
+
+  function marcarPagado(fila, imagenComprobante) {
     setPagosRegistrados((prev) => [...prev, {
+      comprobante: imagenComprobante,
+      // Foto del detalle con el que se calculó este pago (database/111).
+      detalle: armarFilasLiquidacion(fila.paseador),
       id: Date.now() + Math.random(),
       paseador: fila.paseador, periodo, etiqueta, monto: fila.monto, paseos: fila.realizados, clientes: fila.clientes,
       ajuste: fila.ajuste || 0,
@@ -387,6 +433,30 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
 
   return (
     <>
+    {reclamosPago.filter((r) => !r.resuelto).length > 0 && (
+      <div className="howria-card" style={{ ...tarjeta, border: `1px solid ${RUST}`, background: "#FBEEEA", marginBottom: 20 }}>
+        <h2 style={{ ...sectionTitle, color: RUST }}>
+          Mensajes sobre pagos ({reclamosPago.filter((r) => !r.resuelto).length})
+        </h2>
+        <p style={hint}>Un trabajador avisó que algo no le cuadra con su pago. Solo lo ves tú.</p>
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {reclamosPago.filter((r) => !r.resuelto).map((r) => (
+            <div key={r.id} style={{ background: "#FFFFFF", borderRadius: 10, padding: 14 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 13.5, fontWeight: 700, color: NAVY }}>{r.trabajador}</p>
+              <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>
+                {new Date(r.creado_en).toLocaleString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <p style={{ margin: "0 0 12px", fontSize: 14, color: INK, whiteSpace: "pre-wrap" }}>{r.mensaje}</p>
+              <button onClick={() => resolverReclamoPago(r.id, nombreUsuario)}
+                style={{ ...botonSecundario, width: "auto", padding: "7px 14px", fontSize: 12.5, margin: 0 }}>
+                Marcar como resuelto
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
     <div className="howria-card" style={tarjeta}>
       <h2 style={sectionTitle}>Pago a trabajadores</h2>
       <p style={hint}>Calculado desde los paseos que cada paseador marcó como realizados en "Mis paseos" (no desde lo facturado), con su tarifa por paseo.</p>
@@ -466,7 +536,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                             style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, borderColor: RUST, color: RUST }} />
                         </>
                       ) : (
-                        <BotonConfirmable onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
+                        <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
                           style={{ border: "none", background: "#2F6A46", color: "#fff", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, cursor: "pointer" }} />
                       )}
                     </div>
@@ -527,7 +597,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                       style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12, borderColor: RUST, color: RUST }} />
                   </>
                 ) : (
-                  <BotonConfirmable onConfirm={() => marcarPagado(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
+                  <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
                     style={{ ...botonPrincipal, background: "#2F6A46", boxShadow: "none", width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
                 )}
               </div>
@@ -609,6 +679,39 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     {ajusteModal && (
       <ModalAjustePago paseador={ajusteModal} monto={ajusteMontoForm} motivo={ajusteMotivoForm}
         onMonto={setAjusteMontoForm} onMotivo={setAjusteMotivoForm} onGuardar={guardarAjusteModal} onCerrar={() => setAjusteModal(null)} />
+    )}
+    {cobrando && (
+      <div onClick={cerrarCobro} className="howria-modal-fondo"
+        style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+        <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" className="howria-modal-caja"
+          style={{ background: "#FFFFFF", borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+          <h3 style={{ ...sectionTitle, fontSize: 17, margin: "0 0 4px" }}>Pagar a {cobrando.paseador}</h3>
+          <p style={{ ...hint, marginTop: 0 }}>{etiqueta} · {cobrando.realizados} paseo(s)</p>
+          <p style={{ margin: "10px 0 16px", fontSize: 26, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(cobrando.monto)}</p>
+
+          <label style={{ ...botonSecundario, display: "inline-block", padding: "10px 16px", cursor: subiendo ? "wait" : "pointer", marginBottom: 12 }}>
+            {subiendo ? "Procesando..." : comprobante ? "Cambiar comprobante" : "Adjuntar comprobante"}
+            <input type="file" accept="image/*" onChange={elegirComprobante} style={{ display: "none" }} />
+          </label>
+
+          {comprobante ? (
+            <img src={comprobante} alt="Comprobante de la transferencia"
+              style={{ display: "block", width: "100%", borderRadius: 8, border: "1px solid #E4DBC3", marginBottom: 14 }} />
+          ) : (
+            <p style={{ ...hint, margin: "0 0 14px", color: RUST }}>
+              Adjunta la captura de la transferencia para poder registrar el pago.
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={confirmarPago} disabled={!comprobante || subiendo}
+              style={{ ...botonPrincipal, marginTop: 0, width: "auto", padding: "10px 20px", background: "#2F6A46", opacity: !comprobante || subiendo ? 0.45 : 1 }}>
+              Confirmar pago
+            </button>
+            <button onClick={cerrarCobro} style={{ ...botonSecundario, width: "auto", padding: "10px 20px", margin: 0 }}>Cancelar</button>
+          </div>
+        </div>
+      </div>
     )}
     {detalleAbierto && (
       <ModalDetalleMes paseador={detalleAbierto} clientes={clientes} registroPaseos={registroPaseos}

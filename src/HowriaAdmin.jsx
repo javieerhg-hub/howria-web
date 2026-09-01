@@ -429,6 +429,10 @@ function pagoToDb(p) {
     fecha_pago: p.fechaPagoISO || fechaKey(new Date()),
     periodo_desde: p.periodoDesdeISO || null,
     marcado_por: p.marcadoPor || null,
+    // Imagen del comprobante de transferencia, comprimida a 1200px
+    // (database/111). Obligatoria para marcar un pago.
+    comprobante: p.comprobante || null,
+    detalle: p.detalle || null,
     deshecho_por: p.deshechoPor || null,
     deshecho_en: p.deshechoEn || null,
   };
@@ -465,6 +469,9 @@ function dbToPago(row) {
     // fallback a fecha_pago en Finanzas (costosPeriodo).
     periodoDesdeISO: row.periodo_desde || null,
     marcadoPor: row.marcado_por || undefined,
+    comprobante: row.comprobante || null,
+    detalle: row.detalle || null,
+    _dbId: row.id,
     deshechoPor: row.deshecho_por || undefined,
     deshechoEn: row.deshecho_en || undefined,
   };
@@ -1270,7 +1277,9 @@ const TABS_QUE_USAN_TABLA = {
   solicitudes_registro: ["usuarios"],
   entregas_inventario: ["inventario"],
   costos_negocio: ["finanzas"],
-  pagos_trabajadores: ["finanzas", "pagos"],
+  // pagos_trabajadores ya NO va acá: desde database/111 el paseador lee
+  // sus propios pagos para el aviso de "te pagamos", y RLS le devuelve
+  // solo sus filas, así que le cuesta muy poco.
   ajustes_pago_pendientes: ["pagos"],
   objetivos_semanales: ["equipo"],
   objetivos_mensuales: ["equipo"],
@@ -1909,6 +1918,71 @@ export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
 // Solicitudes de "Registro de cuenta" pendientes de revisión (ver
 // api/solicitud-registro.js) — solo trae las que siguen en estado
 // "pendiente"; aprobar/rechazar las saca de esta lista.
+// Qué pagos ya vio el trabajador. Vive en su propia tabla y no como una
+// columna de pagos_trabajadores a propósito: RLS no puede limitar por
+// columna, así que darle permiso de escritura sobre la tabla del monto
+// para que marcara "visto" le habilitaría también cambiárselo.
+function usePagosVistos(sessionVersion) {
+  const [vistos, setVistos] = useState([]);
+
+  useEffect(() => {
+    if (sessionVersion == null) return;
+    let activo = true;
+    supabase.from("pagos_vistos").select("pago_id").then(({ data }) => {
+      if (activo && data) setVistos(data.map((r) => r.pago_id));
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  function marcarVisto(pagoDbId) {
+    if (!pagoDbId || vistos.includes(pagoDbId)) return;
+    setVistos((prev) => [...prev, pagoDbId]);
+    supabase.from("pagos_vistos").insert({ pago_id: pagoDbId }).then(({ error }) => {
+      // Si falla, el aviso volverá a aparecer la próxima vez. Es el
+      // error correcto: mejor repetir el agradecimiento que tragarse un
+      // pago sin que la persona se entere.
+      if (error) setVistos((prev) => prev.filter((x) => x !== pagoDbId));
+    });
+  }
+
+  return [vistos, marcarVisto];
+}
+
+// Avisos privados de un trabajador sobre su pago. Aparte del chat de
+// equipo: hablar de plata delante de todos incomoda.
+function useReclamosPago(sessionVersion) {
+  const [reclamos, setReclamos] = useState([]);
+
+  useEffect(() => {
+    if (sessionVersion == null) return;
+    let activo = true;
+    supabase.from("reclamos_pago").select("*").order("creado_en", { ascending: false }).then(({ data }) => {
+      if (activo && data) setReclamos(data);
+    });
+    return () => { activo = false; };
+  }, [sessionVersion]);
+
+  async function enviarReclamo({ pagoDbId, trabajador, mensaje }) {
+    const { data, error } = await supabase
+      .from("reclamos_pago")
+      .insert({ pago_id: pagoDbId || null, trabajador, mensaje })
+      .select()
+      .single();
+    if (error) { showToast("No se pudo enviar el mensaje."); return false; }
+    setReclamos((prev) => [data, ...prev]);
+    return true;
+  }
+
+  function resolverReclamo(id, nombreUsuario) {
+    setReclamos((prev) => prev.map((r) => (r.id === id ? { ...r, resuelto: true, resuelto_por: nombreUsuario, resuelto_en: new Date().toISOString() } : r)));
+    supabase.from("reclamos_pago").update({ resuelto: true, resuelto_por: nombreUsuario, resuelto_en: new Date().toISOString() }).eq("id", id).then(({ error }) => {
+      if (error) showToast("No se pudo marcar como resuelto.");
+    });
+  }
+
+  return [reclamos, enviarReclamo, resolverReclamo];
+}
+
 function useSolicitudesRegistro(sessionVersion) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -1947,6 +2021,117 @@ export const ESTADOS_FACTURA = [
 
 export function fmtCLP(n) {
   return Number(n || 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+}
+
+// Lo primero que ve un paseador la sesión siguiente a que le pagaron.
+// No es un aviso más entre otros: es el momento en que se entera de
+// cuánto ganó, así que ocupa la pantalla y no se pierde entre tarjetas.
+//
+// Se muestra una sola vez por pago (queda anotado en pagos_vistos). Si
+// falla al anotarlo, vuelve a aparecer la próxima vez — mejor repetir el
+// agradecimiento que tragarse un pago sin que la persona se entere.
+function ModalPagoRecibido({ pago, user, onCerrar, onEnviarMensaje }) {
+  const [mostrandoMensaje, setMostrandoMensaje] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [bajando, setBajando] = useState(false);
+
+  const meta = Number(user.metaMensual || 0);
+  const paseos = pago.paseos || 0;
+
+  async function verLiquidacion() {
+    if (bajando) return;
+    setBajando(true);
+    try {
+      // Import dinámico: jsPDF pesa, y un paseador no debería cargarla
+      // solo por si algún día toca este botón.
+      const { descargarLiquidacionPaseador } = await import("./tabs/_compartido_pdf.jsx");
+      await descargarLiquidacionPaseador({
+        paseador: pago.paseador,
+        etiquetaPeriodo: pago.etiqueta || "",
+        filas: pago.detalle || [],
+        ajuste: pago.ajuste || 0,
+        ajusteMotivo: pago.ajusteMotivo || "",
+        total: pago.monto,
+      });
+    } catch {
+      showToast("No se pudo abrir la liquidación.");
+    } finally {
+      setBajando(false);
+    }
+  }
+
+  async function enviar() {
+    if (!mensaje.trim() || enviando) return;
+    setEnviando(true);
+    const ok = await onEnviarMensaje(mensaje.trim());
+    setEnviando(false);
+    if (ok) {
+      showToast("Mensaje enviado — te van a responder.", "exito");
+      onCerrar();
+    }
+  }
+
+  return (
+    <div className="howria-modal-fondo"
+      style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400, padding: 20 }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="pago-recibido-titulo" className="howria-modal-caja"
+        style={{ background: CREAM, borderRadius: 16, padding: "30px 26px", maxWidth: 420, width: "100%", maxHeight: "88vh", overflowY: "auto", textAlign: "center" }}>
+        <div style={{ fontSize: 40, lineHeight: 1, marginBottom: 12 }}>🐾</div>
+        <h2 id="pago-recibido-titulo" style={{ margin: "0 0 8px", fontFamily: "Georgia, serif", fontSize: 21, color: NAVY, lineHeight: 1.3 }}>
+          Gracias por tu dedicación en cada paseo
+        </h2>
+        <p style={{ margin: "0 0 4px", fontSize: 13.5, color: "#6B6248" }}>{pago.etiqueta}, ganaste</p>
+        <p style={{ margin: "0 0 20px", fontSize: 38, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{fmtCLP(pago.monto)}</p>
+
+        <div style={{ background: "#FFFFFF", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+          <p style={{ margin: 0, fontSize: 15, color: NAVY }}>
+            <b>{paseos}</b> paseo{paseos === 1 ? "" : "s"} realizado{paseos === 1 ? "" : "s"}
+          </p>
+          {meta > 0 && (
+            <>
+              <p style={{ margin: "4px 0 8px", fontSize: 13, color: "#8A7E5C" }}>
+                {paseos >= meta ? `¡Superaste tu meta de ${meta}!` : `Tu meta era de ${meta}`}
+              </p>
+              <div style={{ height: 8, borderRadius: 4, background: "#EDE4CE", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min(100, Math.round((paseos / meta) * 100))}%`, background: paseos >= meta ? "#2F6A46" : GOLD }} />
+              </div>
+            </>
+          )}
+        </div>
+
+        {mostrandoMensaje ? (
+          <div style={{ textAlign: "left" }}>
+            <label style={label} htmlFor="mensaje-pago">¿Qué no te cuadra?</label>
+            <textarea id="mensaje-pago" rows={4} value={mensaje} onChange={(e) => setMensaje(e.target.value)}
+              placeholder="Cuéntanos qué revisar de tu pago…" style={{ ...input, marginBottom: 10, resize: "vertical" }} />
+            <p style={{ ...hint, margin: "0 0 12px" }}>Lo lee solo la coordinación, no el chat del equipo.</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={enviar} disabled={!mensaje.trim() || enviando}
+                style={{ ...botonPrincipal, marginTop: 0, width: "auto", padding: "10px 18px", opacity: !mensaje.trim() || enviando ? 0.45 : 1 }}>
+                {enviando ? "Enviando..." : "Enviar"}
+              </button>
+              <button onClick={() => setMostrandoMensaje(false)} style={{ ...botonSecundario, width: "auto", padding: "10px 18px", margin: 0 }}>Volver</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button onClick={verLiquidacion} disabled={bajando}
+              style={{ ...botonPrincipal, marginTop: 0, opacity: bajando ? 0.5 : 1 }}>
+              {bajando ? "Preparando..." : "Ver liquidación"}
+            </button>
+            <button onClick={() => setMostrandoMensaje(true)} style={{ ...botonSecundario, margin: 0 }}>
+              Hay algo que no cuadra
+            </button>
+            <button onClick={onCerrar}
+              style={{ border: "none", background: "none", color: "#8A7E5C", cursor: "pointer", fontSize: 13, padding: "8px 0", minHeight: 40 }}>
+              Cerrar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function LogoHowria({ height = 40 }) {
@@ -4775,7 +4960,7 @@ export default function HowriaAdmin() {
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", versionSiSeUsa("logins_pendientes_borrar"));
-  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", versionSiSeUsa("pagos_trabajadores"));
+  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
   // Borrador de bono/descuento por paseador+período, compartido — antes
   // vivía solo en localStorage de quien lo escribía, invisible para otra
   // persona/dispositivo hasta confirmar el pago.
@@ -4870,6 +5055,8 @@ export default function HowriaAdmin() {
   const [disponibilidadFecha, toggleBloqueDisponibilidad, , aplicarPatronSemanal] = useDisponibilidadFecha(sessionVersion);
   const [planesClases, setPlanesClases, cargandoPlanesClases] = useSyncedTable("planes_clases", planClaseToDb, dbToPlanClase, "creado_en", versionSiSeUsa("planes_clases"));
   const [packsClases, setPacksClases] = useSyncedTable("packs_clases", packClaseToDb, dbToPackClase, "creado_en", versionSiSeUsa("packs_clases"));
+  const [pagosVistos, marcarPagoVisto] = usePagosVistos(sessionVersion);
+  const [reclamosPago, enviarReclamoPago, resolverReclamoPago] = useReclamosPago(sessionVersion);
   const [clasesRealizadas, marcarClase, cargandoClasesRealizadas, deshacerClase] = useClasesRealizadas(versionSiSeUsa("clases_realizadas"));
   const [tarifas, actualizarTarifas] = useTarifas(sessionVersion);
   const [prospectos, setProspectos, cargandoProspectos] = useSyncedTable("prospectos", prospectoToDb, dbToProspecto, "created_at", sessionVersion);
@@ -4946,6 +5133,15 @@ export default function HowriaAdmin() {
   // esto evita que quede sin forma de recuperarse desde la propia app. El
   // checkbox de "Permisos por rol" ya sugería esta garantía visualmente,
   // pero antes no era real — dependía solo de lo que hubiera en la base.
+  // El pago más reciente de esta persona que todavía no vio. Solo para
+  // quien cobra paseos: un coordinador no recibe este aviso aunque
+  // aparezca en la tabla de pagos.
+  const pagoSinVer = (user.rol === "paseador" || user.rol === "entrenador")
+    ? pagosRegistrados
+        .filter((p) => p.paseador === user.nombre && !p.deshechoEn && p._dbId && !pagosVistos.includes(p._dbId))
+        .sort((a, b) => new Date(b.fechaPagoISO || 0) - new Date(a.fechaPagoISO || 0))[0]
+    : null;
+
   const tabsPermitidosRol = esAdmin
     ? Array.from(new Set([...(permisosRoles?.[user.rol] || []), "usuarios"]))
     : (permisosRoles?.[user.rol] || []);
@@ -5257,7 +5453,7 @@ export default function HowriaAdmin() {
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
-        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} />}
+        {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} reclamosPago={reclamosPago} resolverReclamoPago={resolverReclamoPago} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} citasAgenda={citasAgenda} />}
         {tab === "mapa" && tabsPermitidosRol.includes("mapa") && <MapaRutas clientes={clientes} setClientes={setClientes} usuarios={usuarios} paseadorId={mapaPaseadorSel} setPaseadorId={setMapaPaseadorSel} mascotas={mascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} incluidos={mapaIncluidos} setIncluidos={setMapaIncluidos} ruta={mapaRuta} setRuta={setMapaRuta} velocidad={mapaVelocidad} setVelocidad={setMapaVelocidad} duracionParada={mapaDuracionParada} setDuracionParada={setMapaDuracionParada} />}
         {tab === "equipo" && tabsPermitidosRol.includes("equipo") && <EquipoTrabajo usuarios={usuarios} objetivos={objetivosSemanales} setObjetivos={setObjetivosSemanales} objetivosMensuales={objetivosMensuales} setObjetivosMensuales={setObjetivosMensuales} tareas={tareasEquipo} setTareas={setTareasEquipo} cargando={cargandoEquipo} esAdmin={esAdmin} />}
@@ -5276,6 +5472,12 @@ export default function HowriaAdmin() {
           </div>
         </div>
       </div>
+      {pagoSinVer && (
+        <ModalPagoRecibido pago={pagoSinVer} user={user}
+          onCerrar={() => marcarPagoVisto(pagoSinVer._dbId)}
+          onEnviarMensaje={(mensaje) => enviarReclamoPago({ pagoDbId: pagoSinVer._dbId, trabajador: user.nombre, mensaje })} />
+      )}
+
       <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} correosNoLeidos={correosNoLeidos} />
       <ChatEquipo user={user} mensajes={mensajesEquipo} enviarMensaje={enviarMensajeEquipo} cargando={cargandoMensajesEquipo} ultimaLectura={ultimaLecturaChat} marcarLeido={marcarChatLeido} />
     </div>
