@@ -36,7 +36,7 @@ function fmtFecha(iso) {
 // El monto se guarda al confirmar y no a cada tecla: escribiendo, un
 // "2" camino a "25000" quedaría grabado como el pago acordado.
 function FilaPago({
-  titulo, subtitulo, boletasDelCliente, boletaVinculadaId, onVincular,
+  titulo, subtitulo, perro, boletasDelCliente, boletaVinculadaId, onVincular,
   entroPorFactura, valor, onCambiar, onConfirmar, confirmado, puedeVincular,
 }) {
   const leToca = Number(valor) || 0;
@@ -48,8 +48,15 @@ function FilaPago({
     <div style={{ background: "#FFFFFF", border: `1px solid ${confirmado ? "#2F6A46" : "#E4DBC3"}`, borderRadius: 10, padding: "12px 14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{titulo}</p>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>{subtitulo}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {perro && (
+              <span style={{ fontSize: 12.5, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: CREAM_SOFT, color: NAVY, whiteSpace: "nowrap" }}>
+                🐾 {perro}
+              </span>
+            )}
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: NAVY }}>{titulo}</p>
+          </div>
+          <p style={{ margin: "3px 0 0", fontSize: 12, color: "#8A7E5C" }}>{subtitulo}</p>
         </div>
         {confirmado && (
           <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: "#D8ECDE", color: "#2F6A46", alignSelf: "flex-start" }}>
@@ -331,8 +338,9 @@ export function PagoAdiestramiento({
           <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
             {citasPendientes.map((c) => (
               <FilaPago key={c._dbId}
-                titulo={`${c.tipo === "evaluacion" ? "Evaluación" : "Clase"} · ${c.clienteNombre}`}
-                subtitulo={`${fmtFecha(c.fechaISO)}${c.perro ? ` · 🐾 ${c.perro}` : ""}`}
+                titulo={c.tipo === "evaluacion" ? "Evaluación" : "Clase"}
+                subtitulo={`${fmtFecha(c.fechaISO)} · ${c.clienteNombre}`}
+                perro={c.perro}
                 puedeVincular
                 boletasDelCliente={boletasDe(c.clienteNombre)}
                 boletaVinculadaId={c.boletaAdiestramientoId}
@@ -358,6 +366,7 @@ export function PagoAdiestramiento({
               <FilaPago key={b._dbId}
                 titulo={b.packNombre || `Boleta N°${String(b.numero).padStart(3, "0")}`}
                 subtitulo={`${b.cliente} · ${fmtFecha(b.fechaISO)} · boleta N°${String(b.numero).padStart(3, "0")}`}
+                perro={b.perro}
                 entroPorFactura={b.total}
                 valor={montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))}
                 onCambiar={(v) => cambiarMonto(claveBoleta(b), v)}
