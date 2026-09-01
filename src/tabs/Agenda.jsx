@@ -52,6 +52,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   const [notasEdit, setNotasEdit] = useState("");
   const [confirmandoId, setConfirmandoId] = useState(null);
   const [citaDetalleId, setCitaDetalleId] = useState(null);
+  const [cancelandoId, setCancelandoId] = useState(null);
   const esEntrenador = rolActual === "entrenador";
   const [adiestradorHorario, setAdiestradorHorario] = useState(esEntrenador ? nombreActual : (adiestradores[0]?.nombre ?? ""));
   const [linkGenericoCopiado, setLinkGenericoCopiado] = useState(false);
@@ -91,17 +92,41 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
     setFechaHora(""); setNotasNuevas(""); setDuracionCita(60); setPrecioCita(""); setMostrarFormAgendar(false);
   }
 
-  function cancelar(id) {
-    setCitas((prev) => prev.map((c) => (c.id === id ? { ...c, estado: "cancelada" } : c)));
+  // Cancelar y rechazar pasan por el servidor (api/cancelar-cita.js) y no
+  // por un cambio de estado local, porque además de mover el estado le
+  // avisan al cliente por correo. Mismo esquema que confirmar(): un 502
+  // significa que la cita SÍ quedó cancelada y solo falló el correo, así
+  // que igual hay que reflejarlo en pantalla.
+  async function cambiarEstadoConAviso(cita, accion) {
+    if (cancelandoId) return;
+    setCancelandoId(cita.id);
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch("/api/cancelar-cita", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ citaId: cita._dbId, accion }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      if (!resp.ok && resp.status !== 502) {
+        showToast(resultado.error || "No se pudo cancelar la cita.");
+        return;
+      }
+      const estadoNuevo = accion === "rechazar" ? "rechazada" : "cancelada";
+      setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, estado: estadoNuevo } : c)));
+      if (resp.status === 502) showToast(resultado.error);
+      else if (resultado.aviso) showToast(resultado.aviso);
+      else showToast(accion === "rechazar" ? "Hora rechazada — se le avisó al cliente." : "Cita cancelada — se le avisó al cliente.", "exito");
+    } catch {
+      showToast("No se pudo cancelar la cita — revisa tu conexión.");
+    } finally {
+      setCancelandoId(null);
+    }
   }
 
   function confirmarRealizada(id) {
     setCitas((prev) => prev.map((c) => (c.id === id ? { ...c, estado: "realizada", notas: notasEdit.trim() } : c)));
     setEditandoId(null); setNotasEdit("");
-  }
-
-  function rechazar(id) {
-    setCitas((prev) => prev.map((c) => (c.id === id ? { ...c, estado: "rechazada" } : c)));
   }
 
   async function confirmar(cita) {
@@ -218,7 +243,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
                     style={{ ...botonPrincipal, width: "auto", padding: "7px 16px", marginTop: 0, fontSize: 12.5, opacity: confirmandoId ? 0.6 : 1 }}>
                     {confirmandoId === c.id ? "Confirmando..." : "Confirmar"}
                   </button>
-                  <BotonEliminar onConfirm={() => rechazar(c.id)} disabled={!!confirmandoId} label="Rechazar" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
+                  <BotonEliminar onConfirm={() => cambiarEstadoConAviso(c, "rechazar")} disabled={!!confirmandoId || !!cancelandoId} label="Rechazar" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
                 </div>
               </div>
             ))}
@@ -318,7 +343,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
               ) : (
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   <button onClick={() => { setEditandoId(c.id); setNotasEdit(c.notas || ""); }} style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5 }}>Marcar realizada</button>
-                  <BotonEliminar onConfirm={() => cancelar(c.id)} label="Cancelar cita" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
+                  <BotonEliminar onConfirm={() => cambiarEstadoConAviso(c, "cancelar")} disabled={!!cancelandoId} label="Cancelar cita" style={{ ...botonSecundario, padding: "7px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
                 </div>
               )}
             </div>
