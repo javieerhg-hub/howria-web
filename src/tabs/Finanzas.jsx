@@ -17,7 +17,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, nombreUsuario, user, onVerPagos }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, nombreUsuario, user, onVerPagos, onVerBoletas }) {
   const [periodo, setPeriodo] = useState("semana");
   const [rangoDesde, setRangoDesde] = useState("");
   const [rangoHasta, setRangoHasta] = useState("");
@@ -175,9 +175,54 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     costosNegocio.filter((c) => { const f = new Date(c.fecha + "T00:00:00"); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
     [costosNegocio, actualDesde, actualHasta]);
   const costosGeneralesPeriodo = costosGeneralesFiltrados.reduce((acc, c) => acc + Number(c.monto || 0), 0);
-  const utilidad = actual.ingresos - costosPeriodo - costoResponsablesAdiestramiento - costosGeneralesPeriodo;
   const promedioBoleta = actual.cantidad ? actual.ingresos / actual.cantidad : 0;
   const varIngresos = variacion(actual.ingresos, anterior.ingresos);
+
+  // ---- La caja del período ----
+  //
+  // El número grande de la pestaña pasa a ser CAJA: plata que se movió de
+  // verdad. Antes "Ingresos" contaba también las boletas aceptadas sin
+  // pagar y "Ganancia" restaba solo los pagos ya hechos, así que a
+  // principio de mes la ganancia salía inflada y caía de golpe al
+  // registrar los pagos. Lo emitido sin cobrar y el trabajo sin pagar
+  // ahora van aparte, en "En camino", en vez de mezclarse.
+  //
+  // Ojo con la diferencia con `filtradas`: eso son solo las boletas que
+  // cuentan como venta (esVenta). Acá hacen falta TODAS las del período,
+  // porque los borradores son justamente lo que no se veía en ningún lado.
+  const delPeriodo = useMemo(() =>
+    todasLasBoletas.filter((b) => { const f = new Date(b.fechaISO); return f >= actualDesde && (!actualHasta || f <= actualHasta); }),
+    [todasLasBoletas, actualDesde, actualHasta]);
+  const sumaTotales = (lista) => lista.reduce((acc, b) => acc + Number(b.total || 0), 0);
+
+  const cobradasPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "pagada"), [delPeriodo]);
+  const porCobrarPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "pendiente_pago"), [delPeriodo]);
+  const borradoresPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "no_enviada"), [delPeriodo]);
+
+  const entro = sumaTotales(cobradasPeriodo);
+  const salio = costosPeriodo + costoResponsablesAdiestramiento + costosGeneralesPeriodo;
+  const queda = entro - salio;
+  const porEmitir = sumaTotales(borradoresPeriodo);
+  const porCobrar = sumaTotales(porCobrarPeriodo);
+  // La variación se compara contra lo cobrado del período anterior, no
+  // contra lo facturado: si no, el porcentaje compararía dos cosas
+  // distintas entre sí.
+  const varEntro = variacion(entro, sumaTotales(anteriores.filter((b) => b.estado === "pagada")));
+
+  // Trabajo del período que todavía no se le pagó a nadie: lo que suman
+  // los paseos hechos menos lo ya registrado como pagado. Es una
+  // aproximación de paseos (el adiestramiento se acuerda caso a caso y
+  // vive en Pago adiestramiento), y por eso nunca baja de cero.
+  const porPagarTrabajadores = useMemo(() => {
+    if (vistaPersonal) return 0;
+    const hoyLocal = new Date();
+    const fin = actualHasta && actualHasta < hoyLocal ? actualHasta : hoyLocal;
+    const paseadores = [...new Set(clientesProp.map((c) => c.paseadorNombre).filter(Boolean))];
+    const trabajado = paseadores.reduce((acc, p) => acc + resumenPaseadorEnRango({
+      clientes: clientesProp, registroPaseos, reprogramaciones, paseador: p, desde: actualDesde, hasta: fin,
+    }).totales.monto, 0);
+    return Math.max(trabajado - costosPeriodo, 0);
+  }, [vistaPersonal, clientesProp, registroPaseos, reprogramaciones, actualDesde, actualHasta, costosPeriodo]);
 
   const porCliente = useMemo(() => {
     const mapa = {};
@@ -441,60 +486,110 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           <input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} style={{ ...input, marginBottom: 0, width: 150 }} title="Hasta" />
         </div>
       )}
-
-      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 7}, 1fr)`, gap: 14, marginBottom: 26 }}>
-        <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
-          {periodo !== "personalizado" && (
-            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: varIngresos >= 0 ? "#9FD8A8" : "#E3A08C" }}>
-              {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
+      {/* La caja del período: entró, salió, queda. Es lo que Javier pidió
+          poder mirar de un vistazo, y el número que manda es el de CAJA —
+          plata cobrada de verdad, no boletas emitidas. Lo que está en
+          camino va abajo, separado, para que no se mezcle con lo que ya
+          existe. */}
+      {!vistaPersonal && (
+        <>
+          {/* Lo más accionable de la pestaña: plata ya trabajada que todavía
+          no se le cobró a nadie. No suma en ningún total de abajo a
+          propósito — un borrador se puede seguir editando, así que darlo
+          por ingreso sería contar algo que aún puede cambiar. */}
+      {!vistaPersonal && borradoresPeriodo.length > 0 && (
+        <div className="no-imprimir" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "#F3E3B4", border: "1px solid #E0CB84", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#6B5312" }}>
+              Tienes {borradoresPeriodo.length} boleta(s) sin enviar por {fmtCLP(porEmitir)}
             </p>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A6A1E" }}>
+              Es trabajo hecho que todavía no le cobraste a nadie. No suma en los totales de abajo hasta que las emitas.
+            </p>
+          </div>
+          {onVerBoletas && (
+            <button onClick={onVerBoletas} style={{ ...botonSecundario, width: "auto", flex: "none", margin: 0, padding: "8px 16px", borderColor: "#8A6A1E", color: "#6B5312" }}>
+              Ir a Boletas →
+            </button>
           )}
         </div>
+      )}
+
+      <div className="howria-finanzas-caja" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 12 }}>
+            <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Entró {etiquetaPeriodo}</p>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(entro)}</p>
+              <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#9BAAB8" }}>{cobradasPeriodo.length} boleta(s) pagada(s)</p>
+              {periodo !== "personalizado" && (
+                <p style={{ margin: "2px 0 0", fontSize: 11.5, color: varEntro >= 0 ? "#9FD8A8" : "#E3A08C" }}>
+                  {varEntro >= 0 ? "▲" : "▼"} {Math.abs(varEntro).toFixed(0)}% vs {etiquetaAnterior}
+                </p>
+              )}
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Salió {etiquetaPeriodo}</p>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(salio)}</p>
+              <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
+                Paseadores {fmtCLP(costosPeriodo)} · Responsables {fmtCLP(costoResponsablesAdiestramiento)} · Otros {fmtCLP(costosGeneralesPeriodo)}
+              </p>
+              {onVerPagos && (
+                <button onClick={onVerPagos} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0, marginTop: 6 }}>
+                  Ver en Pago trabajadores →
+                </button>
+              )}
+            </div>
+            <div style={{ background: queda >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 12, color: queda >= 0 ? "#2F6A46" : RUST, textTransform: "uppercase", letterSpacing: 0.5 }}>Queda para Howria</p>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: queda >= 0 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(queda)}</p>
+              <p style={{ margin: "6px 0 0", fontSize: 11.5, color: queda >= 0 ? "#2F6A46" : RUST }}>Lo que entró menos lo que salió</p>
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 20px" }}>
+            Solo cuenta plata que se movió de verdad: boletas ya pagadas por el cliente, y pagos ya registrados en la app. Lo emitido sin cobrar y el trabajo sin pagar van abajo.
+          </p>
+
+          <p style={{ ...label, marginBottom: 8 }}>En camino {etiquetaPeriodo}</p>
+          <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 26 }}>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Por emitir</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porEmitir)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{borradoresPeriodo.length} boleta(s) en borrador</p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Te deben</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porCobrar)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{porCobrarPeriodo.length} boleta(s) emitida(s) sin pagar</p>
+            </div>
+            <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Debes a trabajadores</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(porPagarTrabajadores)}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Paseos hechos que aún no registras como pagados</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 2}, 1fr)`, gap: 14, marginBottom: 26 }}>
+        {vistaPersonal && (
+          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#9BAAB8", textTransform: "uppercase", letterSpacing: 0.5 }}>Ingresos {etiquetaPeriodo}</p>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: "Georgia, serif" }}>{fmtCLP(actual.ingresos)}</p>
+            {periodo !== "personalizado" && (
+              <p style={{ margin: "6px 0 0", fontSize: 11.5, color: varIngresos >= 0 ? "#9FD8A8" : "#E3A08C" }}>
+                {varIngresos >= 0 ? "▲" : "▼"} {Math.abs(varIngresos).toFixed(0)}% vs {etiquetaAnterior}
+              </p>
+            )}
+          </div>
+        )}
         {vistaPersonal && esResponsable && (
           <div style={{ background: "#D8ECDE", borderRadius: 10, padding: 18 }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: "#2F6A46", textTransform: "uppercase", letterSpacing: 0.5 }}>Tu parte</p>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#2F6A46", fontFamily: "Georgia, serif" }}>{fmtCLP(tuParte)}</p>
           </div>
         )}
-        {!vistaPersonal && (
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a paseadores</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosPeriodo)}</p>
-            {onVerPagos && (
-              <button onClick={onVerPagos} style={{ border: "none", background: "none", color: NAVY, cursor: "pointer", fontSize: 11.5, fontWeight: 600, padding: 0, marginTop: 8 }}>
-                Ver en Pago trabajadores →
-              </button>
-            )}
-          </div>
-        )}
-        {!vistaPersonal && (
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Pago a responsables</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costoResponsablesAdiestramiento)}</p>
-          </div>
-        )}
-        {!vistaPersonal && (
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Otros costos</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(costosGeneralesPeriodo)}</p>
-          </div>
-        )}
-        {!vistaPersonal && (
-          <div style={{ background: utilidad >= 0 ? "#D8ECDE" : "#F1DCD2", borderRadius: 10, padding: 18 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 12, color: utilidad >= 0 ? "#2F6A46" : RUST, textTransform: "uppercase", letterSpacing: 0.5 }}>Ganancia de Howria</p>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: utilidad >= 0 ? "#2F6A46" : RUST, fontFamily: "Georgia, serif" }}>{fmtCLP(utilidad)}</p>
-          </div>
-        )}
         <TarjetaResumenFactura titulo="Boletas emitidas" valor={actual.cantidad} color="#8A7E5C" bg={CREAM_SOFT} />
         <TarjetaResumenFactura titulo="Ticket promedio" valor={fmtCLP(promedioBoleta)} color="#8A7E5C" bg={CREAM_SOFT} />
       </div>
-      {!vistaPersonal && (
-        <p style={{ fontSize: 12, color: "#8A7E5C", marginTop: -18, marginBottom: 26 }}>
-          Es lo que le queda a Howria después de los pagos a paseadores ya registrados como pagados en esta app, de lo que le corresponde a cada responsable en las facturas de adiestramiento donde se definió el reparto, y de los otros costos cargados abajo.
-        </p>
-      )}
 
       {!vistaPersonal && (
         <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
