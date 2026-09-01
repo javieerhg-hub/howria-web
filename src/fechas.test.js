@@ -62,3 +62,27 @@ describe("estaProgramadoEnFecha", () => {
     expect(estaProgramadoEnFecha(cliente, miercoles, [])).toBe(true);
   });
 });
+
+describe("estaProgramadoEnFecha y el estado del cliente", () => {
+  const miercoles = new Date(2026, 8, 2); // 2 de septiembre de 2026
+  const base = { _dbId: "x", tipoServicio: ["paseos"], diasHabituales: [2] };
+
+  it("un cliente activo con ese día sí tiene paseo", () => {
+    expect(estaProgramadoEnFecha({ ...base, estadoCliente: "activo" }, miercoles, [])).toBe(true);
+  });
+
+  // Los días habituales se conservan a proposito para cuando vuelva, asi
+  // que el estado es lo unico que lo saca de la lista.
+  it("uno pausado no, aunque conserve sus días", () => {
+    expect(estaProgramadoEnFecha({ ...base, estadoCliente: "pausado" }, miercoles, [])).toBe(false);
+  });
+
+  it("uno dado de baja tampoco", () => {
+    expect(estaProgramadoEnFecha({ ...base, estadoCliente: "baja" }, miercoles, [])).toBe(false);
+  });
+
+  // Las fichas viejas no tienen el campo: se tratan como activas.
+  it("sin estado guardado se trata como activo", () => {
+    expect(estaProgramadoEnFecha(base, miercoles, [])).toBe(true);
+  });
+});

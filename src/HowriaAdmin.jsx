@@ -2088,6 +2088,11 @@ export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
   // de "sin tipoServicio guardado se trata como paseos" que ya usa el aviso
   // de "sin paseador" en Inicio (ver arriba, sinPaseador).
   if (cliente.tipoServicio?.length && !cliente.tipoServicio.includes("paseos")) return false;
+  // Un cliente pausado o dado de baja no tiene paseos que hacer, pero sus
+  // días habituales siguen guardados: sin esto aparecía igual todos los
+  // días como paseo pendiente, y no había forma de sacarlo de la lista
+  // salvo borrarle los días (y perder su horario para cuando vuelva).
+  if ((cliente.estadoCliente || "activo") !== "activo") return false;
   const dow = (fecha.getDay() + 6) % 7;
   if (cliente.diasHabituales?.includes(dow)) return true;
   const clave = fechaKey(fecha);
