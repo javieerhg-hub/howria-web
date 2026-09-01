@@ -111,6 +111,77 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
     );
   }
 
+  // Vincular una factura a un cliente concreto.
+  //
+  // Por qué hace falta: cuando una boleta se emite con "cliente sin
+  // registrar", queda sin clienteId y la app la asocia comparando el
+  // NOMBRE (ver esBoletaDeCliente). Eso funciona mientras el nombre
+  // calce exacto; si difiere en una tilde o en un apellido, la factura
+  // queda huérfana — no sale en la ficha del cliente, no cuenta en su
+  // historial de ventas y no se le atribuye a nadie en Pago
+  // adiestramiento. Asignarla a mano deja el vínculo firme.
+  //
+  // NO se toca el nombre impreso en la boleta: ese es el documento que
+  // ya se le entregó al cliente y no corresponde reescribirlo. Lo que
+  // cambia es a quién apunta.
+  const [vinculoPendiente, setVinculoPendiente] = useState(null); // { claveFila, clienteId }
+
+  function vincularACliente(boleta, clienteId) {
+    editarBoleta(setterDe(boleta._tipo), boleta._dbId,
+      conUltimaAccion({ clienteId: clienteId || null }, nombreUsuario));
+    const c = clientes.find((x) => x._dbId === clienteId);
+    showToast(clienteId ? `Factura N°${boleta.numero} vinculada a ${c?.nombre || "el cliente"}.` : `Factura N°${boleta.numero} desvinculada.`, "exito");
+  }
+
+  function SelectorClienteFactura({ b, claveFila }) {
+    const pendiente = vinculoPendiente?.claveFila === claveFila ? vinculoPendiente : null;
+    const actual = b.clienteId || "";
+    const clienteActual = clientes.find((c) => c._dbId === b.clienteId);
+
+    if (pendiente) {
+      const destino = clientes.find((c) => c._dbId === pendiente.clienteId);
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 170 }}>
+          <p style={{ margin: 0, fontSize: 11.5, color: RUST, lineHeight: 1.3 }}>
+            {pendiente.clienteId
+              ? `¿Vincular la factura N°${b.numero} a ${destino?.nombre}? Pasa a contar en su historial.`
+              : `¿Desvincular la factura N°${b.numero} de su cliente?`}
+          </p>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => { vincularACliente(b, pendiente.clienteId); setVinculoPendiente(null); }}
+              style={{ border: "none", background: RUST, color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 11.5, cursor: "pointer" }}>
+              Confirmar
+            </button>
+            <button onClick={() => setVinculoPendiente(null)}
+              style={{ border: "1px solid #E4DBC3", background: "none", color: "#6B6248", borderRadius: 6, padding: "4px 10px", fontSize: 11.5, cursor: "pointer" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ minWidth: 150 }}>
+        <select value={actual} aria-label={`Cliente de la factura N°${b.numero}`}
+          onChange={(e) => e.target.value !== actual && setVinculoPendiente({ claveFila, clienteId: e.target.value || null })}
+          style={{ ...input, marginBottom: 0, fontSize: 12.5, padding: "5px 8px", width: "100%" }}>
+          <option value="">Sin vincular</option>
+          {clientes.map((c) => <option key={c.id} value={c._dbId}>{c.nombre}{c.perro ? ` — ${c.perro}` : ""}</option>)}
+        </select>
+        {!b.clienteId && (
+          <p style={{ margin: "3px 0 0", fontSize: 10.5, color: "#8A7E5C", lineHeight: 1.3 }}>
+            Se asocia por nombre ("{b.cliente}"). Vincúlala para que quede firme.
+          </p>
+        )}
+        {b.clienteId && clienteActual && clienteActual.nombre !== b.cliente && (
+          <p style={{ margin: "3px 0 0", fontSize: 10.5, color: GOLD, lineHeight: 1.3 }}>
+            Emitida a nombre de "{b.cliente}"
+          </p>
+        )}
+      </div>
+    );
+  }
+
   function abrirFormPago(boleta) {
     if (!boleta._dbId) return;
     setPagoPendienteDbId(boleta._dbId);
@@ -252,7 +323,12 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
             )}
           </td>
           <td style={{ padding: "10px", fontSize: 12, color: "#8A7E5C" }}>{b._tipo === "paseo" ? "Paseo" : "Adiestramiento"}</td>
-          <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{b.cliente}</td>
+          <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>
+            {b.cliente}
+            <div style={{ marginTop: 5, fontWeight: 400 }}>
+              <SelectorClienteFactura b={b} claveFila={claveFila} />
+            </div>
+          </td>
           <td style={{ padding: "10px", fontSize: 12 }}>
             <SelectorResponsable b={b} claveFila={claveFila} />
             {b._tipo === "adiestramiento" && (
@@ -363,6 +439,13 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
         {b.estado === "pagada" && b.formaPago && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "#8A7E5C" }}>Pagada: {b.formaPago} · {b.fechaPago}</p>
         )}
+
+        <div style={{ margin: "10px 0 12px" }}>
+          <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
+            Cliente vinculado
+          </label>
+          <SelectorClienteFactura b={b} claveFila={claveFila} />
+        </div>
 
         <div style={{ margin: "10px 0 12px" }}>
           <label style={{ display: "block", fontSize: 11, color: "#8A7E5C", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
