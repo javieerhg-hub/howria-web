@@ -18,6 +18,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, tarjeta, sectionTitle, hint, label, input,
   botonPrincipal, botonSecundario, SkeletonLista, fmtCLP, showToast, comprimirImagen,
   esBoletaDeCliente,
+  cargarComprobantePago,
 } from "../HowriaAdmin.jsx";
 
 const MESES_NOMBRE = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -133,6 +134,10 @@ export function PagoAdiestramiento({
   const [montos, setMontos] = useState({});
   const [cobrando, setCobrando] = useState(false);
   const [comprobante, setComprobante] = useState(null);
+  // El comprobante de un pago YA REGISTRADO no viaja en la carga inicial
+  // (pesa ~80 KB por pago): se pide al apretar "Ver comprobante".
+  const [comprobanteVisto, setComprobanteVisto] = useState(null);
+  const [pidiendoComprobante, setPidiendoComprobante] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
   const [pagoAbierto, setPagoAbierto] = useState(null);
 
@@ -360,12 +365,18 @@ export function PagoAdiestramiento({
                           {abierto ? "Ocultar" : "Ver qué se pagó"}
                         </button>
                       )}
-                      {p.comprobante && (
-                        <a href={p.comprobante} target="_blank" rel="noopener noreferrer"
-                          style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0, textDecoration: "none", display: "inline-block" }}>
-                          Ver comprobante
-                        </a>
-                      )}
+                      <button
+                        onClick={async () => {
+                          if (pidiendoComprobante) return;
+                          setPidiendoComprobante(p.id);
+                          const img = await cargarComprobantePago(p._dbId);
+                          setPidiendoComprobante(null);
+                          if (img) setComprobanteVisto(img);
+                          else showToast("Este pago no tiene comprobante guardado.");
+                        }}
+                        style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0 }}>
+                        {pidiendoComprobante === p.id ? "Abriendo\u2026" : "Ver comprobante"}
+                      </button>
                     </div>
                   </div>
 
@@ -423,6 +434,25 @@ export function PagoAdiestramiento({
               </button>
               <button onClick={() => setCobrando(false)} style={{ ...botonSecundario, width: "auto", padding: "10px 20px", margin: 0 }}>Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* El comprobante de un pago ya registrado, traído bajo demanda.
+          Va en una ventana y no en una pestaña nueva porque es un
+          data: URL: varios navegadores los bloquean al abrirlos solos. */}
+      {comprobanteVisto && (
+        <div onClick={() => setComprobanteVisto(null)} className="howria-modal-fondo"
+          style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Comprobante de la transferencia" className="howria-modal-caja"
+            style={{ background: "#FFFFFF", borderRadius: 14, padding: 18, maxWidth: 520, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontFamily: "'Fraunces', Georgia, serif", fontSize: 17, color: NAVY }}>Comprobante</h3>
+              <button onClick={() => setComprobanteVisto(null)} aria-label="Cerrar"
+                style={{ background: "none", border: "none", color: "#8A7E5C", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
+            </div>
+            <img src={comprobanteVisto} alt="Comprobante de la transferencia"
+              style={{ display: "block", width: "100%", borderRadius: 8, border: "1px solid #E4DBC3" }} />
           </div>
         </div>
       )}

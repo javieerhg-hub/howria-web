@@ -473,13 +473,33 @@ function dbToPago(row) {
     // fallback a fecha_pago en Finanzas (costosPeriodo).
     periodoDesdeISO: row.periodo_desde || null,
     marcadoPor: row.marcado_por || undefined,
-    comprobante: row.comprobante || null,
+    // undefined = no se pidió en esta carga (ver COLUMNAS_PAGO_LIVIANO),
+    // distinto de null = se pidió y no hay. La diferencia importa: aDb()
+    // saca las undefined para no pisar la foto con null al guardar.
+    comprobante: "comprobante" in row ? (row.comprobante || null) : undefined,
     detalle: row.detalle || null,
     tipo: row.tipo || "paseos",
     _dbId: row.id,
     deshechoPor: row.deshecho_por || undefined,
     deshechoEn: row.deshecho_en || undefined,
   };
+}
+
+// Todo lo de un pago MENOS el comprobante, que es una foto de ~80 KB por
+// fila y se baja al entrar aunque nadie la mire. Con un pago ya era el
+// 6% del peso de la sesión; crece con cada pago que se registra.
+// Si algún día se agrega una columna a pagos_trabajadores hay que
+// sumarla acá, si no no llega.
+const COLUMNAS_PAGO_LIVIANO = "id, paseador_nombre, periodo, etiqueta, monto, paseos, clientes, ajuste, ajuste_motivo, fecha_pago, periodo_desde, marcado_por, detalle, tipo, deshecho_por, deshecho_en";
+
+// Trae el comprobante de un pago recién cuando alguien lo quiere ver.
+export async function cargarComprobantePago(dbId) {
+  const { data, error } = await supabase.from("pagos_trabajadores").select("comprobante").eq("id", dbId).maybeSingle();
+  if (error) {
+    showToast("No se pudo cargar el comprobante.");
+    return null;
+  }
+  return data?.comprobante || null;
 }
 
 function costoNegocioToDb(c) {
@@ -707,10 +727,24 @@ function dbToProspecto(row) {
 
 // cambio hecho con el setter (igual que useState) de vuelta a la base
 // de datos — inserta, actualiza o elimina según corresponda.
-function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0, selectFrom = tableName, realtime = false) {
+// `columnas` sirve para dejar fuera de la carga inicial una columna
+// pesada que casi nunca se mira — hoy el comprobante de un pago, que es
+// una foto de ~80 KB por fila. La columna sigue existiendo: se pide
+// aparte cuando alguien la quiere ver (ver cargarComprobantePago).
+function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion = 0, selectFrom = tableName, realtime = false, columnas = "*") {
   const [items, setItemsState] = useState([]);
   const [cargando, setCargando] = useState(true);
   const insertando = useRef(new Set());
+
+  // Una columna que no se pidió al cargar llega como undefined en el
+  // mapeo. Mandarla en un update la pisaría con null y borraría el dato
+  // — por eso las claves undefined se sacan antes de escribir. (En las
+  // comparaciones no cambia nada: JSON.stringify ya las ignora.)
+  function aDb(item) {
+    const fila = mapToDb(item);
+    Object.keys(fila).forEach((k) => { if (fila[k] === undefined) delete fila[k]; });
+    return fila;
+  }
 
   useEffect(() => {
     if (sessionVersion == null) return;
@@ -725,7 +759,7 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
       // Coordinación con paseos reales ocultos detrás).
       let data, error;
       for (let intento = 0; intento < 3; intento++) {
-        let query = supabase.from(selectFrom).select("*");
+        let query = supabase.from(selectFrom).select(columnas);
         if (orderBy) query = query.order(orderBy);
         ({ data, error } = await query);
         if (!error) break;
@@ -785,7 +819,7 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
 
     next.filter((x) => !x._dbId && !insertando.current.has(x.id)).forEach((item) => {
       insertando.current.add(item.id);
-      supabase.from(tableName).insert(mapToDb(item)).select().single().then(({ data, error }) => {
+      supabase.from(tableName).insert(aDb(item)).select().single().then(({ data, error }) => {
         insertando.current.delete(item.id);
         if (error) {
           showToast(`No se pudo guardar: ${error.message}`);
@@ -797,8 +831,8 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
             // Si el ítem se editó mientras el insert estaba en vuelo (no
             // tenía _dbId todavía, así que ese cambio no viajó con nada),
             // se manda ahora como update para no perderlo en silencio.
-            if (actual && JSON.stringify(mapToDb(actual)) !== JSON.stringify(mapToDb(item))) {
-              supabase.from(tableName).update(mapToDb(actual)).eq("id", data.id).then(({ error: errorTardio }) => {
+            if (actual && JSON.stringify(aDb(actual)) !== JSON.stringify(aDb(item))) {
+              supabase.from(tableName).update(aDb(actual)).eq("id", data.id).then(({ error: errorTardio }) => {
                 if (errorTardio) showToast(`No se pudo guardar: ${errorTardio.message}`);
               });
             }
@@ -810,8 +844,8 @@ function useSyncedTable(tableName, mapToDb, mapFromDb, orderBy, sessionVersion =
 
     for (const [dbId, item] of nextByDbId) {
       const anterior = prevByDbId.get(dbId);
-      if (anterior && JSON.stringify(mapToDb(anterior)) !== JSON.stringify(mapToDb(item))) {
-        supabase.from(tableName).update(mapToDb(item)).eq("id", dbId).then(({ error }) => {
+      if (anterior && JSON.stringify(aDb(anterior)) !== JSON.stringify(aDb(item))) {
+        supabase.from(tableName).update(aDb(item)).eq("id", dbId).then(({ error }) => {
           if (error) showToast(`No se pudo guardar: ${error.message}`);
         });
       }
@@ -851,21 +885,42 @@ function useRegistroPaseosSincronizado(clientes, sessionVersion) {
     setRegistroState({});
   }, [sessionVersion]);
 
-  useEffect(() => {
-    if (clientes.length === 0 || cargadoRef.current) return;
-    let activo = true;
-    (async () => {
-      // Mismo reintento que useSyncedTable — antes, si esta carga fallaba
-      // una vez (ver ahí el motivo), cargadoRef ya quedaba en true y esta
-      // pestaña se quedaba con los paseos vacíos por el resto de la sesión,
-      // sin ningún aviso ni forma de reintentar sin recargar la página.
+  // La consulta arranca apenas hay sesión, sin esperar a `clientes`.
+  // ARMAR el mapa sí los necesita (las claves usan el id local del
+  // cliente), pero PEDIR las filas no. Antes salía recién cuando
+  // `clientes` había llegado, así que el tiempo de esa consulta — la más
+  // lenta de todas — se sumaba entero al de esta en vez de solaparse.
+  const pedidoRef = useRef(null);
+  // Mismo reintento que useSyncedTable — antes, si esta carga fallaba una
+  // vez (ver ahí el motivo), cargadoRef ya quedaba en true y esta pestaña
+  // se quedaba con los paseos vacíos por el resto de la sesión, sin
+  // ningún aviso ni forma de reintentar sin recargar la página.
+  function pedirRegistroPaseos() {
+    return (async () => {
       let data, error;
       for (let intento = 0; intento < 3; intento++) {
         ({ data, error } = await supabase.from("registro_paseos").select("*"));
         if (!error) break;
         if (intento < 2) await new Promise((r) => setTimeout(r, 800 * (intento + 1)));
       }
+      return { data, error };
+    })();
+  }
+
+  useEffect(() => {
+    if (sessionVersion == null) { pedidoRef.current = null; return; }
+    pedidoRef.current = pedirRegistroPaseos();
+  }, [sessionVersion]);
+
+  useEffect(() => {
+    if (clientes.length === 0 || cargadoRef.current) return;
+    let activo = true;
+    (async () => {
+      // Si el pedido de arriba falló, se limpió el ref y acá se reintenta.
+      if (!pedidoRef.current) pedidoRef.current = pedirRegistroPaseos();
+      const { data, error } = await pedidoRef.current;
       if (!activo) return;
+      if (error) pedidoRef.current = null;
       if (error) {
         showToast(`No se pudieron cargar los paseos registrados: ${error.message}`);
         return;
@@ -4978,7 +5033,7 @@ export default function HowriaAdmin() {
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", versionSiSeUsa("logins_pendientes_borrar"));
-  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion);
+  const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion, "pagos_trabajadores", false, COLUMNAS_PAGO_LIVIANO);
   // Borrador de bono/descuento por paseador+período, compartido — antes
   // vivía solo en localStorage de quien lo escribía, invisible para otra
   // persona/dispositivo hasta confirmar el pago.
