@@ -184,7 +184,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         if (p.deshechoEn) return false; // revertido: no es un costo real
         const fISO = p.periodoDesdeISO || p.fechaPagoISO;
         if (!fISO) return false;
-        const f = new Date(fISO);
+        // "2026-08-01" sin hora lo lee JavaScript como MEDIANOCHE UTC, que
+        // en Chile es el 31 de julio a las 20:00 — el pago del trabajo de
+        // agosto caia en julio y el informe de agosto mostraba $0 de pago
+        // a paseadores. Con la hora pegada se lee en hora local, igual que
+        // ya hacia costosNegocio mas abajo.
+        const f = new Date(fISO.length <= 10 ? `${fISO}T00:00:00` : fISO);
         return f >= actualDesde && (!actualHasta || f <= actualHasta);
       })
       .reduce((acc, p) => acc + Number(p.monto || 0), 0),
