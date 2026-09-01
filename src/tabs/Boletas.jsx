@@ -10,6 +10,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO,
   LOGO_B64, HUELLA_B64, tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
   fmtCLP, fechaKey, showToast, boletaToDb, dbToBoleta, boletaAdiestramientoToDb, dbToBoletaAdiestramiento,
+  textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import {
   diasDelMes, esFinDeSemanaOFeriado, valorConRecargo, diasSegunPlan,
@@ -437,12 +438,12 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
             paseadoresDeClientes.map((p) => (
               <optgroup key={p} label={p}>
                 {clientes.filter((c) => (c.paseadorNombre || "Sin asignar") === p).map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>
+                  <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>
                 ))}
               </optgroup>
             ))
           ) : (
-            clientesFiltrados.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)
+            clientesFiltrados.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>)
           )}
         </select>
         <label style={label} htmlFor="boleta-mes">Mes a facturar</label>
@@ -1008,7 +1009,7 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
             <label style={label} htmlFor="badiestramiento-cliente">Cliente (con "Clases de adiestramiento" marcado en su ficha)</label>
             <select id="badiestramiento-cliente" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setEmitida(null); }} style={input}>
               {clientesAdiestramiento.length === 0 && <option value="">No hay clientes marcados con "Clases"</option>}
-              {clientesAdiestramiento.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
+              {clientesAdiestramiento.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>)}
             </select>
           </>
         )}

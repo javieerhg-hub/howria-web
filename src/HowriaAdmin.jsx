@@ -169,6 +169,10 @@ function clienteToDb(c) {
 
 function dbToCliente(row) {
   return {
+    // Cuándo entró la ficha. La escribe Postgres sola y nunca se manda de
+    // vuelta (no está en clienteToDb); sirve para marcar los recién
+    // ingresados en las listas — ver textoClienteEnLista.
+    creadoEn: row.created_at || null,
     nombre: row.nombre,
     perro: row.perro,
     telefono: row.telefono,
@@ -1234,6 +1238,35 @@ export const FASES_PASEADOR = [
   { id: "en_retorno", nombre: "En Retorno", color: NAVY, bg: "#DCE3EA" },
   { id: "completado", nombre: "Completado", color: "#2F6A46", bg: "#D8ECDE" },
 ];
+
+// Cuántos días cuenta como "cliente nuevo" en las listas de selección.
+export const DIAS_CLIENTE_RECIENTE = 7;
+
+const ETIQUETA_TIPO_SERVICIO = { paseos: "Paseos", clases: "Clases", evaluacion: "Evaluación" };
+
+export function esClienteReciente(cliente) {
+  if (!cliente?.creadoEn) return false;
+  const dias = (Date.now() - new Date(cliente.creadoEn).getTime()) / 86400000;
+  return dias >= 0 && dias <= DIAS_CLIENTE_RECIENTE;
+}
+
+// Cómo se lee un cliente dentro de un <select>: "🆕 Nombre — Perro · Evaluación".
+//
+// Va como TEXTO y no como etiquetas de colores porque un <option> solo
+// admite texto plano: en el celular la lista no la dibuja la app, la
+// dibuja el selector nativo de iOS/Android.
+//
+// El orden importa. El nombre parte a la izquierda para poder recorrer la
+// lista alfabéticamente, el tipo va al final para no correr los nombres, y
+// el 🆕 va adelante justamente para romper esa alineación — son pocos y la
+// idea es que salten a la vista.
+export function textoClienteEnLista(cliente, { conTipo = true } = {}) {
+  const nuevo = esClienteReciente(cliente) ? "🆕 " : "";
+  const base = `${cliente.nombre}${cliente.perro ? ` — ${cliente.perro}` : ""}`;
+  if (!conTipo) return `${nuevo}${base}`;
+  const tipos = (cliente.tipoServicio || []).map((t) => ETIQUETA_TIPO_SERVICIO[t]).filter(Boolean);
+  return `${nuevo}${base}${tipos.length ? ` · ${tipos.join(" y ")}` : ""}`;
+}
 
 export const TIPOS_SERVICIO = [
   { id: "paseos", nombre: "Paseos" },

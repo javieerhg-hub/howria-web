@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, RUST, MESES, DIAS_SEMANA_LARGO, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, Spinner, BotonEliminar, fechaKey, showToast,
+  textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { diasDelMes } from "../lib/calculosBoletas.js";
 import { CalendarioMes, fechaKeyMes } from "../lib/CalendarioMes.jsx";
@@ -317,7 +318,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
               <div>
                 <label style={label} htmlFor="agenda-cliente">Cliente</label>
                 <select id="agenda-cliente" value={clienteId} onChange={(e) => setClienteId(e.target.value)} style={{ ...input, marginBottom: 0 }}>
-                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>)}
+                  {clientes.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>)}
                 </select>
               </div>
               <div>

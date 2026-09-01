@@ -7,6 +7,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
   estaProgramadoEnFecha,
+  textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";
 
@@ -1130,7 +1131,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             <label style={label}>Cliente</label>
             <select value={clienteMoverSel} onChange={(e) => setClienteMoverSel(e.target.value)} style={{ ...input, marginBottom: 0 }}>
               <option value="">Selecciona un cliente…</option>
-              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro} ({c.paseadorNombre})</option>)}
+              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c, { conTipo: false })} ({c.paseadorNombre})</option>)}
             </select>
           </div>
           <div>
@@ -1184,7 +1185,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             <label style={label}>Cliente</label>
             <select value={clienteAgregarSel} onChange={(e) => elegirClienteAgregar(e.target.value)} style={{ ...input, marginBottom: 0 }}>
               <option value="">Selecciona un cliente…</option>
-              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{c.nombre} — {c.perro} ({c.paseadorNombre})</option>)}
+              {clientesConPaseador.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c, { conTipo: false })} ({c.paseadorNombre})</option>)}
             </select>
           </div>
           <div>

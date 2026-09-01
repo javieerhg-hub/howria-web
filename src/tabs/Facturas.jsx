@@ -7,6 +7,7 @@ import {
   NAVY, CREAM, GOLD, INK, RUST, ESTADOS_FACTURA, tarjeta, sectionTitle, hint, input,
   botonPrincipal, botonSecundario, SkeletonLista, BotonConfirmable, ModalConfirmacion,
   fmtCLP, fechaKey, esBoletaDeCliente, showToast,
+  textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { calcularTotales, esVenta, esPorCobrar, montoParaResponsable } from "../lib/calculosBoletas.js";
 import { FORMAS_PAGO, TarjetaResumenFactura, conUltimaAccion, aceptarBoleta, eliminarBoleta, editarBoleta, EditorBoletaBasico } from "./_compartido.jsx";
@@ -166,7 +167,7 @@ export function Facturas({ boletasEmitidas, setBoletasEmitidas, boletasAdiestram
           onChange={(e) => e.target.value !== actual && setVinculoPendiente({ claveFila, clienteId: e.target.value || null })}
           style={{ ...input, marginBottom: 0, fontSize: 12.5, padding: "5px 8px", width: "100%" }}>
           <option value="">Sin vincular</option>
-          {clientes.map((c) => <option key={c.id} value={c._dbId}>{c.nombre}{c.perro ? ` — ${c.perro}` : ""}</option>)}
+          {clientes.map((c) => <option key={c.id} value={c._dbId}>{textoClienteEnLista(c)}</option>)}
         </select>
         {!b.clienteId && (
           <p style={{ margin: "3px 0 0", fontSize: 10.5, color: "#8A7E5C", lineHeight: 1.3 }}>

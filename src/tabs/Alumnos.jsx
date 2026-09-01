@@ -6,6 +6,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, TEMARIO_ADIESTRAMIENTO,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, SkeletonLista,
   ModalConfirmacion, fmtCLP, fechaKey, showToast, comprimirFotoPerfil, clienteEstaCerrado, tipoServicioComoAlumno,
+  textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { hayChoqueHorario, fechaISOaInputLocal, SeccionPlegable } from "./_compartido.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -110,7 +111,7 @@ function FormularioIngresoAlumno({ inicial, entrenadores, esEntrenador, nombreAc
             style={{ ...input, marginBottom: 0 }}>
             <option value="">No — cargar un alumno desde cero</option>
             {candidatosEvaluacion.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre} — {c.perro}</option>
+              <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>
             ))}
           </select>
           {form.id ? (
