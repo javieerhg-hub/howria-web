@@ -556,11 +556,17 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
           <p style={{ ...label, marginBottom: 8 }}>En camino {etiquetaPeriodo}</p>
           <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 26 }}>
+            {/* Solo si el período tiene borradores. Con 0 quedaba un
+                "Por emitir $0" justo debajo del aviso que dice que hay 28
+                sin enviar, y leído rápido parecen contradecirse: el aviso
+                es de todos los borradores y esta tarjeta solo del período. */}
+            {borradoresPeriodo.length > 0 && (
             <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
-              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Por emitir</p>
+              <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Por emitir {etiquetaPeriodo}</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porEmitir)}</p>
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{borradoresPeriodo.length} boleta(s) en borrador</p>
             </div>
+            )}
             <div style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>Te deben</p>
               <p style={{ margin: 0, fontSize: 19, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(porCobrar)}</p>
