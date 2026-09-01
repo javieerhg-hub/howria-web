@@ -19,7 +19,6 @@ import {
   botonPrincipal, botonSecundario, SkeletonLista, fmtCLP, showToast, comprimirImagen,
   esBoletaDeCliente,
 } from "../HowriaAdmin.jsx";
-import { montoParaResponsable } from "../lib/calculosBoletas.js";
 
 const MESES_NOMBRE = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -135,6 +134,7 @@ export function PagoAdiestramiento({
   const [cobrando, setCobrando] = useState(false);
   const [comprobante, setComprobante] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
+  const [pagoAbierto, setPagoAbierto] = useState(null);
 
   // Evaluaciones y clases que ya hizo y todavía no se le pagan.
   const citasPendientes = useMemo(() => citasAgenda
@@ -142,19 +142,12 @@ export function PagoAdiestramiento({
     .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)),
     [citasAgenda, adiestrador]);
 
-  // Packs vendidos y ya cobrados al cliente, de clientes a su cargo. Solo
-  // cuando el cliente pagó hay plata real que repartir.
-  const boletasPendientes = useMemo(() => boletasAdiestramiento
-    .filter((b) => b.estado === "pagada" && b._dbId && !b.pagadoAResponsable)
-    .filter((b) => {
-      const cliente = clientes.find((c) => esBoletaDeCliente(b, c));
-      return cliente?.responsableNombre === adiestrador || cliente?.adiestradorNombre === adiestrador;
-    })
-    .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO)),
-    [boletasAdiestramiento, clientes, adiestrador]);
+  // Los packs vendidos NO se pagan acá: se siguen repartiendo por la
+  // sección "responsable" de Pago trabajadores, que ya existía. Acá solo
+  // van evaluaciones y clases hechas, para no mezclar dos cosas que se
+  // acuerdan distinto (decisión de Javier).
 
   function claveCita(c) { return `cita-${c._dbId}`; }
-  function claveBoleta(b) { return `boleta-${b._dbId}`; }
 
   function montoDe(clave, sugerido) {
     const v = montos[clave];
@@ -200,22 +193,14 @@ export function PagoAdiestramiento({
     showToast("Monto guardado.", "exito");
   }
 
-  function confirmarMontoBoleta(b) {
-    const monto = Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0;
-    if (monto <= 0) return;
-    setBoletasAdiestramiento((prev) => prev.map((x) => (x._dbId === b._dbId ? { ...x, montoResponsable: monto } : x)));
-    showToast("Monto guardado.", "exito");
-  }
 
-  const totalCitas = citasPendientes.reduce((acc, c) => acc + (Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0), 0);
-  const totalBoletas = boletasPendientes.reduce((acc, b) => acc + (Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0), 0);
-  const total = totalCitas + totalBoletas;
+
+  const total = citasPendientes.reduce((acc, c) => acc + (Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0), 0);
   // Solo cuenta lo que entró de los ítems que efectivamente se van a
   // pagar: sumar todo daría un "queda para Howria" inflado con plata de
   // cosas que todavía no se están repartiendo.
-  const totalEntro =
-    citasPendientes.reduce((acc, c) => acc + ((Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0) > 0 ? entroPorCita(c) : 0), 0)
-    + boletasPendientes.reduce((acc, b) => acc + ((Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0) > 0 ? (b.total || 0) : 0), 0);
+  const totalEntro = citasPendientes.reduce(
+    (acc, c) => acc + ((Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0) > 0 ? entroPorCita(c) : 0), 0);
   const evaluacionesHechas = citasPendientes.filter((c) => c.tipo === "evaluacion").length;
 
   async function elegirComprobante(e) {
@@ -235,8 +220,7 @@ export function PagoAdiestramiento({
     // El detalle se guarda con el pago, igual que en Pago trabajadores:
     // una liquidación es un comprobante y tiene que decir lo mismo dentro
     // de seis meses, aunque las citas o las boletas cambien después.
-    const detalle = [
-      ...citasPendientes
+    const detalle = citasPendientes
         .map((c) => ({
           perro: c.perro || c.clienteNombre,
           cliente: c.clienteNombre,
@@ -246,19 +230,7 @@ export function PagoAdiestramiento({
           monto: Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0,
           concepto: `${c.tipo === "evaluacion" ? "Evaluación" : "Clase"} · ${fmtFecha(c.fechaISO)}`,
         }))
-        .filter((f) => f.monto > 0),
-      ...boletasPendientes
-        .map((b) => ({
-          perro: b.perro || b.cliente,
-          cliente: b.cliente,
-          compartido: false,
-          realizados: b.numClases || 1,
-          tarifa: 0,
-          monto: Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0,
-          concepto: `${b.packNombre || "Pack"} · boleta N°${String(b.numero).padStart(3, "0")}`,
-        }))
-        .filter((f) => f.monto > 0),
-    ];
+        .filter((f) => f.monto > 0);
 
     // Se marca lo pagado y se guarda el monto acordado en cada ítem, para
     // que quede el rastro de por qué se pagó eso.
@@ -267,13 +239,6 @@ export function PagoAdiestramiento({
     setCitas((prev) => prev.map((c) => (idsCitas.has(c._dbId)
       ? { ...c, pagadoAdiestrador: true, pagoAdiestrador: Number(montoDe(claveCita(c), c.pagoAdiestrador)) || 0 }
       : c)));
-
-    const boletasConMonto = boletasPendientes.filter((b) => (Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0) > 0);
-    const idsBoletas = new Set(boletasConMonto.map((b) => b._dbId));
-    setBoletasAdiestramiento((prev) => prev.map((b) => (idsBoletas.has(b._dbId)
-      ? { ...b, montoResponsable: Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) || 0,
-          pagadoAResponsable: true, pagadoAResponsablePor: nombreUsuario, pagadoAResponsableEn: new Date().toISOString() }
-      : b)));
 
     const hoy = new Date();
     setPagosRegistrados((prev) => [...prev, {
@@ -284,7 +249,7 @@ export function PagoAdiestramiento({
       etiqueta: `${MESES_NOMBRE[hoy.getMonth()]} ${hoy.getFullYear()}`,
       monto: total,
       paseos: evaluacionesHechas,
-      clientes: new Set([...citasConMonto.map((c) => c.clienteNombre), ...boletasConMonto.map((b) => b.cliente)]).size,
+      clientes: new Set(citasConMonto.map((c) => c.clienteNombre)).size,
       ajuste: 0,
       ajusteMotivo: null,
       comprobante,
@@ -355,28 +320,6 @@ export function PagoAdiestramiento({
         )}
       </div>
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={{ ...sectionTitle, fontSize: 16 }}>Packs vendidos y cobrados ({boletasPendientes.length})</h2>
-        <p style={hint}>Boletas de adiestramiento que el cliente ya pagó. Solo cuando entró la plata hay algo que repartir.</p>
-        {boletasPendientes.length === 0 ? (
-          <p style={{ ...hint, marginTop: 12 }}>No hay packs pendientes de repartir.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-            {boletasPendientes.map((b) => (
-              <FilaPago key={b._dbId}
-                titulo={b.packNombre || `Boleta N°${String(b.numero).padStart(3, "0")}`}
-                subtitulo={`${b.cliente} · ${fmtFecha(b.fechaISO)} · boleta N°${String(b.numero).padStart(3, "0")}`}
-                perro={b.perro}
-                entroPorFactura={b.total}
-                valor={montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))}
-                onCambiar={(v) => cambiarMonto(claveBoleta(b), v)}
-                onConfirmar={() => confirmarMontoBoleta(b)}
-                confirmado={b.montoResponsable != null} />
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="howria-card" style={{ ...tarjeta, background: NAVY }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -399,22 +342,53 @@ export function PagoAdiestramiento({
         <div className="howria-card" style={tarjeta}>
           <h2 style={{ ...sectionTitle, fontSize: 16 }}>Pagos anteriores a {adiestrador}</h2>
           <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-            {historial.map((p) => (
-              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: CREAM_SOFT, borderRadius: 8, padding: "10px 14px" }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: 13.5, color: NAVY, fontWeight: 600 }}>{fmtCLP(p.monto)}</p>
-                  <p style={{ margin: 0, fontSize: 12, color: "#8A7E5C" }}>
-                    {p.fechaPago} · {(p.detalle || []).length} ítem(s) · lo marcó {p.marcadoPor || "—"}
-                  </p>
+            {historial.map((p) => {
+              const abierto = pagoAbierto === p.id;
+              return (
+                <div key={p.id} style={{ background: CREAM_SOFT, borderRadius: 8, padding: "10px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13.5, color: NAVY, fontWeight: 600 }}>{fmtCLP(p.monto)}</p>
+                      <p style={{ margin: 0, fontSize: 12, color: "#8A7E5C" }}>
+                        {p.fechaPago} · {(p.detalle || []).length} evaluación(es) · lo marcó {p.marcadoPor || "—"}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(p.detalle || []).length > 0 && (
+                        <button onClick={() => setPagoAbierto(abierto ? null : p.id)}
+                          style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0 }}>
+                          {abierto ? "Ocultar" : "Ver qué se pagó"}
+                        </button>
+                      )}
+                      {p.comprobante && (
+                        <a href={p.comprobante} target="_blank" rel="noopener noreferrer"
+                          style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0, textDecoration: "none", display: "inline-block" }}>
+                          Ver comprobante
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* El detalle sale del que se guardó AL PAGAR, no de
+                      recalcularlo: por eso sigue diciendo lo mismo aunque
+                      las citas cambien después. Es el registro de lo ya
+                      pagado, separado de lo que queda pendiente arriba. */}
+                  {abierto && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #DCD2B4", display: "grid", gap: 6 }}>
+                      {(p.detalle || []).map((d, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+                          <span style={{ color: INK }}>
+                            <b>🐾 {d.perro}</b>
+                            <span style={{ color: "#8A7E5C" }}> · {d.concepto || d.cliente}</span>
+                          </span>
+                          <b style={{ color: NAVY, whiteSpace: "nowrap" }}>{fmtCLP(d.monto)}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {p.comprobante && (
-                  <a href={p.comprobante} target="_blank" rel="noopener noreferrer"
-                    style={{ ...botonSecundario, width: "auto", padding: "6px 12px", fontSize: 12, margin: 0, textDecoration: "none", display: "inline-block" }}>
-                    Ver comprobante
-                  </a>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -426,7 +400,7 @@ export function PagoAdiestramiento({
             style={{ background: "#FFFFFF", borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
             <h3 style={{ ...sectionTitle, fontSize: 17, margin: "0 0 4px" }}>Pagar a {adiestrador}</h3>
             <p style={{ ...hint, marginTop: 0 }}>
-              {citasPendientes.filter((c) => Number(montoDe(claveCita(c), c.pagoAdiestrador)) > 0).length} cita(s) y {boletasPendientes.filter((b) => Number(montoDe(claveBoleta(b), b.montoResponsable ?? montoParaResponsable(b))) > 0).length} pack(s)
+              {citasPendientes.filter((c) => Number(montoDe(claveCita(c), c.pagoAdiestrador)) > 0).length} evaluación(es) / clase(s)
             </p>
             <p style={{ margin: "10px 0 16px", fontSize: 26, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(total)}</p>
 
