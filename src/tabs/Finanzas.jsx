@@ -198,6 +198,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const cobradasPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "pagada"), [delPeriodo]);
   const porCobrarPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "pendiente_pago"), [delPeriodo]);
   const borradoresPeriodo = useMemo(() => delPeriodo.filter((b) => b.estado === "no_enviada"), [delPeriodo]);
+  // El aviso de arriba mira TODOS los borradores, no solo los del período
+  // elegido. Una boleta sin emitir del mes pasado es más urgente, no
+  // menos, y con el aviso limitado al período desaparecía justo al mirar
+  // el mes recién empezado: el 1 de septiembre el informe mensual no
+  // mostraba los 26 borradores de agosto por $2.760.578.
+  const borradoresTodos = useMemo(() => todasLasBoletas.filter((b) => b.estado === "no_enviada"), [todasLasBoletas]);
 
   const entro = sumaTotales(cobradasPeriodo);
   const salio = costosPeriodo + costoResponsablesAdiestramiento + costosGeneralesPeriodo;
@@ -497,11 +503,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           no se le cobró a nadie. No suma en ningún total de abajo a
           propósito — un borrador se puede seguir editando, así que darlo
           por ingreso sería contar algo que aún puede cambiar. */}
-      {!vistaPersonal && borradoresPeriodo.length > 0 && (
+      {!vistaPersonal && borradoresTodos.length > 0 && (
         <div className="no-imprimir" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "#F3E3B4", border: "1px solid #E0CB84", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#6B5312" }}>
-              Tienes {borradoresPeriodo.length} boleta(s) sin enviar por {fmtCLP(porEmitir)}
+              Tienes {borradoresTodos.length} boleta(s) sin enviar por {fmtCLP(sumaTotales(borradoresTodos))} en total
             </p>
             <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A6A1E" }}>
               Es trabajo hecho que todavía no le cobraste a nadie. No suma en los totales de abajo hasta que las emitas.
