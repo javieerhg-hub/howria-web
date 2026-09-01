@@ -375,6 +375,9 @@ async function manejarAgendar(req, res) {
         cliente_id: clienteId, cliente_nombre: cliente.nombre, perro: cliente.perro,
         email: cliente.email, telefono: cliente.telefono, direccion: cliente.direccion,
         tipo: "clase", adiestrador, estado: "agendada", origen: "staff",
+        // Explicito, igual que citaToDb en el panel: sin esto la fila
+        // quedaba con duracion nula y distinta al resto.
+        duracion_min: 60,
         plan_id: planId || null, numero_clase: numeroClase ?? null,
       })
       .select("*")

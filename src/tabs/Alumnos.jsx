@@ -268,6 +268,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
   const [fechaAgendaForm, setFechaAgendaForm] = useState("");
   const [temaAgendaForm, setTemaAgendaForm] = useState("");
   const [agendaEnVuelo, setAgendaEnVuelo] = useState(false);
+  const [quitandoCita, setQuitandoCita] = useState(null);
 
   const total = (plan.numClases || 0) + (plan.incluyeEvaluacion ? 1 : 0);
   const hechas = clasesDelPlan.length;
@@ -379,9 +380,56 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
       setAgendaEnVuelo(false);
     }
   }
+  // Quitar una clase agendada tiene dos caminos, y la diferencia es si el
+  // cliente ya dijo "ahí estaré" desde el botón del correo:
+  //
+  //   - Si NO confirmó, la cita era un recordatorio interno y se borra,
+  //     igual que siempre.
+  //   - Si SÍ confirmó, hay una persona que cuenta con esa hora. Ahí no
+  //     puede desaparecer en silencio: se cancela de verdad (la fila
+  //     queda con estado "cancelada", así hay registro de que existió) y
+  //     se le avisa por correo.
+  //
+  // La cancelación pasa por api/cancelar-cita.js, el mismo endpoint que
+  // usa la ficha del cliente — no hay uno nuevo. Y como citaDe() ignora
+  // las canceladas, la clase vuelve a verse como no agendada sola.
   function cancelarAgenda(numero) {
     const cita = citaDe(numero);
-    if (cita?._dbId && setCitas) setCitas((prev) => prev.filter((c) => c._dbId !== cita._dbId));
+    if (!cita?._dbId || !setCitas) return;
+    if (!cita.confirmadaClienteEn) {
+      setCitas((prev) => prev.filter((c) => c._dbId !== cita._dbId));
+      return;
+    }
+    setQuitandoCita(cita);
+  }
+
+  async function confirmarQuitarCita() {
+    const cita = quitandoCita;
+    if (!cita || agendaEnVuelo) return;
+    setAgendaEnVuelo(true);
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const resp = await fetch("/api/cancelar-cita", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ citaId: cita._dbId, accion: "cancelar" }),
+      });
+      const resultado = await resp.json().catch(() => ({}));
+      // 502 = la cita SÍ quedó cancelada y solo falló el correo, así que
+      // igual hay que reflejarlo en pantalla.
+      if (!resp.ok && resp.status !== 502) {
+        showToast(resultado.error || "No se pudo cancelar la clase.");
+        return;
+      }
+      setCitas((prev) => prev.map((c) => (c._dbId === cita._dbId ? { ...c, estado: "cancelada" } : c)));
+      setQuitandoCita(null);
+      if (resp.status === 502) showToast(resultado.error);
+      else showToast("Clase cancelada — se le avisó al cliente por correo.", "exito");
+    } catch {
+      showToast("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setAgendaEnVuelo(false);
+    }
   }
 
   if (!plan._dbId) {
@@ -451,6 +499,15 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
               <button onClick={() => setDetalleAbierto(null)} style={botonSecundario}>Cancelar</button>
             </div>
           </div>
+        )}
+        {quitandoCita && (
+          <ModalConfirmacion
+            titulo="¿Cancelar esta clase?"
+            mensaje={`${String(quitandoCita.clienteNombre || "El cliente").split(" ")[0]} ya confirmó que viene a esta hora. Si la cancelas le va a llegar un correo avisándole, y la clase vuelve a quedar sin agendar.`}
+            textoConfirmar={agendaEnVuelo ? "Cancelando…" : "Cancelar y avisar"}
+            onConfirmar={confirmarQuitarCita}
+            onCancelar={() => setQuitandoCita(null)}
+          />
         )}
         {agendando !== null && (
           <div style={{ marginTop: 6, background: "#EAF2F6", borderRadius: 6, padding: 10 }}>

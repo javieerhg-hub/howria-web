@@ -235,6 +235,10 @@ export function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
             ? new Date(cita.fechaISO).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
             : new Date(cita.fechaISO).toLocaleString("es-CL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} />
           <FilaDetalleCita label={esPaseo ? "Paseador" : "Entrenador"} valor={cita.adiestrador} />
+          {/* Lo que se va a ver en la clase. Se define al agendar y es lo
+              que se le anuncia al cliente por correo, así que el entrenador
+              tiene que poder leerlo desde su propio calendario. */}
+          {cita.tema && <FilaDetalleCita label="Tema" valor={cita.tema} />}
           {cita.precio != null && <FilaDetalleCita label="Precio" valor={fmtCLP(cita.precio)} />}
           <FilaDetalleCita label="Correo" valor={cita.email || "Sin correo"} />
           <FilaDetalleCita label="Teléfono" valor={cita.telefono || "Sin teléfono"} />
@@ -242,6 +246,14 @@ export function ModalDetalleCita({ cita, onCerrar, onEliminar }) {
           {cita.notas && <FilaDetalleCita label="Notas" valor={cita.notas} />}
           {!esPaseo && <FilaDetalleCita label="Origen" valor={cita.origen === "cliente" ? "Pedida por el cliente (agenda pública)" : "Agendada por el equipo"} />}
           {cita.confirmadaEn && <FilaDetalleCita label="Confirmada el" valor={new Date(cita.confirmadaEn).toLocaleString("es-CL")} />}
+          {/* Distinto de "Confirmada el", que es cuando la confirmó el
+              EQUIPO. Esta es la persona diciendo "sí, ahí estoy" desde el
+              botón del correo. Solo se muestra cuando pasó: las citas
+              viejas nunca recibieron ese correo y decir "sin confirmar"
+              en todas ellas sería una alarma falsa. */}
+          {cita.confirmadaClienteEn && (
+            <FilaDetalleCita label="El cliente confirmó" valor={new Date(cita.confirmadaClienteEn).toLocaleString("es-CL")} />
+          )}
         </div>
 
         {puedeEliminar && (
