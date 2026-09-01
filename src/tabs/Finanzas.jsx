@@ -665,8 +665,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
   const etiquetaPeriodo = periodo === "semana" || periodo === "personalizado"
     ? { semana: "esta semana", personalizado: "en el rango elegido" }[periodo]
-    : `en ${tituloPeriodo}`;
-  const etiquetaAnterior = { semana: "semana anterior", mes: "mes anterior", año: "año anterior" }[periodo];
+    : `en ${periodo === "mes" ? "el " : ""}${tituloPeriodo}`;
+  const etiquetaAnterior = { semana: "semana anterior", mes: "ciclo anterior", año: "año anterior" }[periodo];
 
   function imprimirInforme() {
     window.print();
@@ -884,7 +884,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         <button onClick={() => setOffsetPeriodo((n) => n - 1)} aria-label={periodo === "mes" ? "Mes anterior" : "Año anterior"}
           style={{ ...botonSecundario, width: "auto", margin: 0, padding: "6px 14px", flex: "none" }}>←</button>
         <div style={{ minWidth: 190, textAlign: "center" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: NAVY, textTransform: "capitalize", display: "block" }}>{tituloPeriodo}</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: NAVY, display: "block" }}>{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)}</span>
           {ventanaCiclo && <span style={{ fontSize: 11.5, color: "#8A7E5C" }}>{ventanaCiclo}</span>}
         </div>
         <button onClick={() => setOffsetPeriodo((n) => n + 1)} aria-label={periodo === "mes" ? "Mes siguiente" : "Año siguiente"}
