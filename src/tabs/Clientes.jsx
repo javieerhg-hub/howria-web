@@ -137,7 +137,16 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
 
   function toggleDiaHabitual(dow) {
-    setForm((f) => ({ ...f, diasHabituales: f.diasHabituales.includes(dow) ? f.diasHabituales.filter((d) => d !== dow) : [...f.diasHabituales, dow].sort() }));
+    setForm((f) => {
+      const dias = f.diasHabituales.includes(dow)
+        ? f.diasHabituales.filter((d) => d !== dow)
+        : [...f.diasHabituales, dow].sort();
+      // El plan se deduce de los días, no al revés: si alguien elige
+      // "Lunes a viernes" y después saca el martes, la ficha no puede
+      // seguir diciendo "Lunes a viernes". Sin esto el nombre del plan
+      // mentía en cuanto se tocaba un día a mano.
+      return { ...f, diasHabituales: dias, planHabitual: planSegunDias(dias) };
+    });
   }
   // Fechas sueltas: para el cliente que no tiene días fijos sino los que
   // el tutor avisa mes a mes. Se guardan como "2026-09-02" para que
@@ -151,6 +160,14 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
 
   function toggleTipoServicio(tipoId) {
     setForm((f) => ({ ...f, tipoServicio: f.tipoServicio.includes(tipoId) ? f.tipoServicio.filter((t) => t !== tipoId) : [...f.tipoServicio, tipoId] }));
+  }
+
+  // Qué plan corresponde a un conjunto de días. "Personalizado" es la
+  // respuesta cuando no calza con ninguno, incluido el caso de no tener
+  // ningún día.
+  function planSegunDias(dias) {
+    const igual = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+    return PLANES.find((p) => p.id !== "PERSONALIZADO" && igual(p.dias, dias))?.id || "PERSONALIZADO";
   }
 
   function elegirPlan(planId) {
@@ -200,7 +217,7 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
       <h3 style={{ ...sectionTitle, fontSize: 15, marginTop: 26, paddingTop: 20, borderTop: "1px solid #E4DBC3", marginBottom: 14 }}>Plan y horario de paseo</h3>
       <p style={{ ...label, marginTop: 0 }} id="cliente-plan-label">Plan que normalmente contrata</p>
       <div role="group" aria-labelledby="cliente-plan-label" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        {PLANES.filter((p) => p.id !== "PERSONALIZADO").map((p) => (
+        {PLANES.map((p) => (
           <button key={p.id} type="button" onClick={() => elegirPlan(p.id)} aria-pressed={form.planHabitual === p.id}
             style={{ padding: "7px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
               border: form.planHabitual === p.id ? `1.5px solid ${NAVY}` : "1px solid #DCD2B4",
