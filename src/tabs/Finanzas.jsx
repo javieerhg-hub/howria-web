@@ -737,6 +737,10 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     // septiembre el día 1, teniendo su boleta de agosto emitida y
     // aceptada; la de septiembre recién le toca a fin de mes.
     const cobraMesVencido = (c) => {
+      // Lo dicho en la ficha manda; deducir es solo el respaldo para los
+      // clientes que nadie marcó (ver FORMAS_COBRO y database/119).
+      if (c.formaCobro === "vencido") return true;
+      if (c.formaCobro === "adelantado") return false;
       const suyas = todasLasBoletas
         .filter((b) => esBoletaDeCliente(b, c) && b._periodo && b.fechaISO)
         .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));

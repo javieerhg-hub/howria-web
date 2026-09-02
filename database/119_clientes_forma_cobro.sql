@@ -1,0 +1,26 @@
+-- Corre esto en el SQL Editor de Supabase (proyecto Howria)
+--
+-- Cómo se le cobra a cada cliente: por adelantado o el mes vencido.
+--
+-- Howria le cobra por adelantado a la mayoría (la boleta del 27 de agosto
+-- cubre septiembre), pero a algunos les cobra el mes vencido (la del 31 de
+-- agosto cubre agosto, los días ya caminados). Las dos cosas salen el
+-- mismo día, así que la fecha de emisión no las distingue.
+--
+-- Sin este dato, "falta por cobrar" le pedía a un cliente de mes vencido
+-- la boleta de un mes que ni había empezado — le pasó a Daniela (Ikki y
+-- Roma), que aparecía pendiente de septiembre el día 1 teniendo su boleta
+-- de agosto emitida y aceptada.
+--
+-- Se puede deducir del historial (si el mes que cubre su última boleta es
+-- el mismo en que se emitió, es vencido) y la app lo sigue haciendo
+-- cuando esta columna está vacía. Pero deducir falla con un cliente nuevo
+-- o con una boleta mal etiquetada, así que conviene poder decirlo.
+--
+-- SIN valor por defecto a propósito: null = "no dicho", y ahí manda la
+-- deducción. Así nada cambia para los 52 clientes actuales hasta que
+-- alguien los marque a mano.
+alter table clientes add column if not exists forma_cobro text;
+
+-- Sin cambios de RLS: es una columna más de una tabla que ya tiene sus
+-- políticas.

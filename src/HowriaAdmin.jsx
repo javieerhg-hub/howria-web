@@ -147,6 +147,7 @@ function clienteToDb(c) {
     foto_url: c.fotoUrl,
     dias_habituales: c.diasHabituales || [],
     dias_puntuales: c.diasPuntuales || [],
+    forma_cobro: c.formaCobro || null,
     hora_habitual: c.horaHabitual || null,
     plan_habitual: c.planHabitual,
     objetivos: c.objetivos,
@@ -180,6 +181,9 @@ function dbToCliente(row) {
     // Cuándo se dio de baja, para poder medir cuántos se van al mes. La
     // pone un trigger (database/117), tampoco se manda de vuelta.
     bajaEn: row.baja_en || null,
+    // "adelantado" | "vencido" | null. null = no se dijo, y ahí la app lo
+    // deduce del historial de boletas (ver Finanzas, cobraMesVencido).
+    formaCobro: row.forma_cobro || null,
     nombre: row.nombre,
     perro: row.perro,
     telefono: row.telefono,
@@ -1229,6 +1233,16 @@ export const INK = "#332E22";
 export const RUST = "#A85C3B";
 export const NAVY_LOGO = "#102A41"; // mismo color de fondo que el logo, usado en el encabezado de las boletas (canvas)
 export const PANEL_BG = "#F1EFE9"; // fondo del panel del staff — más claro y neutro que CREAM, para que las tarjetas blancas resalten más y se sienta más liviano
+
+// Cómo se le cobra a un cliente. La mayoría paga por adelantado (la
+// boleta de fines de agosto cubre septiembre), pero a algunos se les cobra
+// lo que ya caminaron. Las dos boletas salen el mismo día, así que la
+// fecha de emisión no las distingue: hay que decirlo o deducirlo.
+export const FORMAS_COBRO = [
+  { id: "", nombre: "Deducir del historial", ayuda: "Mira su última boleta: si cubre el mes en que se emitió, es mes vencido." },
+  { id: "adelantado", nombre: "Por adelantado", ayuda: "Se le cobra el mes antes de que empiece. Es lo común en Howria." },
+  { id: "vencido", nombre: "El mes vencido", ayuda: "Se le cobra al final, por los paseos que ya hizo." },
+];
 
 export const ESTADOS_CLIENTE = [
   { id: "activo", nombre: "Activo", color: "#2F6A46", bg: "#D8ECDE" },

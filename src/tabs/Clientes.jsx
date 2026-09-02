@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Search, ArrowUpDown } from "lucide-react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, MESES, TIPOS_SERVICIO, ESTADOS_CLIENTE,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, MESES, TIPOS_SERVICIO, ESTADOS_CLIENTE, FORMAS_COBRO,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
   comprimirFotoPerfil, tipoServicioComoAlumno, BotonConfirmable,
@@ -51,7 +51,7 @@ function resumenAdiestramiento(cliente, citasAgenda, planesClases, clasesRealiza
   };
 }
 
-const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], diasPuntuales: [], horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
+const FORM_VACIO = { nombre: "", perro: "", telefono: "", email: "", valorPaseoRef: "", raza: "", pesoKg: "", fotoUrl: null, diasHabituales: [], diasPuntuales: [], formaCobro: "", horaHabitual: "", planHabitual: "LV", objetivos: "", paseadorNombre: "", tarifaPaseador: "", adiestradorNombre: "", responsableNombre: "", direccion: "", lat: null, lng: null, tipoServicio: ["paseos"], estadoCliente: "activo", fechaInicio: "" };
 
 // Calendario para marcar fechas sueltas de paseo. Existe para el cliente
 // que no tiene días fijos sino los que el tutor avisa cada mes: sin esto
@@ -255,6 +255,15 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
               onMes={setMesPuntual}
             />
           )}
+
+          <label style={label} htmlFor="cliente-forma-cobro">Cómo se le cobra</label>
+          <select id="cliente-forma-cobro" value={form.formaCobro || ""} onChange={(e) => setForm({ ...form, formaCobro: e.target.value })}
+            style={{ ...input, marginBottom: 4 }}>
+            {FORMAS_COBRO.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+          </select>
+          <p style={{ ...hint, marginTop: 0, marginBottom: 16 }}>
+            {FORMAS_COBRO.find((f) => f.id === (form.formaCobro || ""))?.ayuda}
+          </p>
 
           <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
           <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />

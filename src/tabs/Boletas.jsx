@@ -413,6 +413,10 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
     const cicloSugerido = cicloDeFecha(new Date());
     const mesElegidoIdx = MESES.indexOf(String(p.mes || "").toLowerCase());
     const calzaConElCiclo = cicloSugerido && mesElegidoIdx === cicloSugerido.getMonth() && Number(p.anio) === cicloSugerido.getFullYear();
+    // A un cliente de mes vencido no se le puede reclamar el mes: segun el
+    // dia, agosto y septiembre son los dos legitimos. Avisarle seria una
+    // falsa alarma cada vez que se le factura (ver FORMAS_COBRO).
+    const avisarMes = !calzaConElCiclo && cicloSugerido && cliente?.formaCobro !== "vencido";
     return (
       <div className="howria-card" style={{ ...tarjeta, maxWidth: 560, margin: "0 auto" }}>
         <h2 style={sectionTitle}>Confirmar antes de emitir</h2>
@@ -462,7 +466,7 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
         {/* El mes decide en qué período aparece la boleta en Finanzas y es
             lo que el cliente lee en el documento. Es también donde se
             cuela el error más caro: dejar el que venía por omisión. */}
-        {!calzaConElCiclo && cicloSugerido && (
+        {avisarMes && (
           <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#8A6A1E", background: "#F3E3B4", border: "1px solid #E0CB84", borderRadius: 8, padding: "10px 12px" }}>
             Estamos facturando el ciclo de <b>{MESES[cicloSugerido.getMonth()]} {cicloSugerido.getFullYear()}</b> y esta boleta dice <b>{p.mes} {p.anio}</b>.
             Está bien si le estás cobrando los paseos que ya hizo — solo confírmalo antes de emitir.
