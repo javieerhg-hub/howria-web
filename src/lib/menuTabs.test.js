@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -122,5 +122,35 @@ describe("fusiones del menú", () => {
         expect(ids, `la fusión "${f.id}" declara "${s.id}", que no es una pestaña`).toContain(s.id);
       }
     }
+  });
+});
+
+describe("barra inferior de mobile", () => {
+  // Todas las entradas que el menú puede dibujar, en el mismo orden que
+  // el sidebar: las sin grupo primero, después grupo por grupo.
+  const entradas = [
+    ...entradasDeMenu(TODOS_LOS_TABS, ""),
+    ...ORDEN_GRUPOS.flatMap((g) => entradasDeMenu(TODOS_LOS_TABS, g)),
+  ].map((e) => e.id);
+
+  it("la prioridad solo nombra entradas que existen", () => {
+    // El bug que esto evita: la barra elige sus 3 accesos rápidos por
+    // esta lista. Un id que ya no es una entrada (porque se fusionó o se
+    // fue a "Más") no rompe nada — simplemente ese slot no se llena, en
+    // silencio. Paso justo eso al fusionar Cobrar: la lista seguía
+    // diciendo "boletas" y "facturas".
+    for (const id of PRIORIDAD_BARRA_NAV) {
+      expect(entradas, `"${id}" está en PRIORIDAD_BARRA_NAV pero no es una entrada del menú`).toContain(id);
+    }
+  });
+
+  it("la prioridad no nombra sub-pestañas de una fusión", () => {
+    for (const id of PRIORIDAD_BARRA_NAV) {
+      expect(fusionDeTab(id), `"${id}" es una sub-pestaña; en la barra va su entrada, no ella`).toBeNull();
+    }
+  });
+
+  it("alcanza para llenar los 3 accesos rápidos", () => {
+    expect(PRIORIDAD_BARRA_NAV.length).toBeGreaterThanOrEqual(3);
   });
 });

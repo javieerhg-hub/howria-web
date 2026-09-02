@@ -1506,7 +1506,7 @@ export const TODOS_LOS_TABS = [
 // grupo de cada una, así que sacarlos dejaría esos resultados sin
 // contexto. Un grupo sin pestañas visibles no pinta nada (entradasDeMenu
 // devuelve vacío), así que no estorban.
-const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Clientes y dinero", "Administración", "Equipo", "Prospección"];
+export const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Clientes y dinero", "Administración", "Equipo", "Prospección"];
 
 // Pestañas que hoy casi no se usan y que Javier pidió sacar del camino
 // ("déjalas como +más y que no molesten, en un futuro trabajaré en
@@ -5244,7 +5244,15 @@ export function PullToRefresh() {
 
 // Qué secciones van fijas en la barra inferior (además de Inicio, que
 // siempre va primero) — las que no entran quedan agrupadas bajo "Más".
-const PRIORIDAD_BARRA_NAV = ["boletas", "facturas", "clientes", "agenda", "mail", "mis-paseos", "coordinacion", "seguimiento", "finanzas", "pagos", "equipo", "mapa", "usuarios"];
+// Orden de preferencia para los 3 accesos rapidos de la barra inferior en
+// mobile. Nombra ENTRADAS del menu, no pestanas sueltas: desde las
+// fusiones, "cobrar" y "pagar" son una entrada cada una y sus ids de
+// adentro (boletas/facturas/pagos/pago-adiestramiento) ya no sirven aca —
+// poner "boletas" mostraria en la barra algo que en el resto de la app
+// no existe como entrada propia.
+//
+// Las secundarias tampoco van: viven en "Mas" a proposito.
+export const PRIORIDAD_BARRA_NAV = ["cobrar", "clientes", "coordinacion", "mis-paseos", "agenda", "calendario", "pagar", "finanzas", "alumnos", "mail", "usuarios"];
 
 function ItemBarraNav({ activo, Icono, label, onClick, badge }) {
   if (activo) {
@@ -5278,8 +5286,16 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBusca
 
   const tieneInicio = tabs.some((t) => t.id === "inicio");
   const otras = tabs.filter((t) => t.id !== "inicio");
-  const destacadas = PRIORIDAD_BARRA_NAV.map((id) => otras.find((t) => t.id === id)).filter(Boolean).slice(0, 3);
-  const resto = otras.filter((t) => !destacadas.includes(t));
+  // Las mismas entradas que dibuja el menu lateral y en el mismo orden:
+  // primero las sin grupo (Calendario), despues grupo por grupo, con las
+  // fusiones ya colapsadas en una sola entrada.
+  const entradasPrincipales = [
+    ...entradasDeMenu(otras, ""),
+    ...ORDEN_GRUPOS.flatMap((g) => entradasDeMenu(otras, g)),
+  ];
+  const secundarias = otras.filter((t) => esTabSecundario(t.id));
+  const destacadas = PRIORIDAD_BARRA_NAV.map((id) => entradasPrincipales.find((e) => e.id === id)).filter(Boolean).slice(0, 3);
+  const resto = entradasPrincipales.filter((e) => !destacadas.includes(e));
 
   function ir(tabId) {
     setTab(tabId);
@@ -5337,7 +5353,6 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBusca
             {/* Las secundarias van al final, bajo su propio rótulo, para
                 que no se mezclen con las de todos los días. */}
             {(() => {
-              const secundarias = resto.filter((t) => esTabSecundario(t.id));
               if (secundarias.length === 0) return null;
               return (
                 <div style={{ marginBottom: 6 }}>
@@ -5363,9 +5378,11 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBusca
         {tieneInicio && <ItemBarraNav activo={tab === "inicio"} Icono={Home} label="Inicio" onClick={() => ir("inicio")} />}
         {destacadas.map((t) => {
           const Icono = ICONOS_TAB[t.id] || Home;
-          return <ItemBarraNav key={t.id} activo={tab === t.id} Icono={Icono} label={t.label} onClick={() => ir(t.id)} badge={t.id === "mail" ? correosNoLeidos : 0} />;
+          // Una entrada fusionada se pinta activa con cualquiera de sus
+          // sub-pestañas abiertas, y al tocarla lleva a la primera.
+          return <ItemBarraNav key={t.id} activo={entradaActiva(t, tab)} Icono={Icono} label={t.label} onClick={() => ir(destinoDeEntrada(t))} badge={t.id === "mail" ? correosNoLeidos : 0} />;
         })}
-        {resto.length > 0 && (
+        {(resto.length > 0 || secundarias.length > 0) && (
           // Mail puede estar en "destacadas" (arriba) o adentro de "Más" —
           // según el rol, según cuáles pestañas se prioricen — así que el
           // aviso de correo sin leer también tiene que poder aparecer acá.
