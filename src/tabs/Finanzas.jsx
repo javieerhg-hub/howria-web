@@ -728,11 +728,32 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
     const activos = clientes.filter((c) => (c.estadoCliente || "activo") === "activo");
 
+    // Howria le cobra por ADELANTADO a la mayoría, pero a algunos les
+    // cobra el MES VENCIDO — se ve en su última boleta: si el mes que
+    // cubre es el mismo en que se emitió, es vencido.
+    //
+    // A esos no se les puede pedir la boleta de un mes que todavía no
+    // termina. Caso real: Daniela (Ikki y Roma) salía como pendiente de
+    // septiembre el día 1, teniendo su boleta de agosto emitida y
+    // aceptada; la de septiembre recién le toca a fin de mes.
+    const cobraMesVencido = (c) => {
+      const suyas = todasLasBoletas
+        .filter((b) => esBoletaDeCliente(b, c) && b._periodo && b.fechaISO)
+        .sort((a, b) => new Date(b.fechaISO) - new Date(a.fechaISO));
+      const ultima = suyas[0];
+      if (!ultima) return false; // sin historial se asume adelantado, que es lo común
+      const emision = new Date(ultima.fechaISO);
+      return ultima._periodo.getMonth() === emision.getMonth() && ultima._periodo.getFullYear() === emision.getFullYear();
+    };
+    // Último día del mes del ciclo: si todavía no pasó, el mes sigue corriendo.
+    const cicloTerminado = new Date(anio, mes + 1, 0, 23, 59, 59) < new Date();
+
     const paseos = activos
       .filter((c) => (c.tipoServicio || []).includes("paseos"))
       // Sin paseos programados en el ciclo no hay nada que cobrarle: es el
       // caso del cliente que entró a mitad de mes o que no tiene días.
       .filter((c) => diasDelMesProgramados(c, mes, anio, reprogramaciones).length > 0)
+      .filter((c) => cicloTerminado || !cobraMesVencido(c))
       .filter((c) => !tieneBoletaDelCiclo(c));
 
     // Una cita realizada en el ciclo es lo que genera el cobro de
@@ -1325,7 +1346,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         <div>
           <p style={{ ...label, marginBottom: 2 }}>Falta por cobrar {etiquetaPeriodo}</p>
           <p style={{ margin: "0 0 10px", fontSize: 11.5, color: "#8A7E5C" }}>
-            Paseos con días este ciclo y adiestramiento con clases hechas, en ambos casos sin boleta emitida. Los alumnos que este ciclo no tuvieron nada no aparecen: no hay qué cobrarles.
+            Paseos con días este ciclo y adiestramiento con clases hechas, en ambos casos sin boleta emitida. No aparece quien este ciclo no tuvo nada, ni quien paga el mes vencido mientras el mes siga corriendo.
           </p>
           {faltanPorCobrar.paseos.length === 0 && faltanPorCobrar.adiestramiento.length === 0 ? (
             <p style={{ ...hint, marginTop: 8 }}>No queda nadie por cobrar en este ciclo.</p>
