@@ -9,6 +9,7 @@ import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNot
 import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 import { montoPrincipal, montoCompartido } from "./lib/reparto.js";
+import { fechaKey, esClienteDePaseosActivo, estaProgramadoEnFecha, diasDelMesProgramados } from "./lib/programacion.js";
 
 // Cada pestaña (menos Inicio/Mis paseos) vive en su propio archivo bajo
 // ./tabs/, cargado solo cuando de verdad se entra a esa pestaña — así un
@@ -2103,36 +2104,10 @@ function useReprogramaciones(sessionVersion) {
 // ORIGEN de un movimiento no se resta acá — eso ya lo resuelve marcar
 // "cancelado" ese día en registroPaseos (mismo mecanismo que cualquier
 // otra cancelación, ver salirDeRuta/moverPaseo).
-// Quién cuenta como carga de paseos: los de servicio "paseos" (o sin
-// tipoServicio guardado, por compatibilidad con fichas viejas) y que
-// estén activos. Vive acá y no repetido en cada pantalla porque cuando
-// las dos copias se separan, el resumen de la semana deja de cuadrar con
-// el detalle del día y no hay forma de saber cuál de los dos miente.
-export function esClienteDePaseosActivo(cliente) {
-  if (cliente.tipoServicio?.length && !cliente.tipoServicio.includes("paseos")) return false;
-  return (cliente.estadoCliente || "activo") === "activo";
-}
-
-export function estaProgramadoEnFecha(cliente, fecha, reprogramaciones) {
-  // Un cliente que es solo de adiestramiento/clases/evaluación (tipoServicio
-  // sin "paseos") nunca tiene un paseo que marcar, aunque le haya quedado
-  // guardado algún día habitual de cuando se cargó su ficha — mismo criterio
-  // de "sin tipoServicio guardado se trata como paseos" que ya usa el aviso
-  // de "sin paseador" en Inicio (ver arriba, sinPaseador).
-  // Un cliente pausado o dado de baja no tiene paseos que hacer, pero sus
-  // días habituales siguen guardados: sin esto aparecía igual todos los
-  // días como paseo pendiente, y no había forma de sacarlo de la lista
-  // salvo borrarle los días (y perder su horario para cuando vuelva).
-  if (!esClienteDePaseosActivo(cliente)) return false;
-  const dow = (fecha.getDay() + 6) % 7;
-  if (cliente.diasHabituales?.includes(dow)) return true;
-  const clave = fechaKey(fecha);
-  // Fechas sueltas marcadas a mano en la ficha. Van antes de las
-  // reprogramaciones porque son la programación original del cliente, no
-  // un movimiento de una ya existente.
-  if (cliente.diasPuntuales?.includes(clave)) return true;
-  return reprogramaciones.some((r) => r.clienteId === cliente._dbId && r.fechaNueva === clave);
-}
+// esClienteDePaseosActivo y estaProgramadoEnFecha viven en
+// lib/programacion.js — ver ahí por qué. Se re-exportan porque media app
+// las importa desde este archivo.
+export { esClienteDePaseosActivo, estaProgramadoEnFecha };
 
 // Solicitudes de "Registro de cuenta" pendientes de revisión (ver
 // api/solicitud-registro.js) — solo trae las que siguen en estado
@@ -3008,12 +2983,8 @@ export function rangoPeriodo(periodo, hoy) {
 // coincidía con el día real — así una fase/registro de anoche aparecía
 // como si fuera de hoy. Bug real encontrado 2026-08-17 (Javier H: "Mi
 // ruta de hoy" mostraba completada sin haberla iniciado).
-export function fechaKey(d) {
-  const anio = d.getFullYear();
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
+// Vive en lib/programacion.js junto a las funciones que la usan.
+export { fechaKey };
 
 // Mismo criterio que ya usa Coordinación para ordenar la tabla de "Paseos
 // de hoy" por horario — los que no tienen hora fija quedan al final, no
@@ -3322,7 +3293,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   const mesActual = hoy.getMonth(), anioActual = hoy.getFullYear();
   const prefijoMesActual = `${anioActual}-${String(mesActual + 1).padStart(2, "0")}`;
   const resumenMensual = misClientes.map((c) => {
-    const diasDelPlan = diasSegunPlan(mesActual, anioActual, c.diasHabituales || []);
+    // Incluye días habituales Y fechas sueltas: un cliente que sale solo
+    // cuando el tutor avisa tenía 0 programados acá, así que el paseador
+    // no cobraba paseos que sí hizo.
+    const diasDelPlan = diasDelMesProgramados(c, mesActual, anioActual);
     // Un paseo movido HACIA este mes (venga de donde venga) también debe
     // contar para "Tu pago" — si no, el paseador pierde la plata de un
     // paseo que sí hizo, solo porque cayó en un día no habitual.
@@ -5687,8 +5661,8 @@ export default function HowriaAdmin() {
         {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}
         {tab === "inventario" && tabsPermitidosRol.includes("inventario") && <Inventario usuarios={usuarios} entregas={entregasInventario} registrarEntrega={registrarEntregaInventario} eliminarEntrega={eliminarEntregaInventario} cargando={cargandoInventario} user={user} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} packsClases={packsClases} setPacksClases={setPacksClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}

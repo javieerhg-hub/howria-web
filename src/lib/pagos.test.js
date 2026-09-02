@@ -212,3 +212,33 @@ describe("resumenPaseadorEnRango", () => {
     expect(r.compartidos).toHaveLength(0);
   });
 });
+
+// Las fechas sueltas tienen que contar como paseos programados: son la
+// unica forma de programar de un cliente sin dias fijos, y si no cuentan
+// el paseador no cobra lo que si hizo.
+describe("programadosEnRango con fechas sueltas", () => {
+  const desde = new Date(2026, 8, 1);
+  const hasta = new Date(2026, 8, 8); // exclusivo
+
+  it("cuenta las fechas sueltas de un cliente sin días fijos", () => {
+    const c = { id: 1, tipoServicio: ["paseos"], diasHabituales: [], diasPuntuales: ["2026-09-02", "2026-09-04"] };
+    expect(programadosEnRango(c, desde, hasta, {})).toBe(2);
+  });
+
+  it("las suma a los días fijos sin duplicar", () => {
+    // El 2 de septiembre de 2026 es miércoles (dow 2), o sea ya está en
+    // los días fijos: no puede contarse dos veces.
+    const c = { id: 1, tipoServicio: ["paseos"], diasHabituales: [2], diasPuntuales: ["2026-09-02"] };
+    expect(programadosEnRango(c, desde, hasta, {})).toBe(1);
+  });
+
+  it("una fecha suelta cancelada no cuenta", () => {
+    const c = { id: 1, tipoServicio: ["paseos"], diasHabituales: [], diasPuntuales: ["2026-09-02"] };
+    expect(programadosEnRango(c, desde, hasta, { "1_2026-09-02": { cancelado: true } })).toBe(0);
+  });
+
+  it("un cliente pausado no tiene programados", () => {
+    const c = { id: 1, tipoServicio: ["paseos"], estadoCliente: "pausado", diasHabituales: [2] };
+    expect(programadosEnRango(c, desde, hasta, {})).toBe(0);
+  });
+});

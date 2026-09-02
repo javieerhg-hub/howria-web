@@ -11,6 +11,7 @@ import {
   NAVY, CREAM_SOFT, GOLD, INK, tarjeta, sectionTitle, hint, input, botonSecundario,
   fechaKey, showToast,
 } from "../HowriaAdmin.jsx";
+import { estaProgramadoEnFecha } from "../lib/programacion.js";
 import { hayChoqueHorario, ModalDetalleCita, eliminarCita, ordenarRutaCercanoMasProximo } from "./_compartido.jsx";
 
 const TIPOS_CALENDARIO_VISTA = [
@@ -496,7 +497,7 @@ function useConfigItinerario() {
 // citas_agenda + paseos virtuales derivados de diasHabituales, filtrados
 // por tipo visible y acotados al propio adiestrador/paseador si aplica.
 // Compartida entre CalendarioAlumnos e Itinerario.
-function useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles }) {
+function useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles, reprogramaciones = [] }) {
   const esEntrenador = rolActual === "entrenador";
 
   const porDiaCitas = useMemo(() => {
@@ -518,8 +519,12 @@ function useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nomb
     [clientes, esEntrenador, nombreActual]);
 
   return function itemsDelDia(key) {
-    const dow = (new Date(key + "T00:00:00").getDay() + 6) % 7;
-    const paseosDia = tiposVisibles.paseo ? clientesPaseo.filter((c) => c.diasHabituales?.includes(dow)).map((c) => paseoComoItem(c, key, registroPaseos)) : [];
+    const fecha = new Date(key + "T00:00:00");
+    // Misma regla que Coordinación y que el pago: incluye fechas sueltas y
+    // paseos movidos, no solo los días habituales de la semana.
+    const paseosDia = tiposVisibles.paseo
+      ? clientesPaseo.filter((c) => estaProgramadoEnFecha(c, fecha, reprogramaciones)).map((c) => paseoComoItem(c, key, registroPaseos))
+      : [];
     const citasDia = porDiaCitas[key] || [];
     return [...paseosDia, ...citasDia].sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
   };
@@ -551,7 +556,7 @@ function PastillasTipoCalendario({ tiposVisibles, toggleTipoVisible }) {
 // grandes para que se divise bien). Los 3 tipos se pueden mostrar u
 // ocultar por separado con las pastillas de arriba; con las 3 activas se
 // ven todos juntos en el mismo calendario.
-export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual, onVolver }) {
+export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, reprogramaciones = [], rolActual, nombreActual, onVolver }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mesIdx, setMesIdx] = useState(hoy.getMonth());
@@ -565,7 +570,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setCli
     setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles });
+  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles, reprogramaciones });
 
   const primerDiaMes = new Date(anio, mesIdx, 1);
   const diasEnMes = new Date(anio, mesIdx + 1, 0).getDate();
@@ -656,7 +661,7 @@ export function CalendarioAlumnos({ citasAgenda, setCitas, clientes = [], setCli
 // para moverse de día. Mismos datos y misma lógica que CalendarioAlumnos
 // (useConfigItinerario/useItemsPorDia/construirItinerarioDia
 // compartidos), así que un fix ahí también aplica acá.
-export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, rolActual, nombreActual }) {
+export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, registroPaseos = {}, reprogramaciones = [], rolActual, nombreActual }) {
   const [diaSel, setDiaSel] = useState(() => fechaKey(new Date()));
   const [citaSel, setCitaSel] = useState(null);
   const [tiposVisibles, setTiposVisibles] = useState({ evaluacion: true, clase: true, paseo: true });
@@ -667,7 +672,7 @@ export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, 
     setTiposVisibles((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles });
+  const itemsDelDia = useItemsPorDia({ citasAgenda, clientes, registroPaseos, rolActual, nombreActual, tiposVisibles, reprogramaciones });
   const grupos = construirItinerarioDia(itemsDelDia(diaSel), { horaInicioPaseos, duracionPaseoMin, trayectoMin });
   const fechaLabel = new Date(diaSel + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
 

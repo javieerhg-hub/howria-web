@@ -1,3 +1,5 @@
+import { fechaKey, estaProgramadoEnFecha } from "./programacion.js";
+
 // Conteo y monto de paseos dentro de un rango de fechas — la base de lo
 // que se le paga a cada paseador (ver src/tabs/PagoTrabajadores.jsx).
 // Vive acá y no dentro del componente para poder probarlo: es lógica de
@@ -6,29 +8,19 @@
 // que reparto.js y calculosBoletas.js — sin dependencias de React.
 import { montoPrincipal, montoCompartido } from "./reparto.js";
 
-// Igual que fechaKey de HowriaAdmin.jsx, redefinido acá para no acoplar
-// este archivo al bundle del panel (mismo motivo que en CalendarioMes.jsx).
-function fechaKey(fecha) {
-  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
-}
-
 // Cuántos paseos DEBERÍA haber tenido el cliente en el rango, según sus
 // días habituales. Un día cancelado no cuenta: no es un incumplimiento del
 // paseador, así que tampoco debe empeorar su % de cumplimiento.
 // `hasta` es exclusivo.
-export function programadosEnRango(cliente, desde, hasta, registroPaseos = {}) {
-  // Un cliente de solo adiestramiento no tiene paseos programados, aunque
-  // le hayan quedado días habituales guardados. Mismo criterio que
-  // estaProgramadoEnFecha: sin tipoServicio guardado se trata como paseos,
-  // por compatibilidad con los clientes anteriores a ese campo. Sin esto
-  // inflaba los "programados" y hundía el % de cumplimiento del paseador.
-  if (cliente.tipoServicio?.length && !cliente.tipoServicio.includes("paseos")) return 0;
+export function programadosEnRango(cliente, desde, hasta, registroPaseos = {}, reprogramaciones = []) {
+  // La regla de "tiene paseo este día" vive en lib/programacion.js y la
+  // usa toda la app. Antes esta función tenía su propia copia y se quedó
+  // atrás dos veces: no sabía de fechas sueltas ni del estado del cliente.
   let n = 0;
   const cur = new Date(desde);
   while (cur < hasta) {
-    const dow = (cur.getDay() + 6) % 7;
     const cancelado = registroPaseos[`${cliente.id}_${fechaKey(cur)}`]?.cancelado;
-    if (cliente.diasHabituales?.includes(dow) && !cancelado) n++;
+    if (estaProgramadoEnFecha(cliente, cur, reprogramaciones) && !cancelado) n++;
     cur.setDate(cur.getDate() + 1);
   }
   return n;
