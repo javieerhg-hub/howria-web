@@ -55,6 +55,10 @@ export function FinanzasPersonales({
   const enTerreno = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const [offset, setOffset] = useState(0);
+  // Personas cuyo bloque se esta mirando "como si el mes ya estuviera
+  // completo". Es un que-pasa-si, no el estado real, asi que se marca en
+  // pantalla y no toca el titular de arriba.
+  const [proyectados, setProyectados] = useState([]);
   const hoy = new Date();
   const ref = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
   const mes = ref.getMonth(), anio = ref.getFullYear();
@@ -62,6 +66,10 @@ export function FinanzasPersonales({
 
   function vincular(nombre) {
     setUsuarios((prev) => prev.map((u) => (u.id === yo.id ? { ...u, paseadorVinculado: nombre || null } : u)));
+  }
+
+  function alternarProyeccion(id) {
+    setProyectados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   // Marcar si el margen de una persona es de Howria. Hay que decirlo por
@@ -172,10 +180,13 @@ export function FinanzasPersonales({
             const tarifa = Number(c.tarifaPaseador) || 0;
             const hechos = realizadosEnRango(registroPaseos, c.id, desde, hasta);
             const quedan = programadosEnRango(c, desde, hasta, registroPaseos, reprogramaciones);
+            // Si ya hizo mas de los programados (un paseo extra), el mes
+            // "completo" no puede ser menos de lo que ya lleva hecho.
+            const paseosSiCompleta = Math.max(hechos, quedan);
             return {
-              cliente: c, tutorPaga, pagado, tarifa, hechos,
+              cliente: c, tutorPaga, pagado, tarifa, hechos, paseosSiCompleta,
               leToca: hechos * tarifa,
-              leTocaSiCompleta: Math.max(hechos, quedan) * tarifa,
+              leTocaSiCompleta: paseosSiCompleta * tarifa,
               boletas: suyas.length,
             };
           })
@@ -190,6 +201,7 @@ export function FinanzasPersonales({
           tutores,
           leToca,
           queda: tutores - leToca,
+          leTocaSiCompleta: filas.reduce((a, f) => a + f.leTocaSiCompleta, 0),
           quedaSiCompleta: tutores - filas.reduce((a, f) => a + f.leTocaSiCompleta, 0),
           // Sin tarifa cargada el costo sale $0 y el margen se ve enorme
           // sin serlo — hay que decirlo, no callarlo.
@@ -393,24 +405,50 @@ export function FinanzasPersonales({
           <p style={hint}>Nadie más tiene clientes de paseo con movimiento en este ciclo.</p>
         ) : (
           <div style={{ display: "grid", gap: 16 }}>
-            {otros.mios.map((g) => (
-              <div key={g.persona.id}>
+            {otros.mios.map((g) => {
+              // Proyección: los mismos números pero contando TODOS los paseos
+              // del mes, no solo los ya marcados. Sirve para saber cuánto se le
+              // va a pagar al cierre y cuánto margen queda de verdad — a
+              // principio de mes el costo casi no ha corrido y el margen se ve
+              // mucho más alto de lo que va a terminar siendo.
+              const proy = proyectados.includes(g.persona.id);
+              const leTocaVisto = proy ? g.leTocaSiCompleta : g.leToca;
+              const quedaVisto = proy ? g.quedaSiCompleta : g.queda;
+              const nombreCorto = g.persona.nombre.split(" ")[0];
+              return (
+              <div key={g.persona.id} style={proy ? { background: "#FDF6E8", border: "1px dashed " + GOLD, borderRadius: 10, padding: 12 } : undefined}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY }}>{g.persona.nombre}</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY }}>
+                      {g.persona.nombre}
+                      {proy && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "#8A6A1E", textTransform: "uppercase", letterSpacing: 0.5 }}>mes completo</span>}
+                    </p>
                     <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
-                      Tutores pagan {fmtCLP(g.tutores)} · a {g.persona.nombre.split(" ")[0]} {fmtCLP(g.leToca)}
-                      {g.quedaSiCompleta !== g.queda && ` · si completa el mes te quedarían ${fmtCLP(g.quedaSiCompleta)}`}
+                      Tutores pagan {fmtCLP(g.tutores)} · a {nombreCorto} {fmtCLP(leTocaVisto)}
+                      {proy ? " si hace todos los paseos del mes" : " por lo hecho hasta hoy"}
                     </p>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
-                    <p style={{ margin: 0, fontSize: 17, fontWeight: 700, fontFamily: "Georgia, serif", color: g.queda >= 0 ? VERDE : RUST }}>{fmtCLP(g.queda)}</p>
+                    <p style={{ margin: 0, fontSize: 17, fontWeight: 700, fontFamily: "Georgia, serif", color: quedaVisto >= 0 ? VERDE : RUST }}>{fmtCLP(quedaVisto)}</p>
                     <button onClick={() => marcarMargen(g.persona.id, false)} title="Sacar: esta persona trabaja aparte"
                       style={{ border: "none", background: "none", color: "#A99C78", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0 }}>
                       trabaja aparte
                     </button>
                   </div>
                 </div>
+
+                <button onClick={() => alternarProyeccion(g.persona.id)}
+                  style={{ border: "1px solid " + (proy ? NAVY : GOLD), background: proy ? NAVY : "none", color: proy ? "#FFFFFF" : GOLD, borderRadius: 20, padding: "6px 14px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>
+                  {proy ? "← Ver cómo va hoy" : "Ver con todos los paseos del mes marcados"}
+                </button>
+
+                {proy && (
+                  <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A6A1E" }}>
+                    Así cerraría el mes si {nombreCorto} hace todos sus paseos programados:
+                    le pagarías <b>{fmtCLP(g.leTocaSiCompleta)}</b> y te quedarían <b>{fmtCLP(g.quedaSiCompleta)}</b>.
+                    Es una proyección — el titular de arriba sigue mostrando lo real de hoy.
+                  </p>
+                )}
 
                 <div style={{ display: "grid", gap: 4 }}>
                   {g.filas.map((f) => (
@@ -420,13 +458,13 @@ export function FinanzasPersonales({
                           {f.cliente.perro ? `🐾 ${f.cliente.perro} · ` : ""}{String(f.cliente.nombre).trim()}
                         </p>
                         <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
-                          {f.boletas === 0 ? "sin boleta este ciclo" : `tutor ${fmtCLP(f.tutorPaga)}`}
-                          {" · "}{f.hechos} paseo(s) hecho(s) × {fmtCLP(f.tarifa)} = {fmtCLP(f.leToca)}
-                          {f.tarifa === 0 && f.hechos > 0 && " · ⚠ sin tarifa cargada"}
+                          {f.boletas === 0 ? "sin boleta este ciclo" : "tutor " + fmtCLP(f.tutorPaga)}
+                          {" · "}{proy ? f.paseosSiCompleta : f.hechos} paseo(s) {proy ? "del mes" : "hecho(s)"} × {fmtCLP(f.tarifa)} = {fmtCLP(proy ? f.leTocaSiCompleta : f.leToca)}
+                          {f.tarifa === 0 && f.paseosSiCompleta > 0 && " · ⚠ sin tarifa cargada"}
                         </p>
                       </div>
-                      <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, fontFamily: "Georgia, serif", color: f.tutorPaga - f.leToca >= 0 ? VERDE : RUST }}>
-                        {fmtCLP(f.tutorPaga - f.leToca)}
+                      <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, fontFamily: "Georgia, serif", color: f.tutorPaga - (proy ? f.leTocaSiCompleta : f.leToca) >= 0 ? VERDE : RUST }}>
+                        {fmtCLP(f.tutorPaga - (proy ? f.leTocaSiCompleta : f.leToca))}
                       </p>
                     </div>
                   ))}
@@ -441,19 +479,28 @@ export function FinanzasPersonales({
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
 
-            {otros.mios.length > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#EAE0C6", textTransform: "uppercase", letterSpacing: 0.5 }}>Total que me dejan</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B9C4D2" }}>
-                    {otros.mios.length} paseador(es) · de eso ya entró {fmtCLP(otros.quedaCobrado)}
-                  </p>
+            {otros.mios.length > 0 && (() => {
+              const hayProyeccion = otros.mios.some((g) => proyectados.includes(g.persona.id));
+              const total = otros.mios.reduce((a, g) => a + (proyectados.includes(g.persona.id) ? g.quedaSiCompleta : g.queda), 0);
+              return (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#EAE0C6", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      {hayProyeccion ? "Total que me dejarían con el mes completo" : "Total que me dejan"}
+                    </p>
+                    <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B9C4D2" }}>
+                      {hayProyeccion
+                        ? `Proyección — hoy van ${fmtCLP(otros.queda)}`
+                        : `${otros.mios.length} paseador(es) · de eso ya entró ${fmtCLP(otros.quedaCobrado)}`}
+                    </p>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif", color: hayProyeccion ? "#EAE0C6" : "#FFFFFF" }}>{fmtCLP(total)}</p>
                 </div>
-                <p style={{ margin: 0, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(otros.queda)}</p>
-              </div>
-            )}
+              );
+            })()}
 
             {otros.aparte.length > 0 && (
               <div>
