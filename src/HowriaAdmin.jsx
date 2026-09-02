@@ -3310,6 +3310,12 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
     diasValidos.forEach((dNum) => {
       const r = registroPaseos[`${c.id}_${prefijoMesActual}-${String(dNum).padStart(2, "0")}`];
       if (!r?.realizado) return;
+      // Un paseo que hizo OTRA persona no es mío, aunque el cliente sea
+      // mío ahora: pasa cuando a alguien le reasignan un cliente a mitad
+      // de mes. Sin esto el estimado de "Tu pago" incluía los paseos del
+      // paseador anterior, y no cuadraba con lo que después se le paga —
+      // el cálculo del pago real (lib/pagos.js) sí filtra por esto.
+      if (r.paseadorNombre && r.paseadorNombre !== user.nombre) return;
       realizados++;
       // Si el coordinador compartió este paseo con otro paseador (ver
       // Coordinación, "Compartir con..."), a mí me queda el resto del
