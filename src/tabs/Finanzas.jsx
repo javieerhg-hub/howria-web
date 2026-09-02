@@ -5,14 +5,15 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Dog } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, MESES, DIAS_SEMANA_LARGO, TIPOS_SERVICIO, CATEGORIAS_COSTO, grupoDeCategoria,
-  MAX_PERROS_POR_TURNO, contarPerros,
+  MAX_PERROS_POR_TURNO, contarPerros, boletaToDb, dbToBoleta,
   tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario, FilaLista, BotonEliminar,
-  fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
+  fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana, showToast,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable, periodoDeBoleta } from "../lib/calculosBoletas.js";
 import { diasDelMesProgramados } from "../lib/programacion.js";
 import { resumenPaseadorEnRango } from "../lib/pagos.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
+import { supabase } from "../lib/supabaseClient.js";
 
 // Ventana con el respaldo de una cifra. Cada tarjeta de Finanzas puede
 // abrir una: el número solo dice cuánto, y para confiar en él hay que
@@ -90,7 +91,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, citasAgenda = [], nombreUsuario, user, onVerPagos, onVerBoletas }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, citasAgenda = [], onRegistrarBoleta, nombreUsuario, user, onVerPagos, onVerBoletas }) {
   // Arranca en el mes: con facturación mensual por adelantado, el mes es
   // la unidad real del negocio.
   const [periodo, setPeriodo] = useState("mes");
@@ -113,6 +114,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   const [fechaCosto, setFechaCosto] = useState(() => fechaKey(new Date()));
   const [categoriaCosto, setCategoriaCosto] = useState("insumos");
   const [detalle, setDetalle] = useState(null);
+  // Cliente al que se le va a emitir una boleta express desde la lista
+  // de "falta por cobrar".
+  const [expresando, setExpresando] = useState(null);
+  const [montoExpres, setMontoExpres] = useState("");
+  const [emitiendoExpres, setEmitiendoExpres] = useState(false);
 
   function agregarCosto() {
     if (!descCosto.trim() || !Number(montoCosto)) return;
@@ -677,6 +683,78 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     return null;
   };
 
+
+  // Boleta express: cobrarle a un cliente un monto a mano, sin pasar por
+  // el formulario de días y planes. Es para los casos especiales — un
+  // acuerdo distinto ese mes, un cobro que no sale del cálculo por días.
+  //
+  // La boleta que se crea es una boleta normal, no una de segunda clase:
+  // lleva los días programados del ciclo y un valor por paseo derivado del
+  // monto, para que el documento que recibe el cliente cuadre solo. Si el
+  // monto no divide exacto, el resto va como descuento (unos pesos).
+  async function emitirExpres() {
+    const c = expresando;
+    const monto = Number(montoExpres);
+    if (!c || !monto || monto <= 0 || emitiendoExpres) return;
+    setEmitiendoExpres(true);
+    try {
+      const mes = actualDesde.getMonth(), anio = actualDesde.getFullYear();
+      const dias = diasDelMesProgramados(c, mes, anio, reprogramaciones);
+      // Con días, el documento muestra "N paseos x $X". Sin días (un
+      // cobro suelto), muestra solo el total.
+      const valorPaseo = dias.length ? Math.ceil(monto / dias.length) : 0;
+      const subtotal = valorPaseo * dias.length;
+      const { data, error } = await supabase.from("boletas").insert(boletaToDb({
+        clienteId: c._dbId,
+        cliente: c.nombre.trim(),
+        perro: c.perro,
+        valorPaseo,
+        cantidad: dias.length,
+        dias,
+        mes: MESES[mes],
+        anio,
+        planNombre: dias.length ? "Cobro acordado" : "Cobro acordado (sin detalle de días)",
+        paseosCancelados: 0,
+        paseosMesAnterior: 0,
+        recargoPct: 0,
+        dogsitter: null,
+        paseoLargo: null,
+        mostrarIva: false,
+        mensajePersonalizado: null,
+        descuento: Math.max(0, subtotal - monto),
+        subtotal,
+        neto: monto,
+        iva: 0,
+        diasConRecargo: 0,
+        diasNormales: dias.length,
+        total: monto,
+        fecha: new Date().toLocaleDateString("es-CL"),
+        fechaISO: new Date().toISOString(),
+        estado: "pendiente_pago",
+      })).select().single();
+      if (error || !data) {
+        showToast(`No se pudo emitir: ${error?.message || "error desconocido"}`);
+        return;
+      }
+      onRegistrarBoleta?.({ ...dbToBoleta(data), id: Date.now(), _dbId: data.id });
+      showToast(`Boleta N°${String(data.numero).padStart(3, "0")} emitida a ${c.nombre.trim()} por ${fmtCLP(monto)}.`, "exito");
+      setExpresando(null);
+      setMontoExpres("");
+    } catch (e) {
+      showToast("No se pudo conectar — revisa tu conexión.");
+    } finally {
+      setEmitiendoExpres(false);
+    }
+  }
+
+  function abrirExpres(c) {
+    const dias = diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones);
+    // Se propone lo que saldría por el cálculo normal; el punto de la
+    // express es poder cambiarlo.
+    setMontoExpres(String(dias.length * Number(c.valorPaseoRef || 0) || ""));
+    setExpresando(c);
+  }
+
   const porCliente = useMemo(() => {
     const mapa = {};
     filtradas.forEach((b) => {
@@ -1205,6 +1283,47 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </>
       )}
 
+
+      {expresando && (
+        <div onClick={() => setExpresando(null)} className="howria-modal-fondo"
+          style={{ position: "fixed", inset: 0, background: "rgba(18,42,64,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 330, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Cobrar a este cliente" className="howria-modal-caja"
+            style={{ background: "#FFFFFF", borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+            <h3 style={{ margin: "0 0 2px", fontFamily: "'Fraunces', Georgia, serif", fontSize: 18, color: NAVY }}>
+              Cobrarle a {expresando.nombre.trim()}
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "#8A7E5C" }}>
+              {expresando.perro ? `🐾 ${expresando.perro} · ` : ""}{tituloPeriodo}
+            </p>
+
+            <div style={{ background: CREAM_SOFT, borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 12.5, color: "#5C5442" }}>
+              {(() => {
+                const dias = diasDelMesProgramados(expresando, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones);
+                const tarifa = Number(expresando.valorPaseoRef || 0);
+                return dias.length
+                  ? <>Tiene <b>{dias.length} paseo(s)</b> programados este ciclo. Por su tarifa de {fmtCLP(tarifa)} saldría <b>{fmtCLP(dias.length * tarifa)}</b>.</>
+                  : <>No tiene paseos programados este ciclo, así que la boleta va sin detalle de días.</>;
+              })()}
+            </div>
+
+            <label style={label} htmlFor="expres-monto">Total a cobrar</label>
+            <input id="expres-monto" type="number" min="0" value={montoExpres} onChange={(e) => setMontoExpres(e.target.value)}
+              style={{ ...input, marginBottom: 6 }} />
+            <p style={{ ...hint, marginTop: 0, marginBottom: 16 }}>
+              Queda emitida y pendiente de pago, igual que cualquier boleta. Para enviarla al cliente, ábrela desde Facturas.
+            </p>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setExpresando(null)} style={{ ...botonSecundario, width: "auto", margin: 0, padding: "10px 16px" }}>Cancelar</button>
+              <button onClick={emitirExpres} disabled={!Number(montoExpres) || emitiendoExpres}
+                style={{ ...botonPrincipal, marginTop: 0, flex: 1, opacity: !Number(montoExpres) || emitiendoExpres ? 0.5 : 1 }}>
+                {emitiendoExpres ? "Emitiendo…" : `Emitir por ${fmtCLP(Number(montoExpres) || 0)}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ModalDetalleFinanzas detalle={detalle} onCerrar={() => setDetalle(null)} />
 
       <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 2}, 1fr)`, gap: 14, marginBottom: 26 }}>
@@ -1362,9 +1481,14 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                     Paseos ({faltanPorCobrar.paseos.length})
                   </p>
                   {faltanPorCobrar.paseos.map((c) => (
-                    <FilaLista key={c.id} Icono={Dog} titulo={c.nombre.trim()} subtitulo={c.perro}
-                      valor={`${diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones).length} paseo(s)`}
-                      valorColor={RUST} />
+                    <div key={c.id} role="button" tabIndex={0} title="Cobrarle un monto a mano"
+                      onClick={() => abrirExpres(c)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrirExpres(c); } }}
+                      style={{ cursor: "pointer" }}>
+                      <FilaLista Icono={Dog} titulo={c.nombre.trim()} subtitulo={c.perro}
+                        valor={`${diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones).length} paseo(s) →`}
+                        valorColor={RUST} />
+                    </div>
                   ))}
                 </div>
               )}
