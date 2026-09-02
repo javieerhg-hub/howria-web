@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
-  Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
+  Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Wallet, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
   GraduationCap, KeyRound, MessageCircle, Send, Package, Search, ChevronDown,
 } from "lucide-react";
@@ -35,8 +35,7 @@ const MapaRutas = React.lazy(() => import("./tabs/MapaRutas.jsx").then((m) => ({
 const EquipoTrabajo = React.lazy(() => import("./tabs/EquipoTrabajo.jsx").then((m) => ({ default: m.EquipoTrabajo })));
 const Agenda = React.lazy(() => import("./tabs/Agenda.jsx").then((m) => ({ default: m.Agenda })));
 const Alumnos = React.lazy(() => import("./tabs/Alumnos.jsx").then((m) => ({ default: m.Alumnos })));
-const CalendarioAlumnos = React.lazy(() => import("./tabs/CalendarioItinerario.jsx").then((m) => ({ default: m.CalendarioAlumnos })));
-const Itinerario = React.lazy(() => import("./tabs/CalendarioItinerario.jsx").then((m) => ({ default: m.Itinerario })));
+const PestanaCalendario = React.lazy(() => import("./tabs/CalendarioItinerario.jsx").then((m) => ({ default: m.PestanaCalendario })));
 const Mail = React.lazy(() => import("./tabs/Mail.jsx").then((m) => ({ default: m.Mail })));
 const Prospectos = React.lazy(() => import("./tabs/Prospectos.jsx").then((m) => ({ default: m.Prospectos })));
 const PanelAdmin = React.lazy(() => import("./tabs/PanelAdmin.jsx").then((m) => ({ default: m.PanelAdmin })));
@@ -1485,8 +1484,7 @@ export const TODOS_LOS_TABS = [
   { id: "agenda", label: "Agenda", grupo: "Adiestramiento", desc: "Evaluaciones y clases: confirmar, mover, cancelar y la disponibilidad del adiestrador.", busca: "cita evaluacion clase confirmar cancelar horario disponibilidad" },
   { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento", desc: "Los clientes que toman clases: packs, avance y qué les toca ahora.", busca: "clases pack avance entrenamiento" },
   { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Adiestramiento", desc: "Cuánto se le debe al adiestrador por cada evaluación y clase.", busca: "pagar sueldo adiestrador entrenador liquidacion plata" },
-  { id: "calendario", label: "Calendario", grupo: "Agenda general", desc: "El mes completo con paseos, evaluaciones y clases juntos.", busca: "mes agenda vista" },
-  { id: "itinerario", label: "Itinerario", grupo: "Agenda general", desc: "El día hora por hora, con bloques que se arrastran para cambiar el horario.", busca: "dia horario hora grilla bloques arrastrar" },
+  { id: "calendario", label: "Calendario", grupo: "Agenda general", desc: "Paseos, evaluaciones y clases: el mes completo, o el día hora por hora.", busca: "mes dia itinerario horario hora agenda grilla bloques arrastrar vista" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y dinero", desc: "La ficha madre de cada cliente — de acá salen boletas, finanzas y perfiles.", busca: "ficha perro tutor tarifa direccion telefono dueño" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y dinero", desc: "Emitir una boleta nueva, de paseos o de adiestramiento.", busca: "cobrar emitir crear nueva cuenta" },
   { id: "facturas", label: "Facturas", grupo: "Clientes y dinero", desc: "Todas las boletas ya emitidas y en qué estado está cada una.", busca: "cobrar emitidas pagada pendiente deuda estado" },
@@ -1553,7 +1551,6 @@ const ICONOS_TAB = {
   mapa: MapIcon,
   agenda: Calendar,
   calendario: CalendarDays,
-  itinerario: Route,
   alumnos: GraduationCap,
   mail: MailIcon,
   clientes: Dog,
@@ -6037,8 +6034,7 @@ export default function HowriaAdmin() {
         {tab === "notificaciones" && tabsPermitidosRol.includes("notificaciones") && <EnviarNotificaciones usuarios={usuarios} user={user} />}
         {tab === "inventario" && tabsPermitidosRol.includes("inventario") && <Inventario usuarios={usuarios} entregas={entregasInventario} registrarEntrega={registrarEntregaInventario} eliminarEntrega={eliminarEntregaInventario} cargando={cargandoInventario} user={user} />}
         {tab === "agenda" && tabsPermitidosRol.includes("agenda") && <Agenda clientes={clientes} usuarios={usuarios} citas={citasAgenda} setCitas={setCitasAgenda} cargando={cargandoCitasAgenda} disponibilidadFecha={disponibilidadFecha} toggleBloqueDisponibilidad={toggleBloqueDisponibilidad} aplicarPatronSemanal={aplicarPatronSemanal} tarifas={tarifas} actualizarTarifas={actualizarTarifas} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <CalendarioAlumnos citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} rolActual={user.rol} nombreActual={user.nombre} />}
-        {tab === "itinerario" && tabsPermitidosRol.includes("itinerario") && <Itinerario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} rolActual={user.rol} nombreActual={user.nombre} />}
+        {tab === "calendario" && tabsPermitidosRol.includes("calendario") && <PestanaCalendario citasAgenda={citasAgenda} setCitas={setCitasAgenda} clientes={clientes} setClientes={setClientes} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} packsClases={packsClases} setPacksClases={setPacksClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}

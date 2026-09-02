@@ -1,14 +1,17 @@
-// Pestañas Calendario (alumnos) e Itinerario — dos vistas de calendario
-// que comparten los mismos helpers de armado de items del día, por eso
-// viven en un solo archivo en vez de dos (partirlas obligaría a mover casi
-// todo su código interno al módulo compartido de todas formas). Ver
+// Pestaña "Calendario" — dos zooms del mismo dato: el mes completo
+// (CalendarioAlumnos) y el día hora por hora (Itinerario), con
+// PestanaCalendario eligiendo cuál se ve. Hasta el commit de la fase 2
+// eran DOS pestañas del menú, lo que no tenía sentido: comparten el
+// archivo, los helpers y hasta las props. CalendarioAlumnos además se
+// sigue usando por su cuenta como sub-vista de Alumnos (con onVolver).
+// Ver
 // src/HowriaAdmin.jsx (React.lazy) por la lista completa de pestañas y
 // src/tabs/_compartido.jsx para lo compartido real (usado por más
 // pestañas además de estas dos).
 import { useState, useRef, useMemo, useEffect } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import {
-  NAVY, CREAM_SOFT, GOLD, INK, tarjeta, sectionTitle, hint, input, botonSecundario,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, tarjeta, sectionTitle, hint, input, botonSecundario,
   fechaKey, showToast,
 } from "../HowriaAdmin.jsx";
 import { estaProgramadoEnFecha } from "../lib/programacion.js";
@@ -702,6 +705,62 @@ export function Itinerario({ citasAgenda, setCitas, clientes = [], setClientes, 
           onVerDetalle={(it) => setCitaSel(it)} />
       </div>
       {citaSel && <ModalDetalleCita cita={citaSel} onCerrar={() => setCitaSel(null)} onEliminar={setCitas ? (dbId) => eliminarCita(setCitas, dbId) : undefined} />}
+    </div>
+  );
+}
+
+// La pestaña "Calendario" del menú: un selector Mes / Día y abajo la
+// vista elegida. Antes esto eran dos entradas separadas del menú
+// ("Calendario" e "Itinerario") para lo que en realidad es el mismo dato
+// con distinto zoom — la de día nació como "el modal que se abre al
+// clicar un día", puesta directo como pestaña.
+//
+// El selector usa el mismo patrón de Clientes (Paseos/Adiestramiento) y
+// de Boletas, que es el que ya está probado en la app.
+//
+// La elección se recuerda en localStorage porque cada persona usa una:
+// coordinación vive en el día, y el mes se mira para planificar. Que te
+// devuelva a la vista equivocada en cada entrada sería molesto.
+const CLAVE_VISTA_CALENDARIO = "howria_calendario_vista";
+
+export function PestanaCalendario(props) {
+  const [vista, setVista] = useState(() => {
+    try {
+      const guardada = localStorage.getItem(CLAVE_VISTA_CALENDARIO);
+      return guardada === "dia" || guardada === "mes" ? guardada : "mes";
+    } catch {
+      return "mes";
+    }
+  });
+
+  function elegir(v) {
+    setVista(v);
+    try { localStorage.setItem(CLAVE_VISTA_CALENDARIO, v); } catch {}
+  }
+
+  return (
+    <div>
+      <div role="group" aria-label="Vista del calendario" style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {[
+          { id: "mes", nombre: "Mes" },
+          { id: "dia", nombre: "Día" },
+        ].map((v) => {
+          const activo = vista === v.id;
+          return (
+            <button key={v.id} type="button" onClick={() => elegir(v.id)} aria-pressed={activo}
+              style={{
+                flex: 1, padding: "11px 14px", borderRadius: 10, cursor: "pointer", fontSize: 14, minHeight: 46,
+                border: "none", fontWeight: activo ? 700 : 500,
+                background: activo ? NAVY : CREAM_SOFT, color: activo ? CREAM : INK,
+              }}>
+              {v.nombre}
+            </button>
+          );
+        })}
+      </div>
+      {/* Sin onVolver a propósito: acá es la pestaña completa, no la
+          sub-vista de Alumnos. */}
+      {vista === "mes" ? <CalendarioAlumnos {...props} /> : <Itinerario {...props} />}
     </div>
   );
 }
