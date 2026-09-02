@@ -7,7 +7,7 @@ import { CalendarioMes } from "./lib/CalendarioMes.jsx";
 //  - howria.cl/agendaadiestrador (sin ?c=) — link genérico, para cualquier
 //    persona que todavía no es cliente; pide sus datos de contacto y eso
 //    crea un prospecto en vez de reservar a nombre de un cliente.
-// No usa Supabase Auth — todo pasa por /api/cliente-agenda, que valida y
+// No usa Supabase Auth — todo pasa por /api/citas?op=agenda, que valida y
 // guarda del lado del servidor.
 
 const NAVY = "#122A40";
@@ -72,7 +72,7 @@ export default function AgendarPublico() {
   const [contactoDireccion, setContactoDireccion] = useState("");
 
   useEffect(() => {
-    const url = clienteId ? `/api/cliente-agenda?clienteId=${encodeURIComponent(clienteId)}` : "/api/cliente-agenda";
+    const url = clienteId ? `/api/citas?op=agenda&clienteId=${encodeURIComponent(clienteId)}` : "/api/citas?op=agenda";
     fetch(url)
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
       .then(({ ok, data }) => {
@@ -101,7 +101,7 @@ export default function AgendarPublico() {
     setCargandoSlots(true);
     const params = new URLSearchParams({ adiestrador, fecha });
     if (clienteId) params.set("clienteId", clienteId);
-    fetch(`/api/cliente-agenda?${params.toString()}`)
+    fetch(`/api/citas?op=agenda&${params.toString()}`)
       .then((r) => r.json())
       .then((data) => { if (activo) setSlots(data.slots || []); })
       .catch(() => { if (activo) { setSlots([]); setErrorSlots(true); } })
@@ -119,7 +119,7 @@ export default function AgendarPublico() {
     setCargandoMapa(true);
     const params = new URLSearchParams({ adiestrador });
     if (clienteId) params.set("clienteId", clienteId);
-    fetch(`/api/cliente-agenda?${params.toString()}`)
+    fetch(`/api/citas?op=agenda&${params.toString()}`)
       .then((r) => r.json())
       .then((data) => { if (activo) setMapaDisponibilidad(data.disponibilidadFechas || {}); })
       .catch(() => { if (activo) { setMapaDisponibilidad({}); setErrorMapa(true); } })
@@ -148,7 +148,7 @@ export default function AgendarPublico() {
       const body = clienteId
         ? { clienteId, direccion: contactoDireccion.trim(), adiestrador, tipo, fechaISO: horaSel }
         : { nombre: contactoNombre.trim(), email: contactoEmail.trim(), telefono: contactoTelefono.trim(), perro: contactoPerro.trim(), direccion: contactoDireccion.trim(), adiestrador, tipo, fechaISO: horaSel };
-      const resp = await fetch("/api/cliente-agenda", {
+      const resp = await fetch("/api/citas?op=agenda", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

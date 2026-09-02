@@ -16,7 +16,7 @@
 // POST { clienteId, adiestrador, tipo, fechaISO }                              -> cita a nombre de un cliente existente
 // POST { nombre, email, telefono, perro, adiestrador, tipo, fechaISO }         -> crea un prospecto + la cita
 import { createClient } from "@supabase/supabase-js";
-import { enviarNotificacionPush } from "./_lib/enviarPush.js";
+import { enviarNotificacionPush } from "./enviarPush.js";
 
 const DURACION_MIN = 60;
 const DIAS_ADELANTE_MAX = 45;
@@ -355,7 +355,7 @@ export default async function handler(req, res) {
     // Deja lo que la persona llenó en el formulario público como un
     // correo "entrante" más, para que se vea en la pestaña Mail junto al
     // correo "saliente" que ya se registra ahí cuando el equipo confirma
-    // la cita (confirmar-cita.js) — mismo remitente/destinatario en
+    // la cita (citas-confirmar.js) — mismo remitente/destinatario en
     // ambos, así quedan en el mismo hilo y se puede ver de un vistazo si
     // la solicitud llegó y si ya se le mandó la confirmación. No es un
     // correo real (no pasa por Resend), solo un registro para Mail — si

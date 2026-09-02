@@ -16,7 +16,7 @@ import { TIPOS_CITA, hayChoqueHorario, NOMBRES_ESTADO_CITA, ModalDetalleCita, el
 const BLOQUES_DIA = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
 // Lo que el cliente dejó al pedir la cita desde la agenda pública — copia
-// redundante guardada directo en citas_agenda (ver api/cliente-agenda.js),
+// redundante guardada directo en citas_agenda (ver api/_lib/citas-agenda.js),
 // así el adiestrador la ve acá sin necesitar acceso a la tabla prospectos
 // (coordinador/admin únicamente). Citas viejas, creadas antes de esta
 // columna, o agendadas a mano por staff, simplemente no tienen nada que
@@ -97,7 +97,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
     setFechaHora(""); setNotasNuevas(""); setDuracionCita(60); setPrecioCita(""); setMostrarFormAgendar(false);
   }
 
-  // Cancelar y rechazar pasan por el servidor (api/cancelar-cita.js) y no
+  // Cancelar y rechazar pasan por el servidor (api/_lib/citas-cancelar.js) y no
   // por un cambio de estado local, porque además de mover el estado le
   // avisan al cliente por correo. Mismo esquema que confirmar(): un 502
   // significa que la cita SÍ quedó cancelada y solo falló el correo, así
@@ -107,7 +107,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
     setCancelandoId(cita.id);
     try {
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/cancelar-cita", {
+      const resp = await fetch("/api/citas?op=cancelar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ citaId: cita._dbId, accion }),
@@ -130,7 +130,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
   }
 
   // Volver a agendar una cita cancelada o rechazada. Es el mismo endpoint
-  // que mover una confirmada de hora (api/mover-cita.js): allá se da
+  // que mover una confirmada de hora (api/_lib/citas-mover.js): allá se da
   // cuenta de que venía cancelada, la devuelve a "agendada" y le manda al
   // cliente un correo distinto — no le movimos una hora que tenía, le
   // devolvimos una que le habíamos quitado.
@@ -148,7 +148,7 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
     const iso = new Date(fechaReprograma).toISOString();
     try {
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/mover-cita", {
+      const resp = await fetch("/api/citas?op=mover", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ citaId: cita._dbId, fechaNueva: iso }),
@@ -188,14 +188,14 @@ export function Agenda({ clientes, usuarios, citas, setCitas, cargando, disponib
       // estuvo inactiva (típico en el "app" instalada en el celular, que
       // no siempre alcanza a renovarlo sola en segundo plano).
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/confirmar-cita", {
+      const resp = await fetch("/api/citas?op=confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ citaId: cita._dbId }),
       });
       const resultado = await resp.json().catch(() => ({}));
       // 502 = la cita sí quedó confirmada en la base, pero el envío del
-      // correo falló (ver api/confirmar-cita.js) — igual hay que reflejar
+      // correo falló (ver api/_lib/citas-confirmar.js) — igual hay que reflejar
       // el cambio de estado en pantalla, no solo los errores de verdad.
       if (!resp.ok && resp.status !== 502) {
         showToast(resultado.error || "No se pudo confirmar la cita.");

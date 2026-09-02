@@ -1,7 +1,7 @@
 // Función serverless de Vercel: recibe el formulario "Registro de cuenta"
 // de la bienvenida del login. Quien lo llena no tiene sesión (todavía no
 // es del equipo), así que esto usa la service role key como único punto
-// de confianza, igual que api/cliente-agenda.js.
+// de confianza, igual que api/_lib/citas-agenda.js.
 //
 // La cuenta de acceso (Supabase Auth) se crea acá mismo, con la
 // contraseña que la persona eligió — así no hay que generarle una

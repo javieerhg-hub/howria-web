@@ -603,7 +603,7 @@ function citaToDb(c) {
     cliente_nombre: c.clienteNombre,
     perro: c.perro || null,
     // Copia redundante que deja la agenda pública al pedir la cita (ver
-    // api/cliente-agenda.js) — no se edita desde acá, solo se reescribe
+    // api/_lib/citas-agenda.js) — no se edita desde acá, solo se reescribe
     // igual en cada guardado normal, mismo criterio que cliente_nombre.
     email: c.email || null,
     telefono: c.telefono || null,
@@ -622,7 +622,7 @@ function citaToDb(c) {
     pagada: c.pagada || false,
     pagada_en: c.pagadaEn || null,
     // confirmada_en / email_enviado no se mandan desde acá — los escribe
-    // únicamente api/confirmar-cita.js, para que un guardado normal del
+    // únicamente api/_lib/citas-confirmar.js, para que un guardado normal del
     // cliente nunca los pise con estado local desactualizado.
     plan_id: c.planId || null,
     // Lo que se le paga AL ADIESTRADOR por esta cita — distinto de
@@ -1903,7 +1903,7 @@ export function dbToCorreo(row) {
 }
 
 // Los correos entrantes se escriben desde el servidor (Cloudflare Worker ->
-// api/correo-entrante.js) y los salientes desde api/confirmar-cita.js /
+// api/correo-entrante.js) y los salientes desde api/_lib/citas-confirmar.js /
 // api/responder-correo.js — el navegador nunca inserta filas acá, pero sí
 // necesita el setter para marcar "leído" y para reflejar al toque una
 // respuesta recién enviada, sin esperar el próximo refetch completo.

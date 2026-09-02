@@ -1,5 +1,5 @@
 // Función serverless de Vercel: cancela o rechaza una cita y le avisa al
-// cliente por correo. Gemela de api/confirmar-cita.js — mismo esquema de
+// cliente por correo. Gemela de api/_lib/citas-confirmar.js — mismo esquema de
 // verificación (service role key, relee la cita de la base, no confía en
 // nada que mande el navegador) y mismo diseño de correo.
 //
@@ -18,7 +18,7 @@ const RUST = "#A85C3B";
 const ZONA_CHILE = "America/Santiago";
 const NOMBRES_TIPO = { evaluacion: "Evaluación", clase: "Clase de adiestramiento" };
 
-// Mismo motivo que en confirmar-cita.js: este código corre en los
+// Mismo motivo que en citas-confirmar.js: este código corre en los
 // servidores de Vercel, que están en UTC. Sin timeZone explícito una cita
 // de la tarde-noche cambia de día en el correo.
 function fechaEnChile(iso) {

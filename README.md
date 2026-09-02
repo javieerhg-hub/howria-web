@@ -28,15 +28,33 @@ howria.cl (DNS en Cloudflare).
   React). Ruta resuelta en `vercel.json` (junto con `/admin` y `/agendar`).
 - `src/App.jsx` — portal viejo sin protección, **ya no se usa** (se puede
   borrar; `main.jsx` no lo importa).
-- `api/confirmar-cita.js` — función serverless de Vercel: el adiestrador o
-  staff la llama al confirmar una cita pendiente desde el panel; verifica
-  permisos con la service role key y envía el correo de confirmación (vía
-  Resend) con el diseño de marca Howria.
-- `api/cliente-agenda.js` — función serverless que sirve `AgendarPublico.jsx`
-  sin necesidad de sesión: devuelve los datos del cliente/adiestradores/
-  horarios libres, y crea la cita "pendiente" cuando el tutor la solicita.
-  Usa la service role key — el navegador del tutor nunca tiene acceso
-  directo a Supabase.
+- `api/citas.js` — **única** función serverless para todo lo que le pasa a
+  una cita de adiestramiento. No tiene lógica propia: lee `?op=` de la
+  query y llama al archivo de `api/_lib/` que corresponde. Antes esto eran
+  cuatro funciones sueltas y el plan Hobby permite máximo 12 por deploy;
+  juntarlas liberó 3 cupos. El despachador va por la query y no por un
+  campo del body porque `accion` ya estaba ocupado adentro con dos
+  significados distintos (`cancelar`/`rechazar` en una, `agendar` en otra).
+  Las cuatro operaciones:
+  - `?op=agenda` (`api/_lib/citas-agenda.js`) — sirve `AgendarPublico.jsx`
+    sin necesidad de sesión: devuelve los datos del cliente/adiestradores/
+    horarios libres, y crea la cita "pendiente" cuando el tutor la solicita.
+    Usa la service role key — el navegador del tutor nunca tiene acceso
+    directo a Supabase.
+  - `?op=confirmar` (`api/_lib/citas-confirmar.js`) — el adiestrador o staff
+    la llama al confirmar una cita pendiente desde el panel; verifica
+    permisos con la service role key y envía el correo de confirmación (vía
+    Resend) con el diseño de marca Howria. También atiende al cliente que
+    llega desde el correo con `?t=TOKEN`.
+  - `?op=cancelar` (`api/_lib/citas-cancelar.js`) — cancela o rechaza y le
+    avisa al tutor por correo (el texto cambia según el caso).
+  - `?op=mover` (`api/_lib/citas-mover.js`) — le pone hora a una cita, la
+    reprograma, o agenda una clase del plan.
+
+  Ojo al tocar esto: los correos que ya salieron enlazan a la **página**
+  `/confirmar-cita?t=TOKEN` (que `vercel.json` reescribe a `index.html`),
+  no a la ruta de API. Por eso renombrar las rutas de `api/` no rompe
+  ningún correo que esté en la bandeja de un cliente.
 - `database/*.sql` — todos los scripts SQL corridos hasta ahora en Supabase,
   numerados en orden (`NNN_descripcion.sql`) — ver `database/README.md`
   para la convención y el índice completo de qué hace cada uno. El esquema
@@ -89,7 +107,7 @@ Piezas:
   guarda la suscripción en la tabla `push_subscriptions` (Supabase).
 - `api/_lib/enviarPush.js` — helper server-side (usa `web-push`) que le
   manda el push a todas las suscripciones guardadas; se llama desde
-  `api/cliente-agenda.js` (POST) y `api/correo-entrante.js`. Si una
+  `api/_lib/citas-agenda.js` (POST) y `api/correo-entrante.js`. Si una
   suscripción ya no existe (410/404), se borra sola.
 
 Setup, además de las variables de entorno de arriba:
@@ -124,4 +142,4 @@ Setup, además de las variables de entorno de arriba:
   a partir de la fecha de Pascua de ese año).
 - El dominio `howria.cl` ya está verificado en Resend (MX, SPF, DKIM y
   DMARC cargados en Cloudflare) — el correo de confirmación de citas
-  (`api/confirmar-cita.js`) se puede enviar desde `citas@howria.cl`.
+  (`api/_lib/citas-confirmar.js`) se puede enviar desde `citas@howria.cl`.

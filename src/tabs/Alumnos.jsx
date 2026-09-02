@@ -339,7 +339,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
     setAgendaEnVuelo(true);
     try {
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/mover-cita", {
+      const resp = await fetch("/api/citas?op=mover", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({
@@ -391,7 +391,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
   //     queda con estado "cancelada", así hay registro de que existió) y
   //     se le avisa por correo.
   //
-  // La cancelación pasa por api/cancelar-cita.js, el mismo endpoint que
+  // La cancelación pasa por api/_lib/citas-cancelar.js, el mismo endpoint que
   // usa la ficha del cliente — no hay uno nuevo. Y como citaDe() ignora
   // las canceladas, la clase vuelve a verse como no agendada sola.
   function cancelarAgenda(numero) {
@@ -410,7 +410,7 @@ function PlanClases({ plan, boletasDisponibles, clasesDelPlan, marcarClase, desh
     setAgendaEnVuelo(true);
     try {
       const { data: { session } } = await supabase.auth.refreshSession();
-      const resp = await fetch("/api/cancelar-cita", {
+      const resp = await fetch("/api/citas?op=cancelar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ citaId: cita._dbId, accion: "cancelar" }),

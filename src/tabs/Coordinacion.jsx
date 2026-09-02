@@ -275,7 +275,7 @@ function ModalResolverAusencia({ paseador, pendientes, equipoPaseo, nuevoPaseado
 
 // ---------- Clientes entrantes (decidir qué hacer con cada uno) -------
 //
-// api/cliente-agenda.js crea un cliente REAL apenas alguien reserva por
+// api/_lib/citas-agenda.js crea un cliente REAL apenas alguien reserva por
 // el link público — antes de que nadie confirme la cita — a propósito
 // incompleto: sin paseador, sin tarifa, sin plan. Eso sirve para que la
 // cita aparezca de una en las pantallas del entrenador, pero deja al

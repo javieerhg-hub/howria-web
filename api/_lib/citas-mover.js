@@ -1,5 +1,5 @@
 // Función serverless de Vercel: le pone hora a una cita y le avisa al
-// cliente. Hermana de confirmar-cita.js y cancelar-cita.js — mismo
+// cliente. Hermana de citas-confirmar.js y citas-cancelar.js — mismo
 // esquema de verificación (service role key, relee la cita de la base, no
 // confía en nada que mande el navegador) y mismo diseño de correo.
 //

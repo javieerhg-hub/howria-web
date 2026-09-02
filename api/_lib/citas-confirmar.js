@@ -35,7 +35,7 @@ function fmtCLP(n) {
 // `timeZone` explícito, Intl formatea en UTC: una cita de las 15:00 en
 // Chile salía como 18:00 en el correo, y una de la tarde-noche cambiaba
 // derechamente de DÍA (22:00 del lunes → "01:00 del martes"). El cliente
-// recibía una fecha distinta a la que había elegido. api/cliente-agenda.js
+// recibía una fecha distinta a la que había elegido. api/_lib/citas-agenda.js
 // ya lo hacía bien; este correo era el único que faltaba.
 const ZONA_CHILE = "America/Santiago";
 

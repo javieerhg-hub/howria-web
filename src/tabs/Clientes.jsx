@@ -524,9 +524,9 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, pac
   function cancelarCita(cita) {
     // Una cita que nunca se confirmó se "rechaza"; una confirmada se
     // "cancela". El correo que recibe el cliente es distinto en cada
-    // caso (ver api/cancelar-cita.js), por eso no es lo mismo.
+    // caso (ver api/_lib/citas-cancelar.js), por eso no es lo mismo.
     const accion = cita.estado === "pendiente" ? "rechazar" : "cancelar";
-    llamarApi("/api/cancelar-cita", { citaId: cita._dbId, accion }, () => {
+    llamarApi("/api/citas?op=cancelar", { citaId: cita._dbId, accion }, () => {
       const estadoNuevo = accion === "rechazar" ? "rechazada" : "cancelada";
       setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, estado: estadoNuevo } : c)));
     });
@@ -543,7 +543,7 @@ function SeccionEvaluacion({ cliente, citasEvaluacion, setCitas, onArchivar, pac
       return;
     }
     const iso = new Date(nuevaFechaHora).toISOString();
-    llamarApi("/api/mover-cita", { citaId: cita._dbId, fechaNueva: iso }, () => {
+    llamarApi("/api/citas?op=mover", { citaId: cita._dbId, fechaNueva: iso }, () => {
       setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, fechaISO: iso } : c)));
       setReprogramandoId(null);
       setNuevaFechaHora("");
