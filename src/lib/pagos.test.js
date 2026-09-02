@@ -242,3 +242,130 @@ describe("programadosEnRango con fechas sueltas", () => {
     expect(programadosEnRango(c, desde, hasta, {})).toBe(0);
   });
 });
+
+// El caso que reportó Javier: el 2 de septiembre, un cliente que pagó 13
+// paseos aparecía como "1/1" — correcto si se cuenta solo hasta hoy, pero
+// no es lo que el paseador quiere saber. El compromiso del mes sale de la
+// boleta; el conteo hasta hoy se queda para saber si va al día.
+describe("resumenPaseadorEnRango — compromiso del mes y meta", () => {
+  const CONSTANZA = "Constanza";
+  // Lunes, miércoles y viernes a $5.000. Septiembre 2026 empieza martes.
+  const suCliente = { id: 7, _dbId: "c7", nombre: "Ana", paseadorNombre: CONSTANZA, tarifaPaseador: 5000, diasHabituales: [0, 2, 4] };
+  const INICIO_SEPT = new Date(2026, 8, 1);
+  const FIN_SEPT = new Date(2026, 8, 30, 23, 59, 59);
+  const HOY_DIA_2 = new Date(2026, 8, 2); // solo pasó el miércoles 2
+
+  function resumen(extra = {}) {
+    return resumenPaseadorEnRango({
+      clientes: [suCliente],
+      registroPaseos: extra.registroPaseos || {},
+      boletas: extra.boletas || [],
+      paseador: CONSTANZA,
+      desde: INICIO_SEPT,
+      hasta: HOY_DIA_2,
+      hastaTotal: FIN_SEPT,
+      mesBoleta: extra.mesBoleta === undefined ? "septiembre" : extra.mesBoleta,
+      anioBoleta: 2026,
+    });
+  }
+
+  const boletaDe13 = { clienteId: "c7", mes: "septiembre", anio: 2026, cantidad: 13, estado: "pendiente_pago" };
+
+  it("el compromiso del mes sale de la boleta, no de los días corridos", () => {
+    const r = resumen({ boletas: [boletaDe13] });
+    expect(r.filas[0].cobrados).toBe(13);
+    expect(r.filas[0].delMes).toBe(13);
+    expect(r.totales.delMes).toBe(13);
+  });
+
+  it("el conteo hasta hoy sigue siendo aparte, para saber si va al día", () => {
+    const r = resumen({ boletas: [boletaDe13] });
+    // Del 1 al 2 de septiembre solo cae el miércoles 2.
+    expect(r.filas[0].programados).toBe(1);
+    expect(r.filas[0].delMes).toBe(13);
+  });
+
+  it("sin boleta del mes se cae al plan del mes completo, no a los días corridos", () => {
+    const r = resumen();
+    expect(r.filas[0].cobrados).toBeNull();
+    // Septiembre 2026 tiene 13 lunes/miércoles/viernes.
+    expect(r.filas[0].delMes).toBe(13);
+    expect(r.filas[0].programados).toBe(1);
+  });
+
+  it("una boleta cancelada no compromete nada", () => {
+    const r = resumen({ boletas: [{ ...boletaDe13, cantidad: 99, estado: "cancelada" }] });
+    expect(r.filas[0].cobrados).toBeNull();
+  });
+
+  it("un borrador sí compromete — en Howria el flujo real es borrador a pagada", () => {
+    const r = resumen({ boletas: [{ ...boletaDe13, estado: "no_enviada" }] });
+    expect(r.filas[0].cobrados).toBe(13);
+  });
+
+  it("la boleta de otro mes no se toma", () => {
+    const r = resumen({ boletas: [{ ...boletaDe13, mes: "agosto" }] });
+    expect(r.filas[0].cobrados).toBeNull();
+  });
+
+  it("la meta es lo que va a ganar si hace todo lo comprometido", () => {
+    const r = resumen({ boletas: [boletaDe13] });
+    expect(r.totales.meta).toBe(13 * 5000);
+  });
+
+  it("fuera de un mes (semana o año) no se busca boleta y manda el plan", () => {
+    const r = resumen({ boletas: [boletaDe13], mesBoleta: null });
+    expect(r.filas[0].cobrados).toBeNull();
+    expect(r.filas[0].delMes).toBe(13);
+  });
+
+  it("un día cancelado no infla el plan de respaldo", () => {
+    const r = resumen({ registroPaseos: { "7_2026-09-04": { cancelado: true } } });
+    expect(r.filas[0].delMes).toBe(12);
+  });
+});
+
+// Bug encontrado al implementar el compromiso del mes: el conteo perdía el
+// último día del mes cuando el rango cruzaba el cambio de hora de Chile.
+// Es plata — un paseo menos en el total del paseador — y era silencioso.
+describe("resumenPaseadorEnRango — cambio de hora de Chile", () => {
+  const cli = { id: 7, _dbId: "c7", nombre: "Ana", paseadorNombre: "C", tarifaPaseador: 5000, diasHabituales: [0, 2, 4] };
+
+  function delMesDe(anio, mes) {
+    const ini = new Date(anio, mes, 1);
+    const fin = new Date(anio, mes + 1, 0, 23, 59, 59);
+    const r = resumenPaseadorEnRango({
+      clientes: [cli], registroPaseos: {}, paseador: "C",
+      desde: ini, hasta: ini, hastaTotal: fin,
+    });
+    return r.filas[0].delMes;
+  }
+
+  // Cuenta independiente, sin pasar por la función que se está probando.
+  function realesDe(anio, mes) {
+    let n = 0;
+    const ultimo = new Date(anio, mes + 1, 0).getDate();
+    for (let d = 1; d <= ultimo; d++) {
+      const f = new Date(anio, mes, d);
+      if ([0, 2, 4].includes((f.getDay() + 6) % 7)) n++;
+    }
+    return n;
+  }
+
+  it("septiembre no pierde el último día cuando el reloj adelanta", () => {
+    // El caso concreto: septiembre 2026 tenía 13 y devolvía 12, porque el
+    // domingo 6 Chile adelanta una hora y el cursor arrastraba ese desfase.
+    expect(delMesDe(2026, 8)).toBe(realesDe(2026, 8));
+    expect(delMesDe(2026, 8)).toBe(13);
+  });
+
+  it("abril tampoco se descuadra cuando el reloj atrasa", () => {
+    expect(delMesDe(2026, 3)).toBe(realesDe(2026, 3));
+  });
+
+  it("ningún mes del año se descuadra", () => {
+    for (let mes = 0; mes < 12; mes++) {
+      expect(delMesDe(2026, mes), `mes ${mes + 1} de 2026`).toBe(realesDe(2026, mes));
+    }
+  });
+});

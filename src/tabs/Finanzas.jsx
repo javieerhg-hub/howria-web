@@ -917,21 +917,44 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     // la ve un paseador — o sea que desde una sesión de administrador no
     // hay forma de mirarla. Estando en un archivo aparte se puede probar
     // sin sesión: ver "resumenPaseadorEnRango" en lib/pagos.test.js.
+    // Para el paseador el mes es el MES, no el ciclo de cobro de la
+    // empresa: sus paseos se cuentan de calendario. Por eso el compromiso
+    // sale de la boleta de ese mes, y solo cuando se está mirando un mes
+    // — en "esta semana" o "este año" no hay una boleta con la que
+    // comparar, así que se cae al plan de días habituales.
+    // "Ciclo" es del cobro a los clientes; los paseos del paseador se
+    // cuentan por mes calendario, así que acá no corresponde esa palabra.
+    const etiquetaMesPaseador = periodo === "mes"
+      ? `de ${MESES[actualDesde.getMonth()]}`
+      : etiquetaPeriodo;
+    const mesBoleta = periodo === "mes" ? MESES[actualDesde.getMonth()] : null;
+    const anioBoleta = periodo === "mes" ? actualDesde.getFullYear() : null;
+
     const { filas: resumenPaseador, compartidos: misPaseosCompartidos, totales: totalesPaseador } = resumenPaseadorEnRango({
       clientes: clientesProp,
       registroPaseos,
       reprogramaciones,
+      boletas: boletasEmitidasProp,
       paseador: user.nombre,
       desde: actualDesde,
       hasta: finPaseador,
+      hastaTotal: actualHasta,
+      mesBoleta,
+      anioBoleta,
     });
     const totalRealizadosPaseador = totalesPaseador.realizados;
     const totalProgramadosPaseador = totalesPaseador.programados;
     const totalMontoPaseador = totalesPaseador.monto;
+    const totalDelMesPaseador = totalesPaseador.delMes;
+    const metaPaseador = totalesPaseador.meta;
+    const avanceMeta = metaPaseador ? Math.round((totalMontoPaseador / metaPaseador) * 100) : 0;
+    // Cuántos de sus clientes ya tienen boleta del mes: si son pocos, la
+    // meta todavía es una estimación desde el plan y hay que decirlo.
+    const conBoleta = resumenPaseador.filter((r) => r.cobrados !== null).length;
 
     function exportarCsvPaseador() {
-      const encabezado = ["Cliente", "Perro", "Programados", "Realizados", "Cancelados", "Faltantes", "Monto"];
-      const filas = resumenPaseador.map((r) => [r.cliente.nombre, r.cliente.perro, r.programados, r.realizados, r.cancelados, r.faltantes, r.monto]);
+      const encabezado = ["Cliente", "Perro", "Del mes", "Programados a hoy", "Realizados", "Cancelados", "Faltantes", "Monto"];
+      const filas = resumenPaseador.map((r) => [r.cliente.nombre, r.cliente.perro, r.delMes, r.programados, r.realizados, r.cancelados, r.faltantes, r.monto]);
       const csv = [encabezado, ...filas].map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
       const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -983,18 +1006,48 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         )}
 
         <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 22 }}>
+          {/* Contra el compromiso del MES completo (la boleta del cliente
+              cuando existe). Antes esto contaba solo hasta hoy, así que el
+              día 2 un cliente de 13 paseos aparecía como "1 de 1". */}
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosPaseador} / {totalProgramadosPaseador}</p>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos {etiquetaMesPaseador}</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosPaseador} / {totalDelMesPaseador}</p>
+          </div>
+          {/* Distinto del anterior a propósito: acá no importa el mes
+              entero sino si va al día con lo que ya debería estar hecho. */}
+          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Al día de hoy</p>
+            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{totalRealizadosPaseador} / {totalProgramadosPaseador}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 11.5, color: totalRealizadosPaseador >= totalProgramadosPaseador ? "#2F6A46" : RUST }}>
+              {totalRealizadosPaseador >= totalProgramadosPaseador
+                ? "Vas al día"
+                : `Te faltan ${totalProgramadosPaseador - totalRealizadosPaseador} por marcar`}
+            </p>
           </div>
           <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Avance</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{totalProgramadosPaseador ? Math.round((totalRealizadosPaseador / totalProgramadosPaseador) * 100) : 0}%</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Monto a recibir {etiquetaPeriodo}</p>
+            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Llevas ganado {etiquetaMesPaseador}</p>
             <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(totalMontoPaseador)}</p>
           </div>
+          {/* La meta no se fija a mano: es lo que va a ganar si hace todo
+              lo que sus clientes tienen pagado este mes. */}
+          {metaPaseador > 0 && (
+            <div style={{ background: GOLD, borderRadius: 10, padding: 16, gridColumn: "1 / -1" }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, color: NAVY, textTransform: "uppercase", opacity: 0.75 }}>Meta {etiquetaMesPaseador}</p>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(metaPaseador)}</p>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: NAVY }}>{avanceMeta}% alcanzado</p>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: "rgba(18,42,64,0.18)", marginTop: 10, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, avanceMeta)}%`, height: "100%", background: NAVY, borderRadius: 999 }} />
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: 11.5, color: NAVY, opacity: 0.8 }}>
+                {totalMontoPaseador >= metaPaseador
+                  ? "Ya cumpliste la meta del mes."
+                  : `Te faltan ${fmtCLP(metaPaseador - totalMontoPaseador)} para llegar.`}
+                {conBoleta < resumenPaseador.length && " Es una estimación: no todos tus clientes tienen boleta de este mes todavía."}
+              </p>
+            </div>
+          )}
         </div>
 
         <p style={label}>Detalle por cliente</p>
@@ -1008,7 +1061,12 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                   <div style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: r.cliente.fotoUrl ? `url(${r.cliente.fotoUrl}) center/cover` : CREAM_SOFT }} />
                   <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre}</p>
                 </div>
-                <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>{r.realizados}/{r.programados} paseos</p>
+                {/* Contra lo que el tutor tiene pagado este mes (la boleta),
+                    no contra los días que ya pasaron. */}
+                <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>
+                  {r.realizados}/{r.delMes} paseos
+                  {r.cobrados === null && r.delMes > 0 && <span title="Este cliente todavía no tiene boleta de este mes, así que el total sale de sus días habituales"> ·&nbsp;previsto</span>}
+                </p>
                 <div style={{ display: "inline-block", background: GOLD, borderRadius: 6, padding: "5px 9px" }}>
                   <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(r.monto)}</p>
                 </div>

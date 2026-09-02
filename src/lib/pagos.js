@@ -64,10 +64,17 @@ export function montoRealizadoEnRango(registroPaseos, clienteId, desde, hasta, p
 // paseador al mover esto de lugar.
 function clavesHabitualesEnRango(desde, hasta, diasSemana) {
   const claves = [];
+  // MEDIODÍA, no medianoche. En el cambio de hora de Chile (septiembre
+  // adelanta, abril atrasa) el reloj salta a las 00:00, así que avanzar un
+  // día desde las 00:00 deja el cursor en las 01:00 — y esa hora de más se
+  // arrastra hasta el final del rango, dejando el último día fuera por 60
+  // minutos. Septiembre de 2026 perdía el miércoles 30: un paseo menos en
+  // el conteo del paseador, en silencio. Anclado a las 12:00, un
+  // corrimiento de ±1 hora nunca cruza el borde del día.
   const cursor = new Date(desde);
-  cursor.setHours(0, 0, 0, 0);
+  cursor.setHours(12, 0, 0, 0);
   const fin = new Date(hasta);
-  fin.setHours(0, 0, 0, 0);
+  fin.setHours(12, 0, 0, 0);
   while (cursor <= fin) {
     const dow = (cursor.getDay() + 6) % 7;
     if (diasSemana.includes(dow)) claves.push(fechaKey(cursor));
@@ -87,12 +94,26 @@ function clavesHabitualesEnRango(desde, hasta, diasSemana) {
 // persona, la parte principal no le toca — aunque el cliente sea suyo.
 // Es el mismo criterio de montoRealizadoEnRango, que es lo que usa Pago
 // trabajadores para pagar de verdad; los dos números tienen que cuadrar.
+// `hasta` corta en HOY: es lo que define "faltantes", o sea los paseos que
+// ya deberían estar marcados. `hastaTotal` es el fin del período completo
+// y sirve para el compromiso del mes — sin él, el día 2 de septiembre un
+// cliente de 13 paseos mostraba "1/1", que es correcto pero no es lo que
+// el paseador quiere saber.
+//
+// `boletas` + `mesBoleta`/`anioBoleta`: el compromiso del mes sale de la
+// BOLETA cuando existe, no de contar días habituales. La boleta es lo que
+// el tutor efectivamente pagó ("13 paseos") y es el número contra el que
+// el paseador se quiere medir; los días habituales son solo el plan
+// teórico y se mueven con feriados, días puntuales y reprogramaciones.
+// Sin boleta del mes se cae al plan, que es la mejor estimación que hay.
 export function resumenPaseadorEnRango({
-  clientes = [], registroPaseos = {}, reprogramaciones = [], paseador, desde, hasta,
+  clientes = [], registroPaseos = {}, reprogramaciones = [], boletas = [],
+  paseador, desde, hasta, hastaTotal = null, mesBoleta = null, anioBoleta = null,
 }) {
   const misClientes = clientes.filter((c) => c.paseadorNombre === paseador);
   const desdeKey = fechaKey(new Date(desde));
   const hastaKey = fechaKey(new Date(hasta));
+  const finTotal = hastaTotal || hasta;
 
   const filas = misClientes.map((c) => {
     // Un paseo movido HACIA una fecha del rango (venga de donde venga)
@@ -117,9 +138,34 @@ export function resumenPaseadorEnRango({
       realizados++;
       monto += montoPrincipal(tarifa, r);
     });
+    // El plan del período COMPLETO (no solo hasta hoy), que es el respaldo
+    // cuando todavía no hay boleta del mes.
+    const clavesTotal = [...new Set([
+      ...clavesHabitualesEnRango(desde, finTotal, c.diasHabituales || []),
+      ...reprogramaciones
+        .filter((r) => r.clienteId === c._dbId && r.fechaNueva >= desdeKey && r.fechaNueva <= fechaKey(new Date(finTotal)))
+        .map((r) => r.fechaNueva),
+    ])];
+    const programadosTotal = clavesTotal.filter((k) => !registroPaseos[`${c.id}_${k}`]?.cancelado).length;
+
+    // Una boleta cancelada no compromete nada. Un borrador sí: en Howria
+    // el flujo real es borrador -> pagada, así que esperar a que esté
+    // aceptada dejaría al paseador sin meta media semana.
+    const boleta = mesBoleta
+      ? boletas.find((b) => b.clienteId === c._dbId && b.mes === mesBoleta && b.anio === anioBoleta && b.estado !== "cancelada")
+      : null;
+    const cobrados = boleta ? Number(boleta.cantidad || 0) : null;
+
+    // Contra esto se mide el paseador: la boleta si existe, el plan si no.
+    const delMes = cobrados ?? programadosTotal;
+
     // "faltantes": de los días netos de cancelación, los que ya deberían
     // haberse hecho pero todavía no se marcaron.
-    return { cliente: c, programados: validas.length, realizados, cancelados, faltantes: validas.length - realizados, monto };
+    return {
+      cliente: c, programados: validas.length, realizados, cancelados,
+      faltantes: validas.length - realizados, monto,
+      programadosTotal, cobrados, delMes, metaMonto: delMes * tarifa,
+    };
   });
 
   // Paseos de clientes AJENOS donde este paseador quedó como el segundo
@@ -143,6 +189,10 @@ export function resumenPaseadorEnRango({
     totales: {
       realizados: filas.reduce((acc, f) => acc + f.realizados, 0),
       programados: filas.reduce((acc, f) => acc + f.programados, 0),
+      // Del período completo, para "cuánto llevo del mes".
+      delMes: filas.reduce((acc, f) => acc + f.delMes, 0),
+      // La meta en plata: lo que va a ganar si hace todo lo comprometido.
+      meta: filas.reduce((acc, f) => acc + f.metaMonto, 0),
       compartido: totalCompartido,
       monto: filas.reduce((acc, f) => acc + f.monto, 0) + totalCompartido,
     },
