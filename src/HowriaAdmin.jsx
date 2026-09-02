@@ -293,6 +293,34 @@ export function slugEmailUsuario(nombre) {
   return `${limpio}@howria.local`;
 }
 
+
+// Gasto personal de quien mira Finanzas personales (database/123). No es
+// un costo de la empresa: eso vive en costos_negocio. La RLS lo ata al
+// correo de la sesion, asi que un administrador no ve los del otro.
+function gastoPersonalToDb(g) {
+  return {
+    usuario_email: g.usuarioEmail,
+    descripcion: g.descripcion,
+    monto: Number(g.monto) || 0,
+    categoria: g.categoria || "otros",
+    fecha: g.fecha,
+    fijo: g.fijo || false,
+    fijo_hasta: g.fijoHasta || null,
+  };
+}
+
+function dbToGastoPersonal(row) {
+  return {
+    usuarioEmail: row.usuario_email,
+    descripcion: row.descripcion,
+    monto: row.monto || 0,
+    categoria: row.categoria || "otros",
+    fecha: row.fecha,
+    fijo: row.fijo || false,
+    fijoHasta: row.fijo_hasta || null,
+  };
+}
+
 function usuarioToDb(u) {
   return {
     nombre: u.nombre,
@@ -1481,6 +1509,7 @@ const TABS_QUE_USAN_TABLA = {
   solicitudes_registro: ["usuarios"],
   entregas_inventario: ["inventario"],
   costos_negocio: ["finanzas"],
+  gastos_personales: ["finanzas-personales"],
   // pagos_trabajadores ya NO va acá: desde database/111 el paseador lee
   // sus propios pagos para el aviso de "te pagamos", y RLS le devuelve
   // solo sus filas, así que le cuesta muy poco.
@@ -5189,6 +5218,7 @@ export default function HowriaAdmin() {
   const [clientes, setClientes, cargandoClientes] = useSyncedTable("clientes", clienteToDb, dbToCliente, "nombre", sessionVersion);
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
+  const [gastosPersonales, setGastosPersonales, cargandoGastosPersonales] = useSyncedTable("gastos_personales", gastoPersonalToDb, dbToGastoPersonal, "fecha", versionSiSeUsa("gastos_personales"));
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", versionSiSeUsa("logins_pendientes_borrar"));
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion, "pagos_trabajadores", false, COLUMNAS_PAGO_LIVIANO);
   // Borrador de bono/descuento por paseador+período, compartido — antes
@@ -5688,7 +5718,7 @@ export default function HowriaAdmin() {
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} citasAgenda={citasAgenda} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} onVerBoletas={tabsPermitidosRol.includes("boletas") ? () => setTab("boletas") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
-        {tab === "finanzas-personales" && tabsPermitidosRol.includes("finanzas-personales") && <FinanzasPersonales usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} citasAgenda={citasAgenda} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} user={user} cargando={cargandoClientes || cargandoBoletas} />}
+        {tab === "finanzas-personales" && tabsPermitidosRol.includes("finanzas-personales") && <FinanzasPersonales usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} citasAgenda={citasAgenda} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} gastosPersonales={gastosPersonales} setGastosPersonales={setGastosPersonales} cargandoGastos={cargandoGastosPersonales} user={user} cargando={cargandoClientes || cargandoBoletas} />}
         {tab === "pago-adiestramiento" && tabsPermitidosRol.includes("pago-adiestramiento") && <PagoAdiestramiento usuarios={usuarios} clientes={clientes} citasAgenda={citasAgenda} setCitas={setCitasAgenda} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} nombreUsuario={user.nombre} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} reclamosPago={reclamosPago} resolverReclamoPago={resolverReclamoPago} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} citasAgenda={citasAgenda} />}

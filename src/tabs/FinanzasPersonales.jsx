@@ -19,6 +19,11 @@
 //      su margen no es de Howria. Se marca por persona
 //      (usuarios.margen_va_a_howria, database/122).
 //
+// Y abajo, lo que no es de la empresa en absoluto: sus gastos personales
+// (database/123, privados por RLS incluso de otros administradores),
+// para cerrar con lo unico que de verdad sirve para organizarse el mes:
+// cuanto le queda limpio despues de pagar todo.
+//
 // El vínculo cuenta-admin ↔ cuenta-paseador se guarda en
 // usuarios.paseador_vinculado (database/120) en vez de escribir un nombre
 // en el código.
@@ -33,6 +38,38 @@ import { periodoDeBoleta, cicloDeFecha, esVenta } from "../lib/calculosBoletas.j
 
 const VERDE = "#2F6A46";
 
+// Categorias de gasto personal. Son pocas a proposito: una lista larga
+// hace que uno dude donde poner cada cosa y termine usando "otros" para
+// todo. El emoji ayuda a reconocerlas de un vistazo en el desglose.
+const CATEGORIAS_GASTO = [
+  { id: "casa", nombre: "Casa", emoji: "\u{1F3E0}" },
+  { id: "comida", nombre: "Comida", emoji: "\u{1F37D}" },
+  { id: "transporte", nombre: "Transporte", emoji: "\u{1F697}" },
+  { id: "deudas", nombre: "Deudas y cuotas", emoji: "\u{1F4B3}" },
+  { id: "salud", nombre: "Salud", emoji: "\u{1FA7A}" },
+  { id: "personal", nombre: "Personal", emoji: "\u2728" },
+  { id: "otros", nombre: "Otros", emoji: "\u{1F4E6}" },
+];
+
+function catDe(id) {
+  return CATEGORIAS_GASTO.find((c) => c.id === id) || CATEGORIAS_GASTO[CATEGORIAS_GASTO.length - 1];
+}
+
+// Un gasto normal cuenta en el mes de su fecha. Uno fijo cuenta en todos
+// los meses desde esa fecha, hasta el mes de fijoHasta si se dio de baja
+// — asi un arriendo no hay que escribirlo de nuevo cada mes, y dejar de
+// pagarlo no borra los meses en que si se pago.
+function gastoCuentaEn(g, mes, anio) {
+  const f = new Date(g.fecha.length <= 10 ? g.fecha + "T00:00:00" : g.fecha);
+  const desde = f.getFullYear() * 12 + f.getMonth();
+  const mirado = anio * 12 + mes;
+  if (!g.fijo) return desde === mirado;
+  if (mirado < desde) return false;
+  if (!g.fijoHasta) return true;
+  const h = new Date(g.fijoHasta.length <= 10 ? g.fijoHasta + "T00:00:00" : g.fijoHasta);
+  return mirado <= h.getFullYear() * 12 + h.getMonth();
+}
+
 function Kpi({ titulo, valor, detalle, color = NAVY, bg = CREAM_SOFT }) {
   return (
     <div style={{ background: bg, borderRadius: 10, padding: 16 }}>
@@ -45,7 +82,8 @@ function Kpi({ titulo, valor, detalle, color = NAVY, bg = CREAM_SOFT }) {
 
 export function FinanzasPersonales({
   usuarios = [], setUsuarios, clientes = [], boletasEmitidas = [], boletasAdiestramiento = [],
-  citasAgenda = [], registroPaseos = {}, reprogramaciones = [], user, cargando,
+  citasAgenda = [], registroPaseos = {}, reprogramaciones = [],
+  gastosPersonales = [], setGastosPersonales, cargandoGastos, user, cargando,
 }) {
   // El user de la sesión es una foto del momento del login: si el vínculo
   // se elige acá mismo, hay que leerlo de la lista viva para que la
@@ -59,6 +97,7 @@ export function FinanzasPersonales({
   // completo". Es un que-pasa-si, no el estado real, asi que se marca en
   // pantalla y no toca el titular de arriba.
   const [proyectados, setProyectados] = useState([]);
+  const [gastoNuevo, setGastoNuevo] = useState({ descripcion: "", monto: "", categoria: "casa", fijo: false });
   const hoy = new Date();
   const ref = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
   const mes = ref.getMonth(), anio = ref.getFullYear();
@@ -243,6 +282,55 @@ export function FinanzasPersonales({
   // se desinfla no sirve para planificar.
   const ganare = paseos.cobrado + adiestramiento.queda + otros.quedaSiCompleta;
   const yaEntro = paseos.pagado + adiestramiento.quedaCobrado + otros.quedaCobradoSiCompleta;
+
+  const gastos = useMemo(() => {
+    const filas = gastosPersonales
+      .filter((g) => gastoCuentaEn(g, mes, anio))
+      .sort((a, b) => b.monto - a.monto);
+    const porCategoria = CATEGORIAS_GASTO
+      .map((c) => ({ ...c, total: filas.filter((g) => g.categoria === c.id).reduce((a, g) => a + g.monto, 0) }))
+      .filter((c) => c.total > 0)
+      .sort((a, b) => b.total - a.total);
+    return {
+      filas,
+      porCategoria,
+      total: filas.reduce((a, g) => a + g.monto, 0),
+      fijos: filas.filter((g) => g.fijo).reduce((a, g) => a + g.monto, 0),
+    };
+  }, [gastosPersonales, mes, anio]);
+
+  const limpio = ganare - gastos.total;
+
+  function agregarGasto(e) {
+    e.preventDefault();
+    const monto = Number(gastoNuevo.monto);
+    if (!gastoNuevo.descripcion.trim() || !monto || monto <= 0) return;
+    setGastosPersonales((prev) => [...prev, {
+      id: Date.now(),
+      usuarioEmail: user?.email,
+      descripcion: gastoNuevo.descripcion.trim(),
+      monto,
+      categoria: gastoNuevo.categoria,
+      // Se guarda con fecha en el mes que se esta mirando, no hoy: si
+      // estoy revisando agosto y agrego un gasto, es de agosto.
+      fecha: `${anio}-${String(mes + 1).padStart(2, "0")}-01`,
+      fijo: gastoNuevo.fijo,
+      fijoHasta: null,
+    }]);
+    setGastoNuevo({ descripcion: "", monto: "", categoria: gastoNuevo.categoria, fijo: false });
+  }
+
+  function borrarGasto(id) {
+    setGastosPersonales((prev) => prev.filter((g) => g.id !== id));
+  }
+
+  // Dar de baja un fijo: deja de contar DESPUES de este mes, sin borrar
+  // los meses en que si se pago.
+  function darDeBajaFijo(id) {
+    const ultimoDia = new Date(anio, mes + 1, 0);
+    const hasta = `${ultimoDia.getFullYear()}-${String(ultimoDia.getMonth() + 1).padStart(2, "0")}-${String(ultimoDia.getDate()).padStart(2, "0")}`;
+    setGastosPersonales((prev) => prev.map((g) => (g.id === id ? { ...g, fijoHasta: hasta } : g)));
+  }
 
   if (cargando) return <SkeletonLista filas={6} />;
 
@@ -551,6 +639,106 @@ export function FinanzasPersonales({
             )}
           </div>
         )}
+      </div>
+
+      <div className="howria-card" style={{ ...tarjeta, marginTop: 20 }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Mis gastos de {MESES[mes]}</h3>
+        <p style={{ ...hint, marginTop: 4, marginBottom: 14 }}>
+          Lo tuyo, no lo de la empresa: arriendo, comida, cuotas, lo que sea. Solo tú
+          los ves — ni los otros administradores pueden. Lo que marques como
+          “todos los meses” se repite solo, sin que lo vuelvas a escribir.
+        </p>
+
+        <form onSubmit={agregarGasto} style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={gastoNuevo.descripcion} onChange={(e) => setGastoNuevo({ ...gastoNuevo, descripcion: e.target.value })}
+              placeholder="En qué (arriendo, supermercado…)" aria-label="En qué gastaste"
+              style={{ ...input, margin: 0, flex: "2 1 200px" }} />
+            <input type="number" min="0" value={gastoNuevo.monto} onChange={(e) => setGastoNuevo({ ...gastoNuevo, monto: e.target.value })}
+              placeholder="Cuánto" aria-label="Cuánto"
+              style={{ ...input, margin: 0, flex: "1 1 110px" }} />
+            <select value={gastoNuevo.categoria} onChange={(e) => setGastoNuevo({ ...gastoNuevo, categoria: e.target.value })}
+              aria-label="Categoría" style={{ ...input, margin: 0, flex: "1 1 150px" }}>
+              {CATEGORIAS_GASTO.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: INK, cursor: "pointer" }}>
+              <input type="checkbox" checked={gastoNuevo.fijo} onChange={(e) => setGastoNuevo({ ...gastoNuevo, fijo: e.target.checked })} />
+              Se repite todos los meses
+            </label>
+            <button type="submit" disabled={!gastoNuevo.descripcion.trim() || !Number(gastoNuevo.monto)}
+              style={{ border: "none", background: NAVY, color: "#FFFFFF", borderRadius: 20, padding: "8px 18px", fontSize: 12.5, fontWeight: 600,
+                cursor: "pointer", opacity: !gastoNuevo.descripcion.trim() || !Number(gastoNuevo.monto) ? 0.5 : 1 }}>
+              Agregar gasto
+            </button>
+          </div>
+        </form>
+
+        {cargandoGastos ? (
+          <SkeletonLista filas={3} />
+        ) : gastos.filas.length === 0 ? (
+          <p style={hint}>Todavía no anotaste gastos en {MESES[mes]}.</p>
+        ) : (
+          <>
+            <div style={{ display: "grid", gap: 4, marginBottom: 12 }}>
+              {gastos.filas.map((g) => (
+                <div key={g.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 8, padding: "9px 12px" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: NAVY }}>
+                      {catDe(g.categoria).emoji} {g.descripcion}
+                      {g.fijo && <span style={{ marginLeft: 7, fontSize: 10.5, fontWeight: 700, color: "#8A6A1E", textTransform: "uppercase", letterSpacing: 0.4 }}>todos los meses</span>}
+                    </p>
+                    <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>{catDe(g.categoria).nombre}</p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
+                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, fontFamily: "Georgia, serif", color: RUST }}>− {fmtCLP(g.monto)}</p>
+                    {g.fijo ? (
+                      <button onClick={() => darDeBajaFijo(g.id)} title="Deja de contar después de este mes, sin borrar los anteriores"
+                        style={{ border: "none", background: "none", color: "#A99C78", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0 }}>
+                        ya no lo pago
+                      </button>
+                    ) : (
+                      <button onClick={() => borrarGasto(g.id)} aria-label={`Borrar ${g.descripcion}`}
+                        style={{ border: "none", background: "none", color: "#A99C78", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {gastos.porCategoria.map((c) => (
+                <span key={c.id} style={{ fontSize: 11.5, background: CREAM_SOFT, color: INK, borderRadius: 20, padding: "5px 12px" }}>
+                  {c.emoji} {c.nombre} {fmtCLP(c.total)}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: "grid", gap: 8, borderTop: "1px solid #E4DBC3", paddingTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK }}>
+            <span>Vas a ganar</span><b style={{ fontFamily: "Georgia, serif" }}>{fmtCLP(ganare)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK }}>
+            <span>Tus gastos{gastos.fijos > 0 ? ` (${fmtCLP(gastos.fijos)} son fijos)` : ""}</span>
+            <b style={{ fontFamily: "Georgia, serif", color: RUST }}>− {fmtCLP(gastos.total)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: limpio >= 0 ? VERDE : RUST, borderRadius: 10, padding: "14px 16px", marginTop: 4 }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                {limpio >= 0 ? `Te queda limpio en ${MESES[mes]}` : `Te falta en ${MESES[mes]}`}
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "rgba(255,255,255,0.8)" }}>
+                {limpio >= 0
+                  ? `De eso ya tienes en la mano ${fmtCLP(Math.max(0, yaEntro - gastos.total))}`
+                  : "Tus gastos superan lo que vas a ganar este mes"}
+              </p>
+            </div>
+            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(limpio)}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
