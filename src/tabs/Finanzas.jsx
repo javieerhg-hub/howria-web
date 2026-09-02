@@ -10,6 +10,7 @@ import {
   fmtCLP, fechaKey, esBoletaDeCliente, inicioSemana,
 } from "../HowriaAdmin.jsx";
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable, periodoDeBoleta } from "../lib/calculosBoletas.js";
+import { diasDelMesProgramados } from "../lib/programacion.js";
 import { resumenPaseadorEnRango } from "../lib/pagos.js";
 import { TarjetaResumenFactura } from "./_compartido.jsx";
 
@@ -89,7 +90,7 @@ function variacion(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, nombreUsuario, user, onVerPagos, onVerBoletas }) {
+export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestramiento: boletasAdiestramientoProp = [], clientes: clientesProp, pagosRegistrados: pagosRegistradosProp = [], registroPaseos = {}, reprogramaciones = [], costosNegocio = [], setCostosNegocio, citasAgenda = [], nombreUsuario, user, onVerPagos, onVerBoletas }) {
   // Arranca en el mes: con facturación mensual por adelantado, el mes es
   // la unidad real del negocio.
   const [periodo, setPeriodo] = useState("mes");
@@ -662,11 +663,31 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     ],
   });
 
+  // Qué es cada cliente, para distinguirlo en las listas. Una boleta de
+  // adiestramiento se etiqueta por la boleta misma y no por la ficha: un
+  // cliente puede tener clases Y paseos, y lo que importa es de qué es la
+  // plata que se está mostrando.
+  const etiquetaDeCliente = (nombre, tipoBoleta) => {
+    if (tipoBoleta === "adiestramiento") return "Adiestramiento";
+    const c = clientes.find((x) => String(x.nombre).trim() === String(nombre).trim());
+    const tipos = c?.tipoServicio || [];
+    if (tipos.includes("paseos")) return "Paseos";
+    if (tipos.includes("clases")) return "Clases";
+    if (tipos.includes("evaluacion")) return "Evaluación";
+    return null;
+  };
+
   const porCliente = useMemo(() => {
     const mapa = {};
-    filtradas.forEach((b) => { mapa[b.cliente] = (mapa[b.cliente] || 0) + b.total; });
-    return Object.entries(mapa).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total);
-  }, [filtradas]);
+    filtradas.forEach((b) => {
+      mapa[b.cliente] = mapa[b.cliente] || { total: 0, tipos: new Set() };
+      mapa[b.cliente].total += b.total;
+      mapa[b.cliente].tipos.add(b._tipo);
+    });
+    return Object.entries(mapa)
+      .map(([nombre, v]) => ({ nombre, total: v.total, etiqueta: [...v.tipos].map((t) => etiquetaDeCliente(nombre, t)).filter(Boolean).join(" + ") }))
+      .sort((a, b) => b.total - a.total);
+  }, [filtradas, clientes]);
 
   // Siempre por MES, nunca por día. Una boleta de paseos cubre el mes
   // entero, así que su período es el día 1: agrupar por día dejaba todo
@@ -689,11 +710,44 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
     });
   }, [periodo, todasLasBoletasVenta, actualDesde]);
 
-  const clientesSinBoletaEsteMes = useMemo(() => {
-    return clientes.filter((c) => !todasLasBoletas.some((b) => (
-      esBoletaDeCliente(b, c) && b._periodo && b._periodo.getMonth() === actualDesde.getMonth() && b._periodo.getFullYear() === actualDesde.getFullYear()
-    )));
-  }, [clientes, todasLasBoletas, actualDesde]);
+  // Quién falta por cobrar en este ciclo.
+  //
+  // Antes listaba a TODO cliente sin boleta del mes, y eso acusaba a quien
+  // no correspondía: los alumnos de adiestramiento no se cobran todos los
+  // meses (se cobra el pack o la evaluación cuando ocurre), así que
+  // aparecían como pendientes para siempre. Con 52 clientes la lista era
+  // casi entera y no servía para decidir nada.
+  //
+  // Ahora se pregunta lo que de verdad importa en cada negocio:
+  //   Paseos       — ¿tiene paseos programados este ciclo y no le emitiste?
+  //   Adiestramiento — ¿hizo una evaluación o clase este ciclo y no la cobraste?
+  const faltanPorCobrar = useMemo(() => {
+    const mes = actualDesde.getMonth(), anio = actualDesde.getFullYear();
+    const tieneBoletaDelCiclo = (c) => todasLasBoletas.some((b) =>
+      esBoletaDeCliente(b, c) && b._periodo && b._periodo.getMonth() === mes && b._periodo.getFullYear() === anio);
+
+    const activos = clientes.filter((c) => (c.estadoCliente || "activo") === "activo");
+
+    const paseos = activos
+      .filter((c) => (c.tipoServicio || []).includes("paseos"))
+      // Sin paseos programados en el ciclo no hay nada que cobrarle: es el
+      // caso del cliente que entró a mitad de mes o que no tiene días.
+      .filter((c) => diasDelMesProgramados(c, mes, anio, reprogramaciones).length > 0)
+      .filter((c) => !tieneBoletaDelCiclo(c));
+
+    // Una cita realizada en el ciclo es lo que genera el cobro de
+    // adiestramiento. Sin cita, no hay nada pendiente.
+    const hizoAlgoEsteCiclo = (c) => citasAgenda.some((cita) =>
+      cita.estado === "realizada" && cita.clienteId === c._dbId &&
+      cita.fechaISO && new Date(cita.fechaISO).getMonth() === mes && new Date(cita.fechaISO).getFullYear() === anio);
+
+    const adiestramiento = activos
+      .filter((c) => (c.tipoServicio || []).some((t) => t === "clases" || t === "evaluacion"))
+      .filter(hizoAlgoEsteCiclo)
+      .filter((c) => !tieneBoletaDelCiclo(c));
+
+    return { paseos, adiestramiento };
+  }, [clientes, todasLasBoletas, actualDesde, reprogramaciones, citasAgenda]);
 
   const porTipoServicio = useMemo(() => {
     return TIPOS_SERVICIO.map((t) => {
@@ -1262,22 +1316,45 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           ) : (
             <div>
               {porCliente.map((c, i) => (
-                <FilaLista key={c.nombre} Icono={Dog} titulo={`${i === 0 ? "🏅 " : ""}${c.nombre}`} valor={fmtCLP(c.total)} valorColor={NAVY} />
+                <FilaLista key={c.nombre} Icono={Dog} titulo={`${i === 0 ? "🏅 " : ""}${String(c.nombre).trim()}`} subtitulo={c.etiqueta} valor={fmtCLP(c.total)} valorColor={NAVY} />
               ))}
             </div>
           )}
         </div>
 
         <div>
-          <p style={{ ...label, marginBottom: 2 }}>Clientes sin boleta {periodo === "mes" ? `de ${tituloPeriodo}` : "este mes"}</p>
-          <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Siempre es el mes calendario actual — no cambia con el período elegido arriba.</p>
-          {clientesSinBoletaEsteMes.length === 0 ? (
-            <p style={{ ...hint, marginTop: 8 }}>Todos los clientes tienen boleta generada este mes.</p>
+          <p style={{ ...label, marginBottom: 2 }}>Falta por cobrar {etiquetaPeriodo}</p>
+          <p style={{ margin: "0 0 10px", fontSize: 11.5, color: "#8A7E5C" }}>
+            Paseos con días este ciclo y adiestramiento con clases hechas, en ambos casos sin boleta emitida. Los alumnos que este ciclo no tuvieron nada no aparecen: no hay qué cobrarles.
+          </p>
+          {faltanPorCobrar.paseos.length === 0 && faltanPorCobrar.adiestramiento.length === 0 ? (
+            <p style={{ ...hint, marginTop: 8 }}>No queda nadie por cobrar en este ciclo.</p>
           ) : (
-            <div>
-              {clientesSinBoletaEsteMes.map((c) => (
-                <FilaLista key={c.id} Icono={Dog} titulo={c.nombre} subtitulo={c.perro} valor="Pendiente" valorColor={RUST} />
-              ))}
+            <div style={{ display: "grid", gap: 14 }}>
+              {faltanPorCobrar.paseos.length > 0 && (
+                <div>
+                  <p style={{ margin: "0 0 4px", fontSize: 11.5, fontWeight: 700, color: "#8A6A1E", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Paseos ({faltanPorCobrar.paseos.length})
+                  </p>
+                  {faltanPorCobrar.paseos.map((c) => (
+                    <FilaLista key={c.id} Icono={Dog} titulo={c.nombre.trim()} subtitulo={c.perro}
+                      valor={`${diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones).length} paseo(s)`}
+                      valorColor={RUST} />
+                  ))}
+                </div>
+              )}
+              {faltanPorCobrar.adiestramiento.length > 0 && (
+                <div>
+                  <p style={{ margin: "0 0 4px", fontSize: 11.5, fontWeight: 700, color: "#2F6A46", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Adiestramiento ({faltanPorCobrar.adiestramiento.length})
+                  </p>
+                  {faltanPorCobrar.adiestramiento.map((c) => (
+                    <FilaLista key={c.id} Icono={Dog} titulo={c.nombre.trim()}
+                      subtitulo={`${c.perro || ""}${(c.tipoServicio || []).includes("clases") ? " · clases" : " · evaluación"}`}
+                      valor="Sin cobrar" valorColor={RUST} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
