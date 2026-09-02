@@ -1483,7 +1483,7 @@ export const TODOS_LOS_TABS = [
   { id: "paseadores", label: "Paseadores", grupo: "Paseos", desc: "Perfil de cada paseador: paseos del mes, plata por cliente y su meta.", busca: "perfil rendimiento meta equipo" },
   { id: "agenda", label: "Agenda", grupo: "Adiestramiento", desc: "Evaluaciones y clases: confirmar, mover, cancelar y la disponibilidad del adiestrador.", busca: "cita evaluacion clase confirmar cancelar horario disponibilidad" },
   { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento", desc: "Los clientes que toman clases: packs, avance y qué les toca ahora.", busca: "clases pack avance entrenamiento" },
-  { id: "calendario", label: "Calendario", grupo: "Agenda general", desc: "Paseos, evaluaciones y clases: el mes completo, o el día hora por hora.", busca: "mes dia itinerario horario hora agenda grilla bloques arrastrar vista" },
+  { id: "calendario", label: "Calendario", grupo: "", desc: "Paseos, evaluaciones y clases: el mes completo, o el día hora por hora.", busca: "mes dia itinerario horario hora agenda grilla bloques arrastrar vista" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y dinero", desc: "La ficha madre de cada cliente — de acá salen boletas, finanzas y perfiles.", busca: "ficha perro tutor tarifa direccion telefono dueño" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y dinero", desc: "Emitir una boleta nueva, de paseos o de adiestramiento.", busca: "cobrar emitir crear nueva cuenta" },
   { id: "facturas", label: "Facturas", grupo: "Clientes y dinero", desc: "Todas las boletas ya emitidas y en qué estado está cada una.", busca: "cobrar emitidas pagada pendiente deuda estado" },
@@ -1494,11 +1494,19 @@ export const TODOS_LOS_TABS = [
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo", desc: "Objetivos del mes y tareas pendientes del equipo.", busca: "metas tareas objetivos pendientes" },
   { id: "notificaciones", label: "Notificaciones", grupo: "Equipo", desc: "Mandar un aviso push a mano a un paseador o entrenador.", busca: "push aviso mensaje avisar mandar" },
   { id: "inventario", label: "Inventario", grupo: "Equipo", desc: "Qué se le entregó a cada persona: correas, bolsas, arneses.", busca: "entregas insumos correa bolsa arnes materiales" },
-  { id: "usuarios", label: "Usuarios", grupo: "Equipo", desc: "Cuentas del equipo, roles y qué pestañas ve cada uno.", busca: "permisos rol cuenta clave contraseña acceso" },
+  { id: "usuarios", label: "Usuarios", grupo: "Administración", desc: "Cuentas del equipo, roles y qué pestañas ve cada uno.", busca: "permisos rol cuenta clave contraseña acceso" },
   { id: "seguimiento", label: "Seguimiento", grupo: "Prospección", desc: "Prospectos: quién preguntó, en qué va y cuándo volver a contactarlo.", busca: "prospecto venta lead interesado contacto" },
-  { id: "mail", label: "Mail", grupo: "Prospección", desc: "El correo de contacto@howria.cl: leer y responder sin salir de la app.", busca: "correo email responder bandeja mensajes" },
+  { id: "mail", label: "Mail", grupo: "Administración", desc: "El correo de contacto@howria.cl: leer y responder sin salir de la app.", busca: "correo email responder bandeja mensajes" },
 ];
-const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Agenda general", "Clientes y dinero", "Equipo", "Prospección"];
+// El orden de los títulos del menú. Las pestañas con grupo "" (Inicio y
+// Calendario) van arriba, sueltas, antes de todos estos.
+//
+// "Equipo" y "Prospección" siguen acá aunque hoy no dibujen ningún título:
+// sus pestañas existen pero están todas en "Más", y el buscador muestra el
+// grupo de cada una, así que sacarlos dejaría esos resultados sin
+// contexto. Un grupo sin pestañas visibles no pinta nada (entradasDeMenu
+// devuelve vacío), así que no estorban.
+const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Clientes y dinero", "Administración", "Equipo", "Prospección"];
 
 // Pestañas que hoy casi no se usan y que Javier pidió sacar del camino
 // ("déjalas como +más y que no molesten, en un futuro trabajaré en
@@ -4462,6 +4470,9 @@ function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
   if (!tabs) return null;
 
   const secundarias = tabs.filter((t) => esTabSecundario(t.id));
+  // Las pestañas sin grupo (hoy Calendario). Inicio se salta: ya estás
+  // parado ahí cuando ves este launcher.
+  const sueltas = entradasDeMenu(tabs, "").filter((t) => t.id !== "inicio");
 
   // Un mismo dibujo para el grid principal y para el de "Más", así los
   // dos se ven igual y un cambio de estilo no hay que hacerlo dos veces.
@@ -4504,6 +4515,7 @@ function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
           <span>Buscar una función…</span>
         </button>
       )}
+      {sueltas.length > 0 && <div style={{ marginBottom: 18 }}>{grid(sueltas)}</div>}
       {ORDEN_GRUPOS.map((grupo) => {
         const tabsDelGrupo = entradasDeMenu(tabs, grupo);
         if (tabsDelGrupo.length === 0) return null;
@@ -5287,6 +5299,18 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBusca
                 <span style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>Buscar una función…</span>
               </button>
             )}
+            {/* Sin grupo (Calendario). "resto" ya excluye Inicio. */}
+            {entradasDeMenu(resto, "").map((t) => {
+              const Icono = ICONOS_TAB[t.id] || Home;
+              const activo = entradaActiva(t, tab);
+              return (
+                <button key={t.id} onClick={() => ir(destinoDeEntrada(t))}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: activo ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
+                  <Icono size={17} color={NAVY} />
+                  <span style={{ fontSize: 13.5, color: INK, fontWeight: activo ? 700 : 400 }}>{t.label}</span>
+                </button>
+              );
+            })}
             {ORDEN_GRUPOS.map((grupo) => {
               const tabsDelGrupo = entradasDeMenu(resto, grupo);
               if (tabsDelGrupo.length === 0) return null;
@@ -6012,16 +6036,23 @@ export default function HowriaAdmin() {
               <span style={{ flex: 1 }}>Buscar…</span>
               <span style={{ fontSize: 10.5, color: "#6E7B8C", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
             </button>
-            {tabs.some((t) => t.id === "inicio") && (
-              <button onClick={() => setTab("inicio")} title={TODOS_LOS_TABS.find((t) => t.id === "inicio")?.desc}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "none", borderRadius: 8,
-                  background: tab === "inicio" ? "rgba(201,150,47,0.16)" : "none", cursor: "pointer", textAlign: "left",
-                  color: tab === "inicio" ? GOLD : "#C9CEDA", fontWeight: tab === "inicio" ? 700 : 500, fontSize: 13.5,
-                }}>
-                <Home size={16} /> Inicio
-              </button>
-            )}
+            {/* Las pestañas sin grupo (Inicio y Calendario) van arriba,
+                sueltas. Calendario está acá y no dentro de un negocio
+                porque muestra los dos: paseos, evaluaciones y clases. */}
+            {entradasDeMenu(tabs, "").map((t) => {
+              const Icono = ICONOS_TAB[t.id] || Home;
+              const activo = entradaActiva(t, tab);
+              return (
+                <button key={t.id} onClick={() => setTab(destinoDeEntrada(t))} title={t.desc}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "none", borderRadius: 8,
+                    background: activo ? "rgba(201,150,47,0.16)" : "none", cursor: "pointer", textAlign: "left",
+                    color: activo ? GOLD : "#C9CEDA", fontWeight: activo ? 700 : 500, fontSize: 13.5,
+                  }}>
+                  <Icono size={16} /> {t.label}
+                </button>
+              );
+            })}
             {ORDEN_GRUPOS.map((grupo) => {
               const tabsDelGrupo = entradasDeMenu(tabs, grupo);
               if (tabsDelGrupo.length === 0) return null;

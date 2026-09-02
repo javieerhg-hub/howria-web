@@ -32,16 +32,24 @@ describe("metadata de las pestañas", () => {
     expect(esTabSecundario("inicio")).toBe(false);
   });
 
-  it("las secundarias no se llevan un grupo entero por delante", () => {
-    // Si todas las pestañas de un grupo quedaran escondidas, el grupo
-    // desaparece del menú sin aviso. Hoy no pasa, y si algún día pasa
-    // conviene que sea una decisión y no un descuido.
+  it("solo los grupos que sabemos quedan sin pestañas visibles", () => {
+    // Un grupo cuyas pestañas están todas en "Más" no dibuja título: no
+    // rompe nada, pero tiene que ser una decisión y no un descuido.
+    //
+    // Los dos de abajo son deliberados. Siguen declarados porque sus
+    // pestañas existen (dentro de "Más") y el buscador muestra el grupo
+    // de cada resultado — sacarlos dejaría esos resultados sin contexto.
+    // Si aparece un tercero, casi seguro es que alguien movió una
+    // pestaña sin darse cuenta de que dejaba el grupo vacío.
+    const vaciosAPosta = ["Equipo", "Prospección"];
     const grupos = [...new Set(TODOS_LOS_TABS.map((t) => t.grupo).filter(Boolean))];
-    for (const g of grupos) {
-      const delGrupo = TODOS_LOS_TABS.filter((t) => t.grupo === g);
-      const visibles = delGrupo.filter((t) => !esTabSecundario(t.id));
-      expect(visibles.length, `el grupo "${g}" se quedaría sin ninguna pestaña visible`).toBeGreaterThan(0);
-    }
+    const vacios = grupos.filter((g) => !TODOS_LOS_TABS.some((t) => t.grupo === g && !esTabSecundario(t.id)));
+    expect(vacios.sort()).toEqual(vaciosAPosta.sort());
+  });
+
+  it("Inicio y Calendario son las únicas sueltas, sin grupo", () => {
+    const sueltas = TODOS_LOS_TABS.filter((t) => !t.grupo).map((t) => t.id);
+    expect(sueltas).toEqual(["inicio", "calendario"]);
   });
 });
 
