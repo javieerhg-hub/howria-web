@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
-  FileText, TrendingUp, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
+  FileText, TrendingUp, Wallet, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
   GraduationCap, KeyRound, MessageCircle, Send, Package,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
@@ -43,6 +43,7 @@ const PanelAdmin = React.lazy(() => import("./tabs/PanelAdmin.jsx").then((m) => 
 const EnviarNotificaciones = React.lazy(() => import("./tabs/EnviarNotificaciones.jsx").then((m) => ({ default: m.EnviarNotificaciones })));
 const Inventario = React.lazy(() => import("./tabs/Inventario.jsx").then((m) => ({ default: m.Inventario })));
 const Paseadores = React.lazy(() => import("./tabs/Paseadores.jsx").then((m) => ({ default: m.Paseadores })));
+const FinanzasPersonales = React.lazy(() => import("./tabs/FinanzasPersonales.jsx").then((m) => ({ default: m.FinanzasPersonales })));
 
 // Aparte de las pestañas de arriba: la ruta guiada de Mis Paseos es su
 // propio chunk, ni en este archivo (se carga siempre, para todo rol, y no
@@ -305,6 +306,7 @@ function usuarioToDb(u) {
     capacitacion_completada: u.capacitacionCompletada || [],
     capacidad_maxima: u.capacidadMaxima || null,
     meta_mensual: u.metaMensual || null,
+    paseador_vinculado: u.paseadorVinculado || null,
   };
 }
 
@@ -320,6 +322,9 @@ function dbToUsuario(row) {
     capacidadMaxima: row.capacidad_maxima,
     metaMensual: row.meta_mensual,
     calendarioToken: row.calendario_token,
+    // Con que cuenta de terreno trabaja esta persona, cuando ademas de
+    // administrar sale a pasear (ver Finanzas personales, database/120).
+    paseadorVinculado: row.paseador_vinculado || null,
   };
 }
 
@@ -1444,6 +1449,7 @@ export const TODOS_LOS_TABS = [
   { id: "boletas", label: "Boletas", grupo: "Clientes y dinero" },
   { id: "facturas", label: "Facturas", grupo: "Clientes y dinero" },
   { id: "finanzas", label: "Finanzas", grupo: "Clientes y dinero" },
+  { id: "finanzas-personales", label: "Finanzas personales", grupo: "Clientes y dinero" },
   { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo" },
   { id: "notificaciones", label: "Notificaciones", grupo: "Equipo" },
@@ -1498,6 +1504,7 @@ const ICONOS_TAB = {
   boletas: Receipt,
   facturas: FileText,
   finanzas: TrendingUp,
+  "finanzas-personales": Wallet,
   paseadores: Footprints,
   pagos: Banknote,
   "pago-adiestramiento": Banknote,
@@ -5676,6 +5683,7 @@ export default function HowriaAdmin() {
         {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} citasAgenda={citasAgenda} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} onVerBoletas={tabsPermitidosRol.includes("boletas") ? () => setTab("boletas") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
+        {tab === "finanzas-personales" && tabsPermitidosRol.includes("finanzas-personales") && <FinanzasPersonales usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} citasAgenda={citasAgenda} reprogramaciones={reprogramaciones} user={user} cargando={cargandoClientes || cargandoBoletas} />}
         {tab === "pago-adiestramiento" && tabsPermitidosRol.includes("pago-adiestramiento") && <PagoAdiestramiento usuarios={usuarios} clientes={clientes} citasAgenda={citasAgenda} setCitas={setCitasAgenda} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} nombreUsuario={user.nombre} />}
         {tab === "pagos" && tabsPermitidosRol.includes("pagos") && <PagoTrabajadores boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} usuarios={usuarios} registroPaseos={registroPaseos} pagosRegistrados={pagosRegistrados} setPagosRegistrados={setPagosRegistrados} cargandoPagos={cargandoPagos} ajustesPago={ajustesPago} setAjustesPago={setAjustesPago} nombreUsuario={user.nombre} reclamosPago={reclamosPago} resolverReclamoPago={resolverReclamoPago} />}
         {tab === "coordinacion" && tabsPermitidosRol.includes("coordinacion") && <Coordinacion clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} setTab={setTab} setMapaPaseadorSel={setMapaPaseadorSel} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} cargandoClientes={cargandoClientes} reprogramaciones={reprogramaciones} moverPaseo={moverPaseo} eliminarReprogramacion={eliminarReprogramacion} user={user} citasAgenda={citasAgenda} />}
