@@ -305,6 +305,11 @@ function gastoPersonalToDb(g) {
     fecha: g.fecha,
     fijo: g.fijo || false,
     fijo_hasta: g.fijoHasta || null,
+    // Un gasto escrito a mano nace confirmado: no hay nada que revisar.
+    // Los que llegan desde el iPhone (api/gastos.js) entran con false y
+    // se confirman desde la bandeja de Finanzas personales.
+    confirmado: g.confirmado !== false,
+    origen: g.origen || "manual",
   };
 }
 
@@ -317,6 +322,13 @@ function dbToGastoPersonal(row) {
     fecha: row.fecha,
     fijo: row.fijo || false,
     fijoHasta: row.fijo_hasta || null,
+    // Las filas de antes de la migración 125 llegan sin estas columnas:
+    // se las trata como gastos a mano ya confirmados, que es lo que son.
+    confirmado: row.confirmado !== false,
+    origen: row.origen || "manual",
+    // Solo lectura — el texto tal como lo mandó el teléfono, por si el
+    // monto o el comercio salieron mal parseados y hay que corregirlos.
+    origenTexto: row.origen_texto || null,
   };
 }
 

@@ -287,7 +287,10 @@ export function FinanzasPersonales({
 
   const gastos = useMemo(() => {
     const filas = gastosPersonales
-      .filter((g) => gastoCuentaEn(g, mes, anio))
+      // Los que entraron solos desde el teléfono y aún no se revisan NO
+      // cuentan: un cobro raro, una devolución o una prueba no deben
+      // mover el "te queda limpio" sin que Javier los haya mirado.
+      .filter((g) => g.confirmado !== false && gastoCuentaEn(g, mes, anio))
       .sort((a, b) => b.monto - a.monto);
     const porCategoria = CATEGORIAS_GASTO
       .map((c) => ({ ...c, total: filas.filter((g) => g.categoria === c.id).reduce((a, g) => a + g.monto, 0) }))
@@ -300,6 +303,20 @@ export function FinanzasPersonales({
       fijos: filas.filter((g) => g.fijo).reduce((a, g) => a + g.monto, 0),
     };
   }, [gastosPersonales, mes, anio]);
+
+  // La bandeja: lo que llegó solo desde el iPhone y falta revisar. Va sin
+  // filtrar por mes a propósito — una compra del 30 se revisa el 2 del mes
+  // siguiente, y filtrada por mes desaparecería sin que nadie la viera.
+  const porRevisar = useMemo(
+    () => gastosPersonales
+      .filter((g) => g.confirmado === false)
+      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))),
+    [gastosPersonales],
+  );
+
+  function confirmarGasto(id, categoria) {
+    setGastosPersonales((prev) => prev.map((g) => (g.id === id ? { ...g, confirmado: true, categoria } : g)));
+  }
 
   const limpio = ganare - gastos.total;
 
@@ -739,6 +756,52 @@ export function FinanzasPersonales({
           los ves — ni los otros administradores pueden. Lo que marques como
           “todos los meses” se repite solo, sin que lo vuelvas a escribir.
         </p>
+
+        {/* La bandeja de lo que entró solo desde el iPhone. Aparece arriba
+            del formulario porque es lo que hay que resolver; si no hay
+            nada por revisar, no ocupa espacio. */}
+        {porRevisar.length > 0 && (
+          <div style={{ border: `1px solid ${GOLD}`, background: "#FBF6E9", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+            <p style={{ margin: "0 0 3px", fontSize: 13.5, fontWeight: 700, color: NAVY }}>
+              {porRevisar.length} gasto(s) por revisar
+            </p>
+            <p style={{ ...hint, margin: "0 0 12px" }}>
+              Llegaron solos desde tu teléfono. Ponles categoría y confirma para que cuenten,
+              o descártalos si no eran tuyos.
+            </p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {porRevisar.map((g) => (
+                <div key={g.id} style={{ background: "#FFFFFF", border: "1px solid #EFE2C4", borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: NAVY, flex: "1 1 140px", minWidth: 0 }}>{g.descripcion}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(g.monto)}</span>
+                    <span style={{ fontSize: 11.5, color: "#9A9179" }}>{g.fecha}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <select defaultValue={g.categoria || "otros"} aria-label={`Categoría de ${g.descripcion}`}
+                      onChange={(e) => confirmarGasto(g.id, e.target.value)}
+                      style={{ ...input, margin: 0, flex: "1 1 150px", fontSize: 13 }}>
+                      {CATEGORIAS_GASTO.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.nombre}</option>)}
+                    </select>
+                    <button type="button" onClick={() => confirmarGasto(g.id, g.categoria || "otros")}
+                      style={{ border: "none", background: NAVY, color: "#FFFFFF", borderRadius: 20, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flex: "none" }}>
+                      Confirmar
+                    </button>
+                    <button type="button" onClick={() => borrarGasto(g.id)}
+                      style={{ border: `1px solid ${RUST}`, background: "none", color: RUST, borderRadius: 20, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", flex: "none" }}>
+                      Descartar
+                    </button>
+                  </div>
+                  {g.origenTexto && (
+                    <p style={{ margin: "8px 0 0", fontSize: 11, color: "#A2977C" }} title="Lo que mandó el teléfono, por si el monto o el nombre quedaron mal">
+                      Tu teléfono envió: {g.origenTexto}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={agregarGasto} style={{ display: "grid", gap: 8, marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
