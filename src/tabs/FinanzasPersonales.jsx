@@ -144,6 +144,10 @@ export function FinanzasPersonales({
   // (ver lib/reparto.js), así que contar los realizados del cliente sin
   // mirar quién lo hizo da el costo completo y no lo parte en dos.
   const otros = useMemo(() => {
+    // Sin el vínculo no se sabe cuál cartera es la propia, y entonces
+    // "los demás" serían todos — incluida la suya. El titular quedaría
+    // enorme y falso, así que hasta elegir la cuenta no se calcula nada.
+    if (!miPaseador) return { grupos: [], queda: 0, quedaCobrado: 0 };
     const desde = new Date(anio, mes, 1);
     const hasta = new Date(anio, mes + 1, 1);
     const grupos = enTerreno
@@ -359,7 +363,12 @@ export function FinanzasPersonales({
           el costo todavía sube.
         </p>
 
-        {otros.grupos.length === 0 ? (
+        {!miPaseador ? (
+          <p style={hint}>
+            Elige arriba con qué cuenta de terreno paseas tú. Hasta saber cuál cartera es
+            la tuya, no se puede separar lo que dejan los demás de lo que ya es tuyo.
+          </p>
+        ) : otros.grupos.length === 0 ? (
           <p style={hint}>Nadie más tiene clientes de paseo con movimiento en este ciclo.</p>
         ) : (
           <div style={{ display: "grid", gap: 16 }}>
