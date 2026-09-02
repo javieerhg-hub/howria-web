@@ -171,7 +171,7 @@ export function FinanzasPersonales({
     // Sin el vínculo no se sabe cuál cartera es la propia, y entonces
     // "los demás" serían todos — incluida la suya. El titular quedaría
     // enorme y falso, así que hasta elegir la cuenta no se calcula nada.
-    if (!miPaseador) return { grupos: [], mios: [], aparte: [], queda: 0, quedaCobrado: 0 };
+    if (!miPaseador) return { grupos: [], mios: [], aparte: [], queda: 0, quedaCobrado: 0, quedaSiCompleta: 0, quedaCobradoSiCompleta: 0 };
     const desde = new Date(anio, mes, 1);
     const hasta = new Date(anio, mes + 1, 1);
     const grupos = enTerreno
@@ -213,6 +213,11 @@ export function FinanzasPersonales({
           // sin serlo — hay que decirlo, no callarlo.
           sinTarifa: filas.filter((f) => f.tarifa === 0 && f.hechos > 0).length,
           quedaCobrado: filas.filter((f) => f.pagado > 0).reduce((a, f) => a + (f.pagado - f.leToca), 0),
+          // La misma cuenta pero descontando el costo del mes COMPLETO. El
+          // titular usa el cierre, asi que "ya entro" tiene que descontar
+          // ese mismo costo — con el de hoy daba mas que el total y
+          // "falta cobrar" salia negativo.
+          quedaCobradoSiCompleta: filas.filter((f) => f.pagado > 0).reduce((a, f) => a + (f.pagado - f.leTocaSiCompleta), 0),
         };
       })
       .filter((g) => g.filas.length > 0)
@@ -227,11 +232,17 @@ export function FinanzasPersonales({
       aparte: grupos.filter((g) => !g.esMio),
       queda: mios.reduce((a, g) => a + g.queda, 0),
       quedaCobrado: mios.reduce((a, g) => a + g.quedaCobrado, 0),
+      quedaSiCompleta: mios.reduce((a, g) => a + g.quedaSiCompleta, 0),
+      quedaCobradoSiCompleta: mios.reduce((a, g) => a + g.quedaCobradoSiCompleta, 0),
     };
   }, [enTerreno, miPaseador, clientes, boletasEmitidas, registroPaseos, reprogramaciones, mes, anio]);
 
-  const ganare = paseos.cobrado + adiestramiento.queda + otros.queda;
-  const yaEntro = paseos.pagado + adiestramiento.quedaCobrado + otros.quedaCobrado;
+  // El titular usa el margen AL CIERRE del mes, no el de hoy (decision de
+  // Javier). A principio de mes casi nada esta marcado, asi que el margen
+  // de hoy sale inflado y luego baja solo — un titular que empieza alto y
+  // se desinfla no sirve para planificar.
+  const ganare = paseos.cobrado + adiestramiento.queda + otros.quedaSiCompleta;
+  const yaEntro = paseos.pagado + adiestramiento.quedaCobrado + otros.quedaCobradoSiCompleta;
 
   if (cargando) return <SkeletonLista filas={6} />;
 
@@ -261,7 +272,7 @@ export function FinanzasPersonales({
       <div className="howria-card" style={{ ...tarjeta, marginBottom: 20 }}>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           <Kpi titulo={`Ganarás en ${MESES[mes]}`} valor={fmtCLP(ganare)} color={VERDE}
-            detalle={`Mis paseos ${fmtCLP(paseos.cobrado)} · adiestramiento ${fmtCLP(adiestramiento.queda)} · otros paseadores ${fmtCLP(otros.queda)}`} />
+            detalle={`Mis paseos ${fmtCLP(paseos.cobrado)} · adiestramiento ${fmtCLP(adiestramiento.queda)} · otros paseadores ${fmtCLP(otros.quedaSiCompleta)} al cierre`} />
           <Kpi titulo="De eso, ya entró" valor={fmtCLP(yaEntro)}
             detalle={ganare > 0 ? `Falta cobrar ${fmtCLP(ganare - yaEntro)}` : "Todavía no hay nada emitido"} />
           <Kpi titulo="Clientes que cobraste" valor={`${paseos.conBoleta} de ${paseos.filas.length}`}
@@ -402,6 +413,11 @@ export function FinanzasPersonales({
         <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
           Solo suma la gente que trabaja así contigo. Quien va por su cuenta queda
           abajo, apagado y sin sumar, hasta que lo marques.
+          {otros.quedaSiCompleta !== otros.queda && (
+            <> El titular de arriba usa el <b>cierre del mes</b> ({fmtCLP(otros.quedaSiCompleta)});
+            acá abajo ves cómo va hoy ({fmtCLP(otros.queda)}), y el botón de cada persona
+            cambia entre las dos.</>
+          )}
         </p>
 
         {!miPaseador ? (
