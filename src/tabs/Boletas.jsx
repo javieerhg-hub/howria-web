@@ -95,6 +95,7 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [diasSemanaPersonalizado, setDiasSemanaPersonalizado] = useState([]);
   const [emitida, setEmitida] = useState(null);
+  const resultadoRef = useRef(null);
   const [paraConfirmar, setParaConfirmar] = useState(null);
   const [generando, setGenerando] = useState(false);
   // Ref, no solo useState: dos clics en el mismo instante (doble clic real)
@@ -303,6 +304,14 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
     setEmitida(nueva);
     setParaConfirmar(null);
     onRegistrarBoleta?.(nueva);
+    // En el celular la boleta emitida queda debajo del formulario entero y
+    // de la imagen: había que scrollear media pantalla para llegar a
+    // "Enviar por WhatsApp", que es lo que uno quiere hacer justo después
+    // de emitirla. El timeout deja que React pinte el bloque antes de
+    // buscarlo.
+    setTimeout(() => {
+      resultadoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }
 
   useEffect(() => {
@@ -743,16 +752,39 @@ function FormularioBoletaPaseo({ clientes, boletasEmitidas, onRegistrarBoleta, r
             Genera la boleta para ver aquí la imagen final, lista para descargar.
           </div>
         ) : (
-          <div>
+          <div ref={resultadoRef}>
+            {/* Las acciones van ARRIBA de la imagen: enviarla es lo que uno
+                quiere hacer justo después de emitirla, y la imagen es
+                larga — dejarlas abajo obligaba a scrollear la boleta
+                entera para llegar al botón. */}
+            <div style={{ background: "#D8ECDE", border: "1px solid #A9CDB6", borderRadius: 10, padding: 14, marginBottom: 12 }}>
+              <p style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 700, color: "#2F6A46" }}>
+                Boleta N°{String(emitida.numero).padStart(3, "0")} emitida · {fmtCLP(emitida.total)}
+              </p>
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2E5C41" }}>
+                {emitida.cliente}{emitida.perro ? ` · 🐾 ${emitida.perro}` : ""} — {emitida.mes} {emitida.anio}
+              </p>
+              <button onClick={enviarWhatsapp}
+                style={{ ...botonPrincipal, marginTop: 0, width: "100%", background: "#2F6A46", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                Enviar a {(emitida.cliente || "").split(/[,\s]/)[0]} por WhatsApp
+              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={descargarPNG} style={{ ...botonSecundario, flex: 1, margin: 0, padding: "8px 10px", fontSize: 12.5 }}>Descargar PNG</button>
+                <button onClick={imprimirPDF} style={{ ...botonSecundario, flex: 1, margin: 0, padding: "8px 10px", fontSize: 12.5 }}>Guardar PDF</button>
+              </div>
+              {!cliente?.telefono && (
+                <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#8A6A1E" }}>
+                  Este cliente no tiene teléfono en su ficha: se abrirá WhatsApp sin destinatario.
+                </p>
+              )}
+            </div>
+
             <div style={{ border: "1px solid #EDE4CE", borderRadius: 8, overflow: "hidden" }}>
               <canvas ref={canvasRef} style={{ width: "100%", display: "block" }} />
             </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              <button onClick={descargarPNG} style={{ ...botonPrincipal, marginTop: 0 }}>Descargar PNG</button>
-              <button onClick={imprimirPDF} style={{ ...botonSecundario }}>Guardar como PDF</button>
-              <button onClick={enviarWhatsapp} style={{ ...botonSecundario, borderColor: "#2F6A46", color: "#2F6A46" }}>Enviar por WhatsApp</button>
-            </div>
-            <p style={{ ...hint, marginTop: 8 }}>WhatsApp Web no permite adjuntar la imagen automáticamente — se abre el chat con el mensaje listo; descarga el PNG y adjúntalo ahí.</p>
+            <p style={{ ...hint, marginTop: 8 }}>
+              En el celular, &ldquo;Enviar por WhatsApp&rdquo; comparte el PDF ya adjunto. En el computador WhatsApp no deja adjuntarlo solo: se descarga el PDF y se abre el chat con el mensaje listo para adjuntarlo.
+            </p>
           </div>
         )}
       </div>
@@ -788,6 +820,7 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
   const [packPrecio, setPackPrecio] = useState(0);
   const [mensajePersonalizado, setMensajePersonalizado] = useState("");
   const [emitida, setEmitida] = useState(null);
+  const resultadoRef = useRef(null);
   const [paraConfirmar, setParaConfirmar] = useState(null);
   const [generando, setGenerando] = useState(false);
   const generandoRef = useRef(false);
@@ -938,6 +971,11 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
     setEmitida(nueva);
     setParaConfirmar(null);
     onRegistrarBoleta?.(nueva);
+    // Igual que en la boleta de paseos: llevar la vista al resultado para
+    // no tener que buscar el botón de enviar.
+    setTimeout(() => {
+      resultadoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }
 
   useEffect(() => {
@@ -1280,14 +1318,33 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
         {!emitida ? (
           <p style={hint}>Completa el formulario y genera la boleta para verla aquí.</p>
         ) : (
-          <>
-            <canvas ref={canvasRef} style={{ width: "100%", maxWidth: 380, border: "1px solid #EDE4CE", borderRadius: 8, display: "block", margin: "0 auto 16px" }} />
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={descargarPNG} style={{ ...botonPrincipal, marginTop: 0 }}>Descargar PNG</button>
-              <button onClick={descargarPDF} style={{ ...botonSecundario, borderColor: NAVY, color: NAVY }}>Descargar PDF</button>
-              <button onClick={enviarWhatsapp} style={{ ...botonSecundario, borderColor: "#2F6A46", color: "#2F6A46" }}>Enviar por WhatsApp</button>
+          <div ref={resultadoRef}>
+            {/* Mismo criterio que la boleta de paseos: enviar es lo que uno
+                quiere hacer justo después de emitir, así que va arriba de
+                la imagen y no debajo. */}
+            <div style={{ background: "#D8ECDE", border: "1px solid #A9CDB6", borderRadius: 10, padding: 14, marginBottom: 12 }}>
+              <p style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 700, color: "#2F6A46" }}>
+                Boleta N°{String(emitida.numero).padStart(3, "0")} emitida · {fmtCLP(emitida.total)}
+              </p>
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2E5C41" }}>
+                {emitida.cliente}{emitida.perro ? ` · 🐾 ${emitida.perro}` : ""} — adiestramiento
+              </p>
+              <button onClick={enviarWhatsapp}
+                style={{ ...botonPrincipal, marginTop: 0, width: "100%", background: "#2F6A46" }}>
+                Enviar a {(emitida.cliente || "").split(" ")[0]} por WhatsApp
+              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={descargarPNG} style={{ ...botonSecundario, flex: 1, margin: 0, padding: "8px 10px", fontSize: 12.5 }}>Descargar PNG</button>
+                <button onClick={descargarPDF} style={{ ...botonSecundario, flex: 1, margin: 0, padding: "8px 10px", fontSize: 12.5 }}>Descargar PDF</button>
+              </div>
+              {!cliente?.telefono && (
+                <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#8A6A1E" }}>
+                  Este cliente no tiene teléfono en su ficha: se abrirá WhatsApp sin destinatario.
+                </p>
+              )}
             </div>
-          </>
+            <canvas ref={canvasRef} style={{ width: "100%", maxWidth: 380, border: "1px solid #EDE4CE", borderRadius: 8, display: "block", margin: "0 auto" }} />
+          </div>
         )}
       </div>
     </div>
