@@ -88,6 +88,23 @@ describe("fusiones del menú", () => {
     expect(entradas.map((e) => e.id)).toEqual(["clientes"]);
   });
 
+  it("Pagar junta las dos mitades y quedan en el mismo grupo", () => {
+    // Antes vivian en grupos distintos del menu: 'pagos' en Equipo y
+    // 'pago-adiestramiento' en Adiestramiento. Era la misma tarea en dos
+    // secciones que no se tocan.
+    expect(fusionDeTab("pagos")?.id).toBe("pagar");
+    expect(fusionDeTab("pago-adiestramiento")?.id).toBe("pagar");
+    const grupoDe = (id) => TODOS_LOS_TABS.find((t) => t.id === id).grupo;
+    expect(grupoDe("pagos")).toBe("Clientes y dinero");
+    expect(grupoDe("pago-adiestramiento")).toBe("Clientes y dinero");
+  });
+
+  it("el grupo del dinero queda en el orden Cobrar, Pagar, Finanzas", () => {
+    const delGrupo = TODOS_LOS_TABS.filter((t) => t.grupo === "Clientes y dinero");
+    const ids = entradasDeMenu(delGrupo, "Clientes y dinero").map((e) => e.id);
+    expect(ids).toEqual(["clientes", "cobrar", "pagar", "finanzas", "finanzas-personales"]);
+  });
+
   it("toda sub-pestaña declarada existe como pestaña real", () => {
     const ids = TODOS_LOS_TABS.map((t) => t.id);
     for (const t of TODOS_LOS_TABS) {

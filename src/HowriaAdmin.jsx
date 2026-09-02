@@ -1483,14 +1483,14 @@ export const TODOS_LOS_TABS = [
   { id: "paseadores", label: "Paseadores", grupo: "Paseos", desc: "Perfil de cada paseador: paseos del mes, plata por cliente y su meta.", busca: "perfil rendimiento meta equipo" },
   { id: "agenda", label: "Agenda", grupo: "Adiestramiento", desc: "Evaluaciones y clases: confirmar, mover, cancelar y la disponibilidad del adiestrador.", busca: "cita evaluacion clase confirmar cancelar horario disponibilidad" },
   { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento", desc: "Los clientes que toman clases: packs, avance y qué les toca ahora.", busca: "clases pack avance entrenamiento" },
-  { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Adiestramiento", desc: "Cuánto se le debe al adiestrador por cada evaluación y clase.", busca: "pagar sueldo adiestrador entrenador liquidacion plata" },
   { id: "calendario", label: "Calendario", grupo: "Agenda general", desc: "Paseos, evaluaciones y clases: el mes completo, o el día hora por hora.", busca: "mes dia itinerario horario hora agenda grilla bloques arrastrar vista" },
   { id: "clientes", label: "Clientes", grupo: "Clientes y dinero", desc: "La ficha madre de cada cliente — de acá salen boletas, finanzas y perfiles.", busca: "ficha perro tutor tarifa direccion telefono dueño" },
   { id: "boletas", label: "Boletas", grupo: "Clientes y dinero", desc: "Emitir una boleta nueva, de paseos o de adiestramiento.", busca: "cobrar emitir crear nueva cuenta" },
   { id: "facturas", label: "Facturas", grupo: "Clientes y dinero", desc: "Todas las boletas ya emitidas y en qué estado está cada una.", busca: "cobrar emitidas pagada pendiente deuda estado" },
+  { id: "pagos", label: "Pago trabajadores", grupo: "Clientes y dinero", desc: "Cuánto se le debe a cada paseador y registrar que ya se le pagó.", busca: "pagar sueldo paseador liquidacion plata comprobante trabajadores" },
+  { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Clientes y dinero", desc: "Cuánto se le debe al adiestrador por cada evaluación y clase.", busca: "pagar sueldo adiestrador entrenador liquidacion plata" },
   { id: "finanzas", label: "Finanzas", grupo: "Clientes y dinero", desc: "Cuánto entró, cuánto salió y qué queda, con costos y rentabilidad.", busca: "plata ingresos caja margen costos gastos utilidad" },
   { id: "finanzas-personales", label: "Finanzas personales", grupo: "Clientes y dinero", desc: "Tu plata, la que no es de la empresa: tus clientes, tu margen y tus gastos.", busca: "mia mio personal javier liquidacion propia" },
-  { id: "pagos", label: "Pago trabajadores", grupo: "Equipo", desc: "Cuánto se le debe a cada paseador y registrar que ya se le pagó.", busca: "pagar sueldo paseador liquidacion plata comprobante" },
   { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo", desc: "Objetivos del mes y tareas pendientes del equipo.", busca: "metas tareas objetivos pendientes" },
   { id: "notificaciones", label: "Notificaciones", grupo: "Equipo", desc: "Mandar un aviso push a mano a un paseador o entrenador.", busca: "push aviso mensaje avisar mandar" },
   { id: "inventario", label: "Inventario", grupo: "Equipo", desc: "Qué se le entregó a cada persona: correas, bolsas, arneses.", busca: "entregas insumos correa bolsa arnes materiales" },
@@ -1544,6 +1544,23 @@ const FUSIONES = [
     subs: [
       { id: "boletas", label: "Emitir" },
       { id: "facturas", label: "Emitidas" },
+    ],
+  },
+  {
+    id: "pagar",
+    label: "Pagar",
+    grupo: "Clientes y dinero",
+    icono: Banknote,
+    desc: "Lo que se le debe a cada persona del equipo, y registrar el pago.",
+    // Antes estas dos vivían en grupos distintos del menú ("pagos" en
+    // Equipo, "pago-adiestramiento" en Adiestramiento), que era lo más
+    // repartido que tenía la app: la misma tarea en dos secciones que no
+    // se tocan. Se calculan distinto —el paseador cobra por paseo a una
+    // tarifa fija del cliente, el adiestrador se cobra ítem por ítem— y
+    // por eso siguen siendo dos pantallas, no una sola mezclada.
+    subs: [
+      { id: "pagos", label: "Paseadores" },
+      { id: "pago-adiestramiento", label: "Adiestradores" },
     ],
   },
 ];
@@ -1618,6 +1635,7 @@ export const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrado
 const ICONOS_TAB = {
   // Entradas fusionadas del menu (ver FUSIONES) — comparten el lookup.
   cobrar: Receipt,
+  pagar: Banknote,
   "mis-paseos": Footprints,
   coordinacion: MapPinned,
   mapa: MapIcon,
@@ -6102,7 +6120,7 @@ export default function HowriaAdmin() {
               un monitor grande dejaban espacio vacío a los costados con el
               ancho fijo de 1040px del resto de la app — mejor aprovechar el
               espacio en vez de forzar scroll horizontal antes de tiempo. */}
-          <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
+          <div className="howria-main" style={{ padding: "28px 32px", maxWidth: ["facturas", "finanzas", "pagos", "pago-adiestramiento"].includes(tab) ? 1400 : 1040, margin: "0 auto" }}>
       {/* Este fallback aparece en CADA cambio de pestaña (mientras baja su
           chunk), así que es el estado de carga más visto de la app — un
           esqueleto con la forma genérica de una pestaña (título, bajada y
