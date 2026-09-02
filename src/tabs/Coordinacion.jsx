@@ -587,7 +587,8 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   const sinDiasAsignados = useMemo(() => clientes.filter((c) =>
     (!(c.tipoServicio || []).length || (c.tipoServicio || []).includes("paseos")) &&
     (c.estadoCliente || "activo") === "activo" &&
-    !(c.diasHabituales || []).length), [clientes]);
+    !(c.diasHabituales || []).length &&
+    !(c.diasPuntuales || []).length), [clientes]);
 
   const calendarioDia = useMemo(() => construirEstadoDia(diaVista, esHoyVista), [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
   const calendarioPorPaseador = useMemo(() => agruparPorPaseador(calendarioDia), [calendarioDia]);
@@ -836,7 +837,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             {sinDiasAsignados.length} cliente(s) de paseos no aparecen en ningún día
           </p>
           <p style={{ margin: "2px 0 8px", fontSize: 12, color: "#8A6A1E" }}>
-            No tienen días habituales marcados, así que no salen en el calendario y nadie les puede marcar un paseo. Ponles sus días en la ficha para que aparezcan.
+            No tienen días marcados, así que no salen en el calendario y nadie les puede marcar un paseo. En su ficha: ponles sus días de la semana, o marca <b>&ldquo;No tiene días fijos&rdquo;</b> y elige las fechas si sale cuando el tutor avisa.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {sinDiasAsignados.map((c) => (
