@@ -119,6 +119,20 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
   // actual; los cobros del mes que viene se preparan desde el 20, así que
   // hay que poder adelantarse.
   const [mesPuntual, setMesPuntual] = useState(0);
+  // El calendario de fechas sueltas es la excepción, no la regla: casi
+  // todos los clientes tienen días fijos. Va detrás de una casilla para
+  // no ocupar media ficha con algo que la mayoría no usa.
+  //
+  // Arranca encendida si el cliente ya tiene fechas guardadas — si no,
+  // quedarían activas pero invisibles, que es peor que no tenerlas.
+  const [usaFechasSueltas, setUsaFechasSueltas] = useState(() => ((inicial?.diasPuntuales || []).length > 0));
+
+  function alternarFechasSueltas(activar) {
+    setUsaFechasSueltas(activar);
+    // Al apagarla se limpian: dejar fechas guardadas de un cliente que ya
+    // no trabaja así lo haría aparecer en Coordinación sin explicación.
+    if (!activar) setForm((f) => ({ ...f, diasPuntuales: [] }));
+  }
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const formInvalido = !form.nombre.trim() || !form.perro.trim();
 
@@ -212,12 +226,18 @@ function FormularioCliente({ inicial, paseadores, entrenadores, responsables, on
             ))}
           </div>
 
-          <CalendarioDiasPuntuales
-            seleccionados={form.diasPuntuales || []}
-            onToggle={toggleDiaPuntual}
-            mesOffset={mesPuntual}
-            onMes={setMesPuntual}
-          />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: usaFechasSueltas ? 10 : 16, fontSize: 13, color: INK }}>
+            <input type="checkbox" checked={usaFechasSueltas} onChange={(e) => alternarFechasSueltas(e.target.checked)} />
+            No tiene días fijos — sale en fechas que avisa el tutor
+          </label>
+          {usaFechasSueltas && (
+            <CalendarioDiasPuntuales
+              seleccionados={form.diasPuntuales || []}
+              onToggle={toggleDiaPuntual}
+              mesOffset={mesPuntual}
+              onMes={setMesPuntual}
+            />
+          )}
 
           <label style={label} htmlFor="cliente-hora-habitual">Hora habitual del paseo (opcional)</label>
           <input id="cliente-hora-habitual" type="time" value={form.horaHabitual} onChange={(e) => setForm({ ...form, horaHabitual: e.target.value })} style={{ ...input, maxWidth: 160 }} />

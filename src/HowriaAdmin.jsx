@@ -2225,8 +2225,10 @@ function useSolicitudesRegistro(sessionVersion) {
 
 export const PLANES = [
   { id: "LV", nombre: "Lunes a viernes", dias: [0,1,2,3,4] },
+  { id: "LS", nombre: "Lunes a sábado", dias: [0,1,2,3,4,5] },
   { id: "LMV", nombre: "Lunes, miércoles y viernes", dias: [0,2,4] },
   { id: "MJ", nombre: "Martes y jueves", dias: [1,3] },
+  { id: "JS", nombre: "Jueves y sábado", dias: [3,5] },
   { id: "TODOS", nombre: "Todos los días", dias: [0,1,2,3,4,5,6] },
   { id: "PERSONALIZADO", nombre: "Personalizado", dias: [] },
 ];
