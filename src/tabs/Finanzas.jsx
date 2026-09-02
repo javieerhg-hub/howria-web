@@ -1481,14 +1481,10 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
                     Paseos ({faltanPorCobrar.paseos.length})
                   </p>
                   {faltanPorCobrar.paseos.map((c) => (
-                    <div key={c.id} role="button" tabIndex={0} title="Cobrarle un monto a mano"
-                      onClick={() => abrirExpres(c)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrirExpres(c); } }}
-                      style={{ cursor: "pointer" }}>
-                      <FilaLista Icono={Dog} titulo={c.nombre.trim()} subtitulo={c.perro}
-                        valor={`${diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones).length} paseo(s) →`}
-                        valorColor={RUST} />
-                    </div>
+                    <FilaLista key={c.id} Icono={Dog} titulo={c.nombre.trim()} subtitulo={c.perro}
+                      onClick={() => abrirExpres(c)} title="Cobrarle un monto a mano"
+                      valor={`${diasDelMesProgramados(c, actualDesde.getMonth(), actualDesde.getFullYear(), reprogramaciones).length} paseo(s) →`}
+                      valorColor={RUST} />
                   ))}
                 </div>
               )}

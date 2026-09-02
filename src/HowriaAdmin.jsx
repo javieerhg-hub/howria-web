@@ -3671,9 +3671,12 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
 // Fila de lista con ícono a la izquierda + título/subtítulo + valor a la
 // derecha — mismo patrón en toda la sección "de un vistazo" de Inicio.
-export function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick }) {
+export function FilaLista({ Icono, titulo, subtitulo, valor, valorColor, onClick, title }) {
   return (
-    <button onClick={onClick} disabled={!onClick} type="button"
+    // Sin onClick queda deshabilitado, para que no se vea clicable lo que no
+    // lo es. Ojo: un button deshabilitado se traga los clics, asi que no
+    // sirve envolverlo en un div clicable — hay que pasarle el onClick a el.
+    <button onClick={onClick} disabled={!onClick} type="button" title={title}
       style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "9px 0", border: "none", borderBottom: "1px solid #F1EAD9", background: "none", cursor: onClick ? "pointer" : "default", font: "inherit", textAlign: "left" }}>
       <div style={{ width: 36, height: 36, borderRadius: 10, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", color: NAVY }}>
         <Icono size={16} />
