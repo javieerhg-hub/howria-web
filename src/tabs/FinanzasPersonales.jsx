@@ -13,6 +13,8 @@
 //      pasea él, así que no sale nada por ellos).
 //   2. Lo que queda para Howria de cada evaluación o clase, o sea lo que
 //      entró menos lo que se le paga al adiestrador.
+//   3. Lo que deja cada paseador ajeno: lo que paga el tutor menos lo que
+//      se le paga a esa persona por hacer el paseo.
 //
 // El vínculo cuenta-admin ↔ cuenta-paseador se guarda en
 // usuarios.paseador_vinculado (database/120) en vez de escribir un nombre
@@ -23,6 +25,7 @@ import {
   botonSecundario, SkeletonLista, fmtCLP, esBoletaDeCliente,
 } from "../HowriaAdmin.jsx";
 import { diasDelMesProgramados } from "../lib/programacion.js";
+import { realizadosEnRango, programadosEnRango } from "../lib/pagos.js";
 import { periodoDeBoleta, esVenta } from "../lib/calculosBoletas.js";
 
 const VERDE = "#2F6A46";
@@ -39,7 +42,7 @@ function Kpi({ titulo, valor, detalle, color = NAVY, bg = CREAM_SOFT }) {
 
 export function FinanzasPersonales({
   usuarios = [], setUsuarios, clientes = [], boletasEmitidas = [], boletasAdiestramiento = [],
-  citasAgenda = [], reprogramaciones = [], user, cargando,
+  citasAgenda = [], registroPaseos = {}, reprogramaciones = [], user, cargando,
 }) {
   // El user de la sesión es una foto del momento del login: si el vínculo
   // se elige acá mismo, hay que leerlo de la lista viva para que la
@@ -130,8 +133,66 @@ export function FinanzasPersonales({
     };
   }, [citasAgenda, boletasAdiestramiento, mes, anio]);
 
-  const ganare = paseos.cobrado + adiestramiento.queda;
-  const yaEntro = paseos.pagado + adiestramiento.quedaCobrado;
+
+  // Lo que dejan los paseadores ajenos: el tutor paga la boleta completa y
+  // de ahí sale la tarifa de quien hace el paseo; la diferencia es de
+  // Howria. Se cuenta por paseos REALIZADOS, que es lo que Pago
+  // trabajadores paga de verdad — así los dos números cuadran.
+  //
+  // El costo va por cliente y no por persona: si un paseo se compartió, la
+  // parte del principal más la del otro suman la misma tarifa
+  // (ver lib/reparto.js), así que contar los realizados del cliente sin
+  // mirar quién lo hizo da el costo completo y no lo parte en dos.
+  const otros = useMemo(() => {
+    const desde = new Date(anio, mes, 1);
+    const hasta = new Date(anio, mes + 1, 1);
+    const grupos = enTerreno
+      .filter((u) => u.nombre !== miPaseador)
+      .map((u) => {
+        const filas = clientes
+          .filter((c) => c.paseadorNombre === u.nombre)
+          .map((c) => {
+            const suyas = boletasEmitidas.filter((b) => esBoletaDeCliente(b, c) && esVenta(b) && delCiclo(b));
+            const tutorPaga = suyas.reduce((a, b) => a + (Number(b.total) || 0), 0);
+            const pagado = suyas.filter((b) => b.estado === "pagada").reduce((a, b) => a + (Number(b.total) || 0), 0);
+            const tarifa = Number(c.tarifaPaseador) || 0;
+            const hechos = realizadosEnRango(registroPaseos, c.id, desde, hasta);
+            const quedan = programadosEnRango(c, desde, hasta, registroPaseos, reprogramaciones);
+            return {
+              cliente: c, tutorPaga, pagado, tarifa, hechos,
+              leToca: hechos * tarifa,
+              leTocaSiCompleta: Math.max(hechos, quedan) * tarifa,
+              boletas: suyas.length,
+            };
+          })
+          .filter((f) => f.tutorPaga > 0 || f.leToca > 0)
+          .sort((a, b) => (b.tutorPaga - b.leToca) - (a.tutorPaga - a.leToca));
+        const tutores = filas.reduce((a, f) => a + f.tutorPaga, 0);
+        const leToca = filas.reduce((a, f) => a + f.leToca, 0);
+        return {
+          persona: u,
+          filas,
+          tutores,
+          leToca,
+          queda: tutores - leToca,
+          quedaSiCompleta: tutores - filas.reduce((a, f) => a + f.leTocaSiCompleta, 0),
+          // Sin tarifa cargada el costo sale $0 y el margen se ve enorme
+          // sin serlo — hay que decirlo, no callarlo.
+          sinTarifa: filas.filter((f) => f.tarifa === 0 && f.hechos > 0).length,
+          quedaCobrado: filas.filter((f) => f.pagado > 0).reduce((a, f) => a + (f.pagado - f.leToca), 0),
+        };
+      })
+      .filter((g) => g.filas.length > 0)
+      .sort((a, b) => b.queda - a.queda);
+    return {
+      grupos,
+      queda: grupos.reduce((a, g) => a + g.queda, 0),
+      quedaCobrado: grupos.reduce((a, g) => a + g.quedaCobrado, 0),
+    };
+  }, [enTerreno, miPaseador, clientes, boletasEmitidas, registroPaseos, reprogramaciones, mes, anio]);
+
+  const ganare = paseos.cobrado + adiestramiento.queda + otros.queda;
+  const yaEntro = paseos.pagado + adiestramiento.quedaCobrado + otros.quedaCobrado;
 
   if (cargando) return <SkeletonLista filas={6} />;
 
@@ -161,7 +222,7 @@ export function FinanzasPersonales({
       <div className="howria-card" style={{ ...tarjeta, marginBottom: 20 }}>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           <Kpi titulo={`Ganarás en ${MESES[mes]}`} valor={fmtCLP(ganare)} color={VERDE}
-            detalle={`Paseos ${fmtCLP(paseos.cobrado)} · adiestramiento ${fmtCLP(adiestramiento.queda)}`} />
+            detalle={`Mis paseos ${fmtCLP(paseos.cobrado)} · adiestramiento ${fmtCLP(adiestramiento.queda)} · otros paseadores ${fmtCLP(otros.queda)}`} />
           <Kpi titulo="De eso, ya entró" valor={fmtCLP(yaEntro)}
             detalle={ganare > 0 ? `Falta cobrar ${fmtCLP(ganare - yaEntro)}` : "Todavía no hay nada emitido"} />
           <Kpi titulo="Clientes que cobraste" valor={`${paseos.conBoleta} de ${paseos.filas.length}`}
@@ -285,6 +346,76 @@ export function FinanzasPersonales({
                 </p>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="howria-card" style={{ ...tarjeta, marginTop: 20 }}>
+        <h3 style={{ ...sectionTitle, fontSize: 16 }}>Lo que me dejan los demás paseadores</h3>
+        <p style={{ ...hint, marginTop: 4, marginBottom: 14 }}>
+          De cada cliente que pasea otra persona: lo que paga el tutor menos lo que le
+          pagas a ella por hacerlo. Se cuenta por paseos ya realizados, que es lo que
+          Pago trabajadores te va a cobrar de verdad — así que mientras el mes corre,
+          el costo todavía sube.
+        </p>
+
+        {otros.grupos.length === 0 ? (
+          <p style={hint}>Nadie más tiene clientes de paseo con movimiento en este ciclo.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 16 }}>
+            {otros.grupos.map((g) => (
+              <div key={g.persona.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY }}>{g.persona.nombre}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
+                      Tutores pagan {fmtCLP(g.tutores)} · a {g.persona.nombre.split(" ")[0]} {fmtCLP(g.leToca)}
+                      {g.quedaSiCompleta !== g.queda && ` · si completa el mes te quedarían ${fmtCLP(g.quedaSiCompleta)}`}
+                    </p>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 17, fontWeight: 700, fontFamily: "Georgia, serif", color: g.queda >= 0 ? VERDE : RUST }}>{fmtCLP(g.queda)}</p>
+                </div>
+
+                <div style={{ display: "grid", gap: 4 }}>
+                  {g.filas.map((f) => (
+                    <div key={f.cliente.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 8, padding: "9px 12px" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: NAVY }}>
+                          {f.cliente.perro ? `🐾 ${f.cliente.perro} · ` : ""}{String(f.cliente.nombre).trim()}
+                        </p>
+                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
+                          {f.boletas === 0 ? "sin boleta este ciclo" : `tutor ${fmtCLP(f.tutorPaga)}`}
+                          {" · "}{f.hechos} paseo(s) hecho(s) × {fmtCLP(f.tarifa)} = {fmtCLP(f.leToca)}
+                          {f.tarifa === 0 && f.hechos > 0 && " · ⚠ sin tarifa cargada"}
+                        </p>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, fontFamily: "Georgia, serif", color: f.tutorPaga - f.leToca >= 0 ? VERDE : RUST }}>
+                        {fmtCLP(f.tutorPaga - f.leToca)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {g.sinTarifa > 0 && (
+                  <div style={{ background: "#FDF6E8", border: `1px solid ${GOLD}`, borderRadius: 8, padding: "9px 12px", marginTop: 6 }}>
+                    <p style={{ margin: 0, fontSize: 11.5, color: INK }}>
+                      {g.sinTarifa} cliente(s) sin tarifa de paseador cargada: el costo sale $0 y
+                      tu ganancia se ve más alta de lo que es. Se arregla en la ficha del cliente.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#EAE0C6", textTransform: "uppercase", letterSpacing: 0.5 }}>Total que me dejan</p>
+                <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B9C4D2" }}>
+                  {otros.grupos.length} paseador(es) · de eso ya entró {fmtCLP(otros.quedaCobrado)}
+                </p>
+              </div>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(otros.queda)}</p>
+            </div>
           </div>
         )}
       </div>
