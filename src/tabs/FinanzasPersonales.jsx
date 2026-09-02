@@ -30,7 +30,7 @@
 import { useState, useMemo } from "react";
 import {
   NAVY, CREAM_SOFT, GOLD, RUST, INK, MESES, tarjeta, sectionTitle, hint, input,
-  botonSecundario, SkeletonLista, fmtCLP, esBoletaDeCliente,
+  botonSecundario, SkeletonLista, fmtCLP, showToast, esBoletaDeCliente,
 } from "../HowriaAdmin.jsx";
 import { diasDelMesProgramados } from "../lib/programacion.js";
 import { realizadosEnRango, programadosEnRango } from "../lib/pagos.js";
@@ -93,11 +93,13 @@ export function FinanzasPersonales({
   const enTerreno = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
   const [offset, setOffset] = useState(0);
-  // Personas cuyo bloque se esta mirando "como si el mes ya estuviera
-  // completo". Es un que-pasa-si, no el estado real, asi que se marca en
-  // pantalla y no toca el titular de arriba.
-  const [proyectados, setProyectados] = useState([]);
+  // Al reves de lo que parece: la lista guarda a quien se esta mirando
+  // "como va HOY". Por defecto todos salen con el mes completo, que es lo
+  // que suma en el titular y lo que sirve para organizarse — lo de hoy es
+  // la consulta puntual, no el estado normal.
+  const [verHoy, setVerHoy] = useState([]);
   const [gastoNuevo, setGastoNuevo] = useState({ descripcion: "", monto: "", categoria: "casa", fijo: false });
+  const [bajandoPdf, setBajandoPdf] = useState(false);
   const hoy = new Date();
   const ref = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
   const mes = ref.getMonth(), anio = ref.getFullYear();
@@ -108,7 +110,7 @@ export function FinanzasPersonales({
   }
 
   function alternarProyeccion(id) {
-    setProyectados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setVerHoy((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   // Marcar si el margen de una persona es de Howria. Hay que decirlo por
@@ -324,6 +326,96 @@ export function FinanzasPersonales({
     setGastosPersonales((prev) => prev.filter((g) => g.id !== id));
   }
 
+  // La liquidacion es el mismo resumen que se ve en pantalla, en papel:
+  // de donde salio cada peso, que se gasto, y cuanto queda limpio. Para
+  // los paseadores ajenos usa el MES COMPLETO, igual que el titular — un
+  // informe que uno guarda o imprime tiene que traer el numero con el que
+  // se organiza, no el de la hora en que se descargo.
+  //
+  // jsPDF pesa, y esta pestana no lo necesita para nada mas: se carga
+  // recien al apretar (mismo criterio que explica _compartido_pdf.jsx).
+  async function bajarLiquidacion() {
+    if (bajandoPdf) return;
+    setBajandoPdf(true);
+    try {
+      const { descargarLiquidacionPersonal } = await import("./_compartido_pdf.jsx");
+      const secciones = [];
+
+      if (paseos.filas.some((f) => f.cobrado > 0)) {
+        secciones.push({
+          titulo: "Mis paseos",
+          detalle: `${paseos.conBoleta} de ${paseos.filas.length} clientes cobrados`,
+          filas: paseos.filas.filter((f) => f.cobrado > 0).map((f) => ({
+            izq: `${f.cliente.perro || "Sin perro"} · ${String(f.cliente.nombre).trim()}`,
+            sub: `${f.programados} paseo(s) · ${f.pagado >= f.cobrado ? "pagada" : `pagado ${fmtCLP(f.pagado)}`}`,
+            der: fmtCLP(f.cobrado),
+          })),
+          etiquetaTotal: "Total de mis paseos",
+          total: fmtCLP(paseos.cobrado),
+        });
+      }
+
+      const adiCerradas = adiestramiento.filas.filter((f) => f.definido);
+      if (adiCerradas.length > 0) {
+        secciones.push({
+          titulo: "Adiestramiento",
+          detalle: `entró ${fmtCLP(adiestramiento.entro)} · al adiestrador ${fmtCLP(adiestramiento.pagado)}`,
+          filas: adiCerradas.map((f) => ({
+            izq: `${f.cita.perro || ""} ${f.cita.clienteNombre}`.trim(),
+            sub: `${f.cita.tipo === "evaluacion" ? "Evaluación" : "Clase"} · entró ${fmtCLP(f.entro)} · al adiestrador ${fmtCLP(f.alAdiestrador)}`,
+            der: fmtCLP(f.queda),
+          })),
+          etiquetaTotal: "Queda para mí",
+          total: fmtCLP(adiestramiento.queda),
+        });
+      }
+
+      otros.mios.forEach((g) => {
+        secciones.push({
+          titulo: `Margen sobre ${g.persona.nombre}`,
+          detalle: "proyectado al cierre del mes",
+          filas: g.filas.map((f) => ({
+            izq: `${f.cliente.perro || "Sin perro"} · ${String(f.cliente.nombre).trim()}`,
+            sub: `tutor ${fmtCLP(f.tutorPaga)} · ${f.paseosSiCompleta} paseo(s) × ${fmtCLP(f.tarifa)} = ${fmtCLP(f.leTocaSiCompleta)}`,
+            der: fmtCLP(f.tutorPaga - f.leTocaSiCompleta),
+          })),
+          etiquetaTotal: `Tutores ${fmtCLP(g.tutores)} menos ${fmtCLP(g.leTocaSiCompleta)}`,
+          total: fmtCLP(g.quedaSiCompleta),
+        });
+      });
+
+      if (gastos.filas.length > 0) {
+        secciones.push({
+          titulo: "Mis gastos",
+          detalle: gastos.fijos > 0 ? `${fmtCLP(gastos.fijos)} son fijos` : "",
+          filas: gastos.filas.map((g) => ({
+            izq: g.descripcion,
+            sub: catDe(g.categoria).nombre + (g.fijo ? " · todos los meses" : ""),
+            der: `− ${fmtCLP(g.monto)}`,
+            negativo: true,
+          })),
+          etiquetaTotal: "Total de gastos",
+          total: `− ${fmtCLP(gastos.total)}`,
+          totalNegativo: true,
+        });
+      }
+
+      await descargarLiquidacionPersonal({
+        titulo: "Mi liquidación personal",
+        periodo: `${MESES[mes]} ${anio}`,
+        secciones,
+        ganare: fmtCLP(ganare),
+        gastos: `− ${fmtCLP(gastos.total)}`,
+        limpio: fmtCLP(limpio),
+        yaEntro: fmtCLP(Math.max(0, yaEntro - gastos.total)),
+      });
+    } catch (e) {
+      showToast("No se pudo generar la liquidación.");
+    } finally {
+      setBajandoPdf(false);
+    }
+  }
+
   // Dar de baja un fijo: deja de contar DESPUES de este mes, sin borrar
   // los meses en que si se pago.
   function darDeBajaFijo(id) {
@@ -502,9 +594,8 @@ export function FinanzasPersonales({
           Solo suma la gente que trabaja así contigo. Quien va por su cuenta queda
           abajo, apagado y sin sumar, hasta que lo marques.
           {otros.quedaSiCompleta !== otros.queda && (
-            <> El titular de arriba usa el <b>cierre del mes</b> ({fmtCLP(otros.quedaSiCompleta)});
-            acá abajo ves cómo va hoy ({fmtCLP(otros.queda)}), y el botón de cada persona
-            cambia entre las dos.</>
+            <> Se muestra el <b>mes completo</b>, que es lo que suma arriba; el botón de cada
+            persona muestra cuánto lleva hasta ahora ({fmtCLP(otros.queda)} en total).</>
           )}
         </p>
 
@@ -523,7 +614,7 @@ export function FinanzasPersonales({
               // va a pagar al cierre y cuánto margen queda de verdad — a
               // principio de mes el costo casi no ha corrido y el margen se ve
               // mucho más alto de lo que va a terminar siendo.
-              const proy = proyectados.includes(g.persona.id);
+              const proy = !verHoy.includes(g.persona.id);
               const leTocaVisto = proy ? g.leTocaSiCompleta : g.leToca;
               const quedaVisto = proy ? g.quedaSiCompleta : g.queda;
               const nombreCorto = g.persona.nombre.split(" ")[0];
@@ -551,14 +642,14 @@ export function FinanzasPersonales({
 
                 <button onClick={() => alternarProyeccion(g.persona.id)}
                   style={{ border: "1px solid " + (proy ? NAVY : GOLD), background: proy ? NAVY : "none", color: proy ? "#FFFFFF" : GOLD, borderRadius: 20, padding: "6px 14px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>
-                  {proy ? "← Ver cómo va hoy" : "Ver con todos los paseos del mes marcados"}
+                  {proy ? "Ver cuánto lleva hasta ahora" : "← Volver al mes completo"}
                 </button>
 
                 {proy && (
                   <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A6A1E" }}>
-                    Así cerraría el mes si {nombreCorto} hace todos sus paseos programados:
-                    le pagarías <b>{fmtCLP(g.leTocaSiCompleta)}</b> y te quedarían <b>{fmtCLP(g.quedaSiCompleta)}</b>.
-                    Es una proyección — el titular de arriba sigue mostrando lo real de hoy.
+                    Si {nombreCorto} hace todos sus paseos programados del mes le pagarías
+                    <b> {fmtCLP(g.leTocaSiCompleta)}</b> y te quedarían <b>{fmtCLP(g.quedaSiCompleta)}</b>.
+                    Hasta ahora lleva {fmtCLP(g.leToca)} y te deja {fmtCLP(g.queda)}.
                   </p>
                 )}
 
@@ -595,8 +686,8 @@ export function FinanzasPersonales({
             })}
 
             {otros.mios.length > 0 && (() => {
-              const hayProyeccion = otros.mios.some((g) => proyectados.includes(g.persona.id));
-              const total = otros.mios.reduce((a, g) => a + (proyectados.includes(g.persona.id) ? g.quedaSiCompleta : g.queda), 0);
+              const hayProyeccion = otros.mios.some((g) => !verHoy.includes(g.persona.id));
+              const total = otros.mios.reduce((a, g) => a + (verHoy.includes(g.persona.id) ? g.queda : g.quedaSiCompleta), 0);
               return (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
                   <div>
@@ -738,6 +829,15 @@ export function FinanzasPersonales({
             </div>
             <p style={{ margin: 0, fontSize: 24, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(limpio)}</p>
           </div>
+
+          <button onClick={bajarLiquidacion} disabled={bajandoPdf}
+            style={{ ...botonSecundario, width: "auto", margin: "4px 0 0", padding: "9px 18px", alignSelf: "flex-start", opacity: bajandoPdf ? 0.5 : 1 }}>
+            {bajandoPdf ? "Generando…" : "Descargar mi liquidación del mes"}
+          </button>
+          <p style={{ ...hint, marginTop: 0 }}>
+            Un PDF con todo lo de esta pestaña: de dónde salió cada peso, tus gastos y lo
+            que te queda limpio. Es para ti — no es un documento tributario.
+          </p>
         </div>
       </div>
     </div>

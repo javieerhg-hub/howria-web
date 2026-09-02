@@ -547,6 +547,180 @@ export function dibujarLiquidacionPaseador(canvas, datos, logoImg, huellaImg) {
   ctx.textAlign = "left";
 }
 
+
+// Liquidacion personal (pestana Finanzas personales) — el resumen del mes
+// del DUENO, no de un trabajador: de donde salio cada peso que gana, que
+// gasto, y cuanto le queda limpio.
+//
+// Es generica a proposito (una lista de secciones con filas) y no una
+// plantilla fija: la pestana ya tiene tres fuentes de ingreso distintas y
+// es probable que aparezca una cuarta. Asi agregarla no obliga a tocar
+// este dibujo.
+export function dibujarLiquidacionPersonal(canvas, datos, logoImg, huellaImg) {
+  const { titulo, periodo, secciones, ganare, gastos, limpio, yaEntro } = datos;
+  const ctx = canvas.getContext("2d");
+  const W = 620;
+  const M = 34;
+  const ALTO_FILA = 28;
+
+  const altoSeccion = (sec) => 34 + sec.filas.length * ALTO_FILA + 30;
+  const H = 190 + secciones.reduce((acc, sec) => acc + altoSeccion(sec), 0) + 160;
+  canvas.width = W;
+  canvas.height = H;
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, W, H);
+
+  if (huellaImg) {
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    const hW = 20, hH = 20 * (huellaImg.height / huellaImg.width);
+    let i = 0;
+    for (let wy = 180; wy < H - 40; wy += 72) {
+      const izquierda = i % 2 === 0;
+      ctx.save();
+      ctx.translate(izquierda ? 16 : W - 16, wy);
+      ctx.rotate(izquierda ? -0.3 : 0.3);
+      ctx.drawImage(huellaImg, -hW / 2, -hH / 2, hW, hH);
+      ctx.restore();
+      i++;
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = NAVY_LOGO;
+  ctx.fillRect(0, 0, W, 120);
+  if (logoImg) {
+    const logoH = 84, logoW = logoImg.width * (logoH / logoImg.height);
+    ctx.drawImage(logoImg, M, 16, logoW, logoH);
+  }
+  ctx.fillStyle = CREAM;
+  ctx.textAlign = "right";
+  ctx.font = "600 18px 'Fraunces', Georgia";
+  ctx.fillText(titulo, W - M, 52);
+  ctx.font = "12.5px 'Inter', Helvetica";
+  ctx.fillText(periodo, W - M, 74);
+  ctx.textAlign = "left";
+
+  let y = 150;
+  ctx.fillStyle = "#8A7E5C";
+  ctx.font = "11.5px 'Inter', Helvetica";
+  ctx.fillText(`Generada el ${new Date().toLocaleDateString("es-CL")} \u00b7 documento interno`, M, y);
+  y += 26;
+
+  secciones.forEach((sec) => {
+    ctx.fillStyle = CREAM_SOFT;
+    ctx.fillRect(M, y, W - M * 2, 30);
+    ctx.fillStyle = INK;
+    ctx.font = "700 12.5px 'Inter', Helvetica";
+    ctx.fillText(sec.titulo.toUpperCase(), M + 12, y + 20);
+    if (sec.detalle) {
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#8A7E5C";
+      ctx.font = "11px 'Inter', Helvetica";
+      ctx.fillText(sec.detalle, W - M - 12, y + 20);
+      ctx.textAlign = "left";
+    }
+    y += 34;
+
+    sec.filas.forEach((f) => {
+      ctx.strokeStyle = "#EFEAD9";
+      ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
+      const base = y + 18;
+      ctx.fillStyle = INK;
+      ctx.font = "600 12.5px 'Inter', Helvetica";
+      wrapTextInline(ctx, f.izq, M + 12, base, 300);
+      if (f.sub) {
+        ctx.fillStyle = "#8A7E5C";
+        ctx.font = "10.5px 'Inter', Helvetica";
+        wrapTextInline(ctx, f.sub, M + 12, base + 11, 320);
+      }
+      ctx.fillStyle = f.negativo ? RUST : INK;
+      ctx.font = "700 13px 'Inter', Helvetica";
+      ctx.textAlign = "right";
+      ctx.fillText(f.der, W - M - 12, base);
+      ctx.textAlign = "left";
+      y += ALTO_FILA;
+    });
+
+    ctx.strokeStyle = "#DCD2B4";
+    ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke();
+    y += 20;
+    ctx.fillStyle = "#6B6248";
+    ctx.font = "600 12.5px 'Inter', Helvetica";
+    ctx.fillText(sec.etiquetaTotal || "Subtotal", M + 12, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = sec.totalNegativo ? RUST : "#2F6A46";
+    ctx.font = "700 14px 'Inter', Helvetica";
+    ctx.fillText(sec.total, W - M - 12, y);
+    ctx.textAlign = "left";
+    y += 24;
+  });
+
+  y += 6;
+  ctx.fillStyle = INK;
+  ctx.font = "13px 'Inter', Helvetica";
+  ctx.fillText("Vas a ganar", M + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "600 13px 'Inter', Helvetica";
+  ctx.fillText(ganare, W - M - 12, y);
+  ctx.textAlign = "left";
+  y += 22;
+  ctx.fillStyle = INK;
+  ctx.font = "13px 'Inter', Helvetica";
+  ctx.fillText("Tus gastos", M + 12, y);
+  ctx.textAlign = "right";
+  ctx.fillStyle = RUST;
+  ctx.font = "600 13px 'Inter', Helvetica";
+  ctx.fillText(gastos, W - M - 12, y);
+  ctx.textAlign = "left";
+  y += 18;
+
+  const altoTotal = 66;
+  ctx.fillStyle = NAVY_LOGO;
+  ctx.fillRect(M, y, W - M * 2, altoTotal);
+  ctx.fillStyle = CREAM;
+  ctx.font = "600 13.5px 'Inter', Helvetica";
+  ctx.fillText("TE QUEDA LIMPIO", M + 16, y + 26);
+  ctx.font = "11px 'Inter', Helvetica";
+  ctx.fillStyle = "#B9C4D2";
+  ctx.fillText(`De eso ya lo tienes en la mano: ${yaEntro}`, M + 16, y + 46);
+  ctx.fillStyle = CREAM;
+  ctx.font = "700 26px 'Fraunces', Georgia";
+  ctx.textAlign = "right";
+  ctx.fillText(limpio, W - M - 16, y + 40);
+  ctx.textAlign = "left";
+  y += altoTotal + 24;
+
+  ctx.fillStyle = "#B0A587";
+  ctx.font = "11px 'Inter', Helvetica";
+  ctx.textAlign = "center";
+  ctx.fillText("Howria \u2014 uso interno, no es un documento tributario", W / 2, Math.min(y, H - 14));
+  ctx.textAlign = "left";
+}
+
+export async function descargarLiquidacionPersonal(datos) {
+  const logoImg = new Image();
+  const huellaImg = new Image();
+  await Promise.all([
+    new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = LOGO_B64; }),
+    new Promise((resolve) => { huellaImg.onload = resolve; huellaImg.onerror = resolve; huellaImg.src = HUELLA_B64; }),
+  ]);
+  if (document.fonts?.ready) {
+    await Promise.all(["700 19px Fraunces", "600 18px Fraunces", "700 26px Fraunces", "13px Inter", "600 13px Inter"]
+      .map((f) => document.fonts.load(f))).then(() => document.fonts.ready).catch(() => {});
+  }
+  const canvas = document.createElement("canvas");
+  dibujarLiquidacionPersonal(canvas, datos, logoImg, huellaImg);
+  const doc = new jsPDF({ orientation: "portrait", unit: "px", format: [canvas.width, canvas.height] });
+  doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+  const link = document.createElement("a");
+  link.download = `Mi-liquidacion-${datos.periodo.replace(/\s+/g, "-")}.pdf`;
+  link.href = URL.createObjectURL(doc.output("blob"));
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 export async function descargarLiquidacionPaseador(datos) {
   const logoImg = new Image();
   const huellaImg = new Image();
