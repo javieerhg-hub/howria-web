@@ -14,7 +14,10 @@
 //   2. Lo que queda para Howria de cada evaluación o clase, o sea lo que
 //      entró menos lo que se le paga al adiestrador.
 //   3. Lo que deja cada paseador ajeno: lo que paga el tutor menos lo que
-//      se le paga a esa persona por hacer el paseo.
+//      se le paga a esa persona por hacer el paseo. Ojo: eso NO vale para
+//      todos — Constanza trabaja asi, pero Arniaz y Andreina van aparte y
+//      su margen no es de Howria. Se marca por persona
+//      (usuarios.margen_va_a_howria, database/122).
 //
 // El vínculo cuenta-admin ↔ cuenta-paseador se guarda en
 // usuarios.paseador_vinculado (database/120) en vez de escribir un nombre
@@ -59,6 +62,13 @@ export function FinanzasPersonales({
 
   function vincular(nombre) {
     setUsuarios((prev) => prev.map((u) => (u.id === yo.id ? { ...u, paseadorVinculado: nombre || null } : u)));
+  }
+
+  // Marcar si el margen de una persona es de Howria. Hay que decirlo por
+  // persona: Constanza trabaja asi, Arniaz y Andreina van aparte, y eso no
+  // se puede deducir de los datos.
+  function marcarMargen(id, esMio) {
+    setUsuarios((prev) => prev.map((u) => (u.id === id ? { ...u, margenVaAHowria: esMio } : u)));
   }
 
   // Una boleta pertenece al ciclo que CUBRE, no al día en que se emitió
@@ -147,7 +157,7 @@ export function FinanzasPersonales({
     // Sin el vínculo no se sabe cuál cartera es la propia, y entonces
     // "los demás" serían todos — incluida la suya. El titular quedaría
     // enorme y falso, así que hasta elegir la cuenta no se calcula nada.
-    if (!miPaseador) return { grupos: [], queda: 0, quedaCobrado: 0 };
+    if (!miPaseador) return { grupos: [], mios: [], aparte: [], queda: 0, quedaCobrado: 0 };
     const desde = new Date(anio, mes, 1);
     const hasta = new Date(anio, mes + 1, 1);
     const grupos = enTerreno
@@ -175,6 +185,7 @@ export function FinanzasPersonales({
         const leToca = filas.reduce((a, f) => a + f.leToca, 0);
         return {
           persona: u,
+          esMio: !!u.margenVaAHowria,
           filas,
           tutores,
           leToca,
@@ -187,11 +198,17 @@ export function FinanzasPersonales({
         };
       })
       .filter((g) => g.filas.length > 0)
-      .sort((a, b) => b.queda - a.queda);
+      .sort((a, b) => (b.esMio ? 1 : 0) - (a.esMio ? 1 : 0) || b.queda - a.queda);
+    // Solo suma el margen de quien está marcado. Los demás se muestran
+    // igual, apagados y sin detalle, para poder marcarlos si cambia el
+    // trato — pero no entran en ningún total.
+    const mios = grupos.filter((g) => g.esMio);
     return {
       grupos,
-      queda: grupos.reduce((a, g) => a + g.queda, 0),
-      quedaCobrado: grupos.reduce((a, g) => a + g.quedaCobrado, 0),
+      mios,
+      aparte: grupos.filter((g) => !g.esMio),
+      queda: mios.reduce((a, g) => a + g.queda, 0),
+      quedaCobrado: mios.reduce((a, g) => a + g.quedaCobrado, 0),
     };
   }, [enTerreno, miPaseador, clientes, boletasEmitidas, registroPaseos, reprogramaciones, mes, anio]);
 
@@ -362,6 +379,10 @@ export function FinanzasPersonales({
           Pago trabajadores te va a cobrar de verdad — así que mientras el mes corre,
           el costo todavía sube.
         </p>
+        <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
+          Solo suma la gente que trabaja así contigo. Quien va por su cuenta queda
+          abajo, apagado y sin sumar, hasta que lo marques.
+        </p>
 
         {!miPaseador ? (
           <p style={hint}>
@@ -372,7 +393,7 @@ export function FinanzasPersonales({
           <p style={hint}>Nadie más tiene clientes de paseo con movimiento en este ciclo.</p>
         ) : (
           <div style={{ display: "grid", gap: 16 }}>
-            {otros.grupos.map((g) => (
+            {otros.mios.map((g) => (
               <div key={g.persona.id}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
                   <div style={{ minWidth: 0 }}>
@@ -382,7 +403,13 @@ export function FinanzasPersonales({
                       {g.quedaSiCompleta !== g.queda && ` · si completa el mes te quedarían ${fmtCLP(g.quedaSiCompleta)}`}
                     </p>
                   </div>
-                  <p style={{ margin: 0, fontSize: 17, fontWeight: 700, fontFamily: "Georgia, serif", color: g.queda >= 0 ? VERDE : RUST }}>{fmtCLP(g.queda)}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
+                    <p style={{ margin: 0, fontSize: 17, fontWeight: 700, fontFamily: "Georgia, serif", color: g.queda >= 0 ? VERDE : RUST }}>{fmtCLP(g.queda)}</p>
+                    <button onClick={() => marcarMargen(g.persona.id, false)} title="Sacar: esta persona trabaja aparte"
+                      style={{ border: "none", background: "none", color: "#A99C78", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0 }}>
+                      trabaja aparte
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 4 }}>
@@ -416,15 +443,41 @@ export function FinanzasPersonales({
               </div>
             ))}
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
-              <div>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#EAE0C6", textTransform: "uppercase", letterSpacing: 0.5 }}>Total que me dejan</p>
-                <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B9C4D2" }}>
-                  {otros.grupos.length} paseador(es) · de eso ya entró {fmtCLP(otros.quedaCobrado)}
-                </p>
+            {otros.mios.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: NAVY, borderRadius: 8, padding: "12px 14px" }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#EAE0C6", textTransform: "uppercase", letterSpacing: 0.5 }}>Total que me dejan</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#B9C4D2" }}>
+                    {otros.mios.length} paseador(es) · de eso ya entró {fmtCLP(otros.quedaCobrado)}
+                  </p>
+                </div>
+                <p style={{ margin: 0, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(otros.queda)}</p>
               </div>
-              <p style={{ margin: 0, fontSize: 19, fontWeight: 700, fontFamily: "Georgia, serif", color: "#FFFFFF" }}>{fmtCLP(otros.queda)}</p>
-            </div>
+            )}
+
+            {otros.aparte.length > 0 && (
+              <div>
+                <p style={{ margin: "6px 0 6px", fontSize: 11.5, fontWeight: 700, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Trabajan aparte — no suman
+                </p>
+                <div style={{ display: "grid", gap: 4 }}>
+                  {otros.aparte.map((g) => (
+                    <div key={g.persona.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#F7F4EC", border: "1px dashed #DCD2B4", borderRadius: 8, padding: "9px 12px" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#8A7E5C" }}>{g.persona.nombre}</p>
+                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#A99C78" }}>
+                          {g.filas.length} cliente(s) · su margen no es tuyo
+                        </p>
+                      </div>
+                      <button onClick={() => marcarMargen(g.persona.id, true)}
+                        style={{ border: `1px solid ${GOLD}`, background: "none", color: GOLD, borderRadius: 20, padding: "5px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", flex: "none" }}>
+                        Su margen es mío
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

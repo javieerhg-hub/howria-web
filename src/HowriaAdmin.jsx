@@ -307,6 +307,7 @@ function usuarioToDb(u) {
     capacidad_maxima: u.capacidadMaxima || null,
     meta_mensual: u.metaMensual || null,
     paseador_vinculado: u.paseadorVinculado || null,
+    margen_va_a_howria: u.margenVaAHowria || false,
   };
 }
 
@@ -325,6 +326,10 @@ function dbToUsuario(row) {
     // Con que cuenta de terreno trabaja esta persona, cuando ademas de
     // administrar sale a pasear (ver Finanzas personales, database/120).
     paseadorVinculado: row.paseador_vinculado || null,
+    // Si la diferencia entre lo que paga el tutor y lo que se le paga a
+    // esta persona es de Howria. Constanza si; Arniaz y Andreina trabajan
+    // aparte (database/122).
+    margenVaAHowria: row.margen_va_a_howria || false,
   };
 }
 
