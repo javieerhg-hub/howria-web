@@ -1513,6 +1513,76 @@ const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Agenda general", "Clientes y 
 export const TABS_SECUNDARIOS = ["paseadores", "mapa", "seguimiento", "inventario", "equipo", "notificaciones"];
 export const esTabSecundario = (id) => TABS_SECUNDARIOS.includes(id);
 
+// Pestañas que el menú muestra como UNA sola entrada con sub-pestañas
+// adentro. Emitir una boleta y revisar las emitidas son dos pasos del
+// mismo trámite; pagarle a un paseador y pagarle a un adiestrador son la
+// misma tarea con dos reglas de cálculo. Tenerlas separadas (y encima en
+// grupos distintos del menú: "pagos" vivía en Equipo y
+// "pago-adiestramiento" en Adiestramiento) era la causa principal de que
+// la app se sintiera repartida.
+//
+// LO IMPORTANTE, Y POR QUÉ ESTO NO LLEVA MIGRACIÓN: los ids de adentro
+// NO se tocan. Cada sub-pestaña sigue siendo su propia unidad de permiso
+// en `permisos_roles`, se sigue configurando una por una desde Usuarios,
+// y acá abajo solo se dibuja la que el rol tenga permitida. Fusionar los
+// ids habría significado que quien tiene una hereda la otra — justo lo
+// que no se quiere con plata de por medio. Esto separa "qué tienes
+// permitido" de "cómo está ordenado el menú".
+//
+// Por eso `finanzas-personales` NO está acá: es de Javier y de nadie
+// más, así que se queda como pestaña suelta (decisión suya, explícita).
+//
+// Para deshacer una fusión basta sacarla de esta lista: las pestañas
+// vuelven solas al menú por separado.
+const FUSIONES = [
+  {
+    id: "cobrar",
+    label: "Cobrar",
+    grupo: "Clientes y dinero",
+    icono: Receipt,
+    desc: "Emitir una boleta y seguir las que ya están emitidas hasta que se paguen.",
+    subs: [
+      { id: "boletas", label: "Emitir" },
+      { id: "facturas", label: "Emitidas" },
+    ],
+  },
+];
+
+// La fusión a la que pertenece una pestaña, si es que pertenece a alguna.
+export function fusionDeTab(id) {
+  return FUSIONES.find((f) => f.subs.some((s) => s.id === id)) || null;
+}
+
+// Convierte la lista de pestañas permitidas de un grupo en las entradas
+// que el menú dibuja: las sueltas tal cual, y las fusionadas colapsadas
+// en una sola entrada (en la posición de su primera sub-pestaña). Una
+// fusión de la que el rol solo tiene una mitad igual se muestra como
+// fusión, con esa única sub-pestaña adentro — así el menú se ve igual
+// para todos y nadie deduce qué se le está escondiendo.
+export function entradasDeMenu(tabs, grupo, { secundarias = false } = {}) {
+  const yaPuesta = new Set();
+  const entradas = [];
+  for (const t of tabs) {
+    if (t.grupo !== grupo) continue;
+    if (esTabSecundario(t.id) !== secundarias) continue;
+    const f = fusionDeTab(t.id);
+    if (!f) {
+      entradas.push(t);
+      continue;
+    }
+    if (yaPuesta.has(f.id)) continue;
+    yaPuesta.add(f.id);
+    const subs = f.subs.filter((s) => tabs.some((x) => x.id === s.id));
+    if (subs.length === 0) continue;
+    entradas.push({ id: f.id, label: f.label, desc: f.desc, grupo, esFusion: true, subs, destino: subs[0].id });
+  }
+  return entradas;
+}
+
+// A dónde lleva un clic en una entrada del menú, y cuándo se pinta activa.
+const destinoDeEntrada = (e) => (e.esFusion ? e.destino : e.id);
+const entradaActiva = (e, tab) => (e.esFusion ? e.subs.some((s) => s.id === tab) : tab === e.id);
+
 // Tablas que solo hacen falta en ciertas pestañas. Si el rol no tiene
 // NINGUNA de ellas, no se bajan: un paseador entraba descargando
 // inventario, pagos, objetivos, planes de clases y solicitudes de
@@ -1546,6 +1616,8 @@ export const ROLES_APP = ["paseador", "entrenador", "coordinador", "administrado
 // Inicio en mobile (ver Inicio() más abajo). "inicio" no necesita uno —
 // ya estás ahí.
 const ICONOS_TAB = {
+  // Entradas fusionadas del menu (ver FUSIONES) — comparten el lookup.
+  cobrar: Receipt,
   "mis-paseos": Footprints,
   coordinacion: MapPinned,
   mapa: MapIcon,
@@ -4316,7 +4388,11 @@ function BuscadorFunciones({ tabs, tabActual, onElegir, onCerrar }) {
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                     <b style={{ fontSize: 14.5, color: NAVY, fontWeight: 600 }}>{t.label}</b>
-                    {t.grupo && <span style={{ fontSize: 10.5, color: "#A2977C", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{t.grupo}</span>}
+                    {/* Para una pestaña fusionada se muestra también su
+                        entrada del menú ("Clientes y dinero · Cobrar"),
+                        porque el nombre que busca ya no está a la vista
+                        en la barra lateral. */}
+                    {t.grupo && <span style={{ fontSize: 10.5, color: "#A2977C", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{t.grupo}{fusionDeTab(t.id) ? ` · ${fusionDeTab(t.id).label}` : ""}</span>}
                     {t.id === tabActual && <span style={{ fontSize: 10.5, color: GOLD, fontWeight: 700 }}>· estás aquí</span>}
                   </span>
                   <span style={{ display: "block", fontSize: 12.5, color: "#6B6248", lineHeight: 1.4, marginTop: 2 }}>{t.desc}</span>
@@ -4326,6 +4402,35 @@ function BuscadorFunciones({ tabs, tabActual, onElegir, onCerrar }) {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// La tira de sub-pestañas que aparece arriba del contenido cuando la
+// pestaña actual es parte de una fusión (ver FUSIONES). Mismo patrón
+// visual que el selector Paseos/Adiestramiento de Clientes y el Mes/Día
+// de Calendario, que es el que ya está probado en la app.
+//
+// Solo se dibuja si hay más de una sub-pestaña permitida: a quien tenga
+// una sola mitad no le sirve de nada un selector de una opción.
+function SubPestanas({ fusion, tabs, tab, setTab }) {
+  const disponibles = fusion.subs.filter((s) => tabs.some((t) => t.id === s.id));
+  if (disponibles.length < 2) return null;
+  return (
+    <div role="group" aria-label={fusion.label} style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      {disponibles.map((s) => {
+        const activo = tab === s.id;
+        return (
+          <button key={s.id} type="button" onClick={() => setTab(s.id)} aria-pressed={activo}
+            style={{
+              flex: 1, padding: "11px 14px", borderRadius: 10, cursor: "pointer", fontSize: 14, minHeight: 46,
+              border: "none", fontWeight: activo ? 700 : 500, fontFamily: "inherit",
+              background: activo ? NAVY : CREAM_SOFT, color: activo ? CREAM : INK,
+            }}>
+            {s.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -4350,7 +4455,7 @@ function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
           const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
           const esDestacado = destacar.includes(t.id);
           return (
-            <button key={t.id} onClick={() => setTab(t.id)} title={t.desc}
+            <button key={t.id} onClick={() => setTab(destinoDeEntrada(t))} title={t.desc}
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
                 padding: "16px 6px", border: "none", borderRadius: 16, background: esDestacado ? GOLD : "#FFFFFF",
@@ -4382,7 +4487,7 @@ function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
         </button>
       )}
       {ORDEN_GRUPOS.map((grupo) => {
-        const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
+        const tabsDelGrupo = entradasDeMenu(tabs, grupo);
         if (tabsDelGrupo.length === 0) return null;
         return (
           <div key={grupo} style={{ marginBottom: 18 }}>
@@ -5165,16 +5270,16 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBusca
               </button>
             )}
             {ORDEN_GRUPOS.map((grupo) => {
-              const tabsDelGrupo = resto.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
+              const tabsDelGrupo = entradasDeMenu(resto, grupo);
               if (tabsDelGrupo.length === 0) return null;
               return (
                 <div key={grupo} style={{ marginBottom: 6 }}>
                   <p style={{ margin: "4px 0 2px 8px", fontSize: 10.5, color: "#B0A587", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>{grupo}</p>
                   {tabsDelGrupo.map((t) => {
                     const Icono = ICONOS_TAB[t.id] || Home;
-                    const activo = tab === t.id;
+                    const activo = entradaActiva(t, tab);
                     return (
-                      <button key={t.id} onClick={() => ir(t.id)}
+                      <button key={t.id} onClick={() => ir(destinoDeEntrada(t))}
                         style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: activo ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
                         <Icono size={17} color={NAVY} />
                         <span style={{ fontSize: 13.5, color: INK, fontWeight: activo ? 700 : 400 }}>{t.label}</span>
@@ -5900,16 +6005,16 @@ export default function HowriaAdmin() {
               </button>
             )}
             {ORDEN_GRUPOS.map((grupo) => {
-              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
+              const tabsDelGrupo = entradasDeMenu(tabs, grupo);
               if (tabsDelGrupo.length === 0) return null;
               return (
                 <div key={grupo} style={{ marginTop: 14 }}>
                   <p style={{ margin: "0 0 4px 12px", fontSize: 10.5, color: "#7C8797", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700 }}>{grupo}</p>
                   {tabsDelGrupo.map((t) => {
                     const Icono = ICONOS_TAB[t.id] || Home;
-                    const activo = tab === t.id;
+                    const activo = entradaActiva(t, tab);
                     return (
-                      <button key={t.id} onClick={() => setTab(t.id)} title={t.desc}
+                      <button key={t.id} onClick={() => setTab(destinoDeEntrada(t))} title={t.desc}
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 10,
                           padding: "10px 12px", border: "none", borderRadius: 8, background: activo ? "rgba(201,150,47,0.16)" : "none",
@@ -6011,6 +6116,7 @@ export default function HowriaAdmin() {
       }>
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab("inicio")}>
+        {fusionDeTab(tab) && <SubPestanas fusion={fusionDeTab(tab)} tabs={tabs} tab={tab} setTab={setTab} />}
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} onBuscar={() => setBuscadorAbierto(true)} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (

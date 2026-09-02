@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -41,6 +41,61 @@ describe("metadata de las pestañas", () => {
       const delGrupo = TODOS_LOS_TABS.filter((t) => t.grupo === g);
       const visibles = delGrupo.filter((t) => !esTabSecundario(t.id));
       expect(visibles.length, `el grupo "${g}" se quedaría sin ninguna pestaña visible`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("fusiones del menú", () => {
+  const tabsDe = (...ids) => TODOS_LOS_TABS.filter((t) => ids.includes(t.id));
+
+  it("Boletas y Facturas viven bajo la misma entrada", () => {
+    expect(fusionDeTab("boletas")?.id).toBe("cobrar");
+    expect(fusionDeTab("facturas")?.id).toBe("cobrar");
+  });
+
+  it("una pestaña suelta no pertenece a ninguna fusión", () => {
+    expect(fusionDeTab("clientes")).toBeNull();
+    expect(fusionDeTab("finanzas")).toBeNull();
+  });
+
+  it("Finanzas personales nunca se fusiona con nada", () => {
+    // Decisión explícita de Javier: "finanzas personales se creó para mí
+    // personalmente no para los demás". Fusionarla con Finanzas haría que
+    // cualquiera con permiso de Finanzas viera su plata.
+    expect(fusionDeTab("finanzas-personales")).toBeNull();
+  });
+
+  it("dos pestañas fusionadas se dibujan como una sola entrada", () => {
+    const entradas = entradasDeMenu(tabsDe("clientes", "boletas", "facturas", "finanzas"), "Clientes y dinero");
+    const ids = entradas.map((e) => e.id);
+    expect(ids).toEqual(["clientes", "cobrar", "finanzas"]);
+    expect(entradas.find((e) => e.id === "cobrar").subs.map((s) => s.id)).toEqual(["boletas", "facturas"]);
+  });
+
+  it("quien tiene solo una mitad ve solo esa mitad", () => {
+    // Lo que protege el gateo por permiso: fusionar es visual, NO reparte
+    // accesos. Un rol con 'facturas' y sin 'boletas' no puede terminar
+    // pudiendo emitir boletas por haber juntado las pestañas.
+    const entradas = entradasDeMenu(tabsDe("facturas"), "Clientes y dinero");
+    expect(entradas).toHaveLength(1);
+    expect(entradas[0].id).toBe("cobrar");
+    expect(entradas[0].subs.map((s) => s.id)).toEqual(["facturas"]);
+    expect(entradas[0].destino).toBe("facturas");
+  });
+
+  it("sin ninguna mitad permitida, la entrada no aparece", () => {
+    const entradas = entradasDeMenu(tabsDe("clientes"), "Clientes y dinero");
+    expect(entradas.map((e) => e.id)).toEqual(["clientes"]);
+  });
+
+  it("toda sub-pestaña declarada existe como pestaña real", () => {
+    const ids = TODOS_LOS_TABS.map((t) => t.id);
+    for (const t of TODOS_LOS_TABS) {
+      const f = fusionDeTab(t.id);
+      if (!f) continue;
+      for (const s of f.subs) {
+        expect(ids, `la fusión "${f.id}" declara "${s.id}", que no es una pestaña`).toContain(s.id);
+      }
     }
   });
 });
