@@ -29,7 +29,7 @@ import {
 } from "../HowriaAdmin.jsx";
 import { diasDelMesProgramados } from "../lib/programacion.js";
 import { realizadosEnRango, programadosEnRango } from "../lib/pagos.js";
-import { periodoDeBoleta, esVenta } from "../lib/calculosBoletas.js";
+import { periodoDeBoleta, cicloDeFecha, esVenta } from "../lib/calculosBoletas.js";
 
 const VERDE = "#2F6A46";
 
@@ -121,8 +121,14 @@ export function FinanzasPersonales({
     const filas = citasAgenda
       .filter((c) => {
         if (c.estado !== "realizada") return false;
-        const d = new Date(c.fechaISO);
-        return d.getMonth() === mes && d.getFullYear() === anio;
+        // Por CICLO DE COBRO, no por el mes en que se hizo. Una evaluacion
+        // del 23 de agosto se cobra y se paga junto con septiembre, y asi
+        // es como Javier la cuenta — igual que una boleta emitida a fines
+        // de agosto que cubre septiembre. Pago adiestramiento no filtra por
+        // fecha (es una cola de pendientes), asi que sin esto lo que esta
+        // ahi hoy no aparecia en el mes en que se va a cobrar.
+        const ciclo = cicloDeFecha(c.fechaISO);
+        return ciclo && ciclo.getMonth() === mes && ciclo.getFullYear() === anio;
       })
       .map((c) => {
         const b = c.boletaAdiestramientoId
@@ -329,13 +335,15 @@ export function FinanzasPersonales({
       <div className="howria-card" style={tarjeta}>
         <h3 style={{ ...sectionTitle, fontSize: 16 }}>Adiestramiento: lo que queda para Howria</h3>
         <p style={{ ...hint, marginTop: 4, marginBottom: 14 }}>
-          Cada evaluación y clase hecha en {MESES[mes]}: lo que entró menos lo acordado
-          con el adiestrador. Solo suman las que ya tienen el monto acordado — las
-          demás van abajo, sin contar.
+          Cada evaluación y clase que se cobra en el ciclo de {MESES[mes]}: lo que entró
+          menos lo acordado con el adiestrador. Va por ciclo, no por el día en que se
+          hizo — una evaluación de fines de agosto se cobra con septiembre, igual que
+          las boletas. Solo suman las que ya tienen el monto acordado; las demás van
+          abajo, sin contar.
         </p>
 
         {adiestramiento.filas.length === 0 ? (
-          <p style={hint}>No hay evaluaciones ni clases realizadas en {MESES[mes]}.</p>
+          <p style={hint}>No hay evaluaciones ni clases que se cobren en el ciclo de {MESES[mes]}.</p>
         ) : (
           <div style={{ display: "grid", gap: 6 }}>
             {adiestramiento.filas.filter((f) => f.definido).map((f) => (
@@ -346,7 +354,7 @@ export function FinanzasPersonales({
                   </p>
                   <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>
                     {f.cita.tipo === "evaluacion" ? "Evaluación" : "Clase"}
-                    {" · "}{new Date(f.cita.fechaISO).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
+                    {" · hecha el "}{new Date(f.cita.fechaISO).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
                     {" · entró "}{fmtCLP(f.entro)}{" · al adiestrador "}{fmtCLP(f.alAdiestrador)}
                     {!f.cobrado && " · aún sin cobrar"}
                   </p>
