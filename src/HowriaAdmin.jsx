@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import {
   Bell, BellOff, Home, Footprints, MapPinned, Map as MapIcon, Calendar, CalendarDays, Route, Mail as MailIcon, Dog, Receipt,
   FileText, TrendingUp, Wallet, Banknote, Users, ShieldCheck, Target, LayoutGrid, CircleCheck, CircleX,
-  GraduationCap, KeyRound, MessageCircle, Send, Package,
+  GraduationCap, KeyRound, MessageCircle, Send, Package, Search, ChevronDown,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
@@ -1467,31 +1467,53 @@ export const DIAS_SEMANA_LARGO = ["Lunes","Martes","Miércoles","Jueves","Vierne
 // Calendario e Itinerario sí son de los dos mundos (traen sus pastillas
 // para mostrar/ocultar paseos, evaluaciones y clases), así que quedan en
 // su propio grupo en vez de forzarlos a uno de los dos lados.
+// Cada pestaña lleva además:
+//   desc  — una línea de "para qué sirve esto", que se ve en el buscador
+//           de funciones y como tooltip en el menú lateral. Se escribe
+//           pensando en alguien que NO sabe dónde está lo que busca.
+//   busca — sinónimos y palabras sueltas que la gente usaría para buscarla
+//           pero que no están en el nombre ("pagar" no aparece en
+//           "Pago trabajadores" conjugado así, "plata" no aparece en
+//           "Finanzas"). Sin esto el buscador solo encuentra lo que ya
+//           sabías cómo se llamaba, que es justo lo que no sirve.
 export const TODOS_LOS_TABS = [
-  { id: "inicio", label: "Inicio", grupo: "" },
-  { id: "mis-paseos", label: "Mis paseos", grupo: "Paseos" },
-  { id: "coordinacion", label: "Coordinación", grupo: "Paseos" },
-  { id: "mapa", label: "Mapa", grupo: "Paseos" },
-  { id: "paseadores", label: "Paseadores", grupo: "Paseos" },
-  { id: "agenda", label: "Agenda", grupo: "Adiestramiento" },
-  { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento" },
-  { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Adiestramiento" },
-  { id: "calendario", label: "Calendario", grupo: "Agenda general" },
-  { id: "itinerario", label: "Itinerario", grupo: "Agenda general" },
-  { id: "clientes", label: "Clientes", grupo: "Clientes y dinero" },
-  { id: "boletas", label: "Boletas", grupo: "Clientes y dinero" },
-  { id: "facturas", label: "Facturas", grupo: "Clientes y dinero" },
-  { id: "finanzas", label: "Finanzas", grupo: "Clientes y dinero" },
-  { id: "finanzas-personales", label: "Finanzas personales", grupo: "Clientes y dinero" },
-  { id: "pagos", label: "Pago trabajadores", grupo: "Equipo" },
-  { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo" },
-  { id: "notificaciones", label: "Notificaciones", grupo: "Equipo" },
-  { id: "inventario", label: "Inventario", grupo: "Equipo" },
-  { id: "usuarios", label: "Usuarios", grupo: "Equipo" },
-  { id: "seguimiento", label: "Seguimiento", grupo: "Prospección" },
-  { id: "mail", label: "Mail", grupo: "Prospección" },
+  { id: "inicio", label: "Inicio", grupo: "", desc: "El resumen del día: avisos, paseos de hoy y accesos rápidos.", busca: "resumen dashboard avisos principal" },
+  { id: "mis-paseos", label: "Mis paseos", grupo: "Paseos", desc: "Tu ruta del día: marcar los paseos hechos y ver cuánto llevas del mes.", busca: "marcar realizado ruta hoy meta mios" },
+  { id: "coordinacion", label: "Coordinación", grupo: "Paseos", desc: "Quién pasea a quién hoy: reasignar, reprogramar y cubrir ausencias.", busca: "asignar reasignar reprogramar ausente cubrir turno hoy manada" },
+  { id: "mapa", label: "Mapa", grupo: "Paseos", desc: "Los clientes del día sobre el mapa, para ordenar el recorrido.", busca: "ruta recorrido direccion ubicacion" },
+  { id: "paseadores", label: "Paseadores", grupo: "Paseos", desc: "Perfil de cada paseador: paseos del mes, plata por cliente y su meta.", busca: "perfil rendimiento meta equipo" },
+  { id: "agenda", label: "Agenda", grupo: "Adiestramiento", desc: "Evaluaciones y clases: confirmar, mover, cancelar y la disponibilidad del adiestrador.", busca: "cita evaluacion clase confirmar cancelar horario disponibilidad" },
+  { id: "alumnos", label: "Alumnos", grupo: "Adiestramiento", desc: "Los clientes que toman clases: packs, avance y qué les toca ahora.", busca: "clases pack avance entrenamiento" },
+  { id: "pago-adiestramiento", label: "Pago adiestramiento", grupo: "Adiestramiento", desc: "Cuánto se le debe al adiestrador por cada evaluación y clase.", busca: "pagar sueldo adiestrador entrenador liquidacion plata" },
+  { id: "calendario", label: "Calendario", grupo: "Agenda general", desc: "El mes completo con paseos, evaluaciones y clases juntos.", busca: "mes agenda vista" },
+  { id: "itinerario", label: "Itinerario", grupo: "Agenda general", desc: "El día hora por hora, con bloques que se arrastran para cambiar el horario.", busca: "dia horario hora grilla bloques arrastrar" },
+  { id: "clientes", label: "Clientes", grupo: "Clientes y dinero", desc: "La ficha madre de cada cliente — de acá salen boletas, finanzas y perfiles.", busca: "ficha perro tutor tarifa direccion telefono dueño" },
+  { id: "boletas", label: "Boletas", grupo: "Clientes y dinero", desc: "Emitir una boleta nueva, de paseos o de adiestramiento.", busca: "cobrar emitir crear nueva cuenta" },
+  { id: "facturas", label: "Facturas", grupo: "Clientes y dinero", desc: "Todas las boletas ya emitidas y en qué estado está cada una.", busca: "cobrar emitidas pagada pendiente deuda estado" },
+  { id: "finanzas", label: "Finanzas", grupo: "Clientes y dinero", desc: "Cuánto entró, cuánto salió y qué queda, con costos y rentabilidad.", busca: "plata ingresos caja margen costos gastos utilidad" },
+  { id: "finanzas-personales", label: "Finanzas personales", grupo: "Clientes y dinero", desc: "Tu plata, la que no es de la empresa: tus clientes, tu margen y tus gastos.", busca: "mia mio personal javier liquidacion propia" },
+  { id: "pagos", label: "Pago trabajadores", grupo: "Equipo", desc: "Cuánto se le debe a cada paseador y registrar que ya se le pagó.", busca: "pagar sueldo paseador liquidacion plata comprobante" },
+  { id: "equipo", label: "Objetivos y tareas", grupo: "Equipo", desc: "Objetivos del mes y tareas pendientes del equipo.", busca: "metas tareas objetivos pendientes" },
+  { id: "notificaciones", label: "Notificaciones", grupo: "Equipo", desc: "Mandar un aviso push a mano a un paseador o entrenador.", busca: "push aviso mensaje avisar mandar" },
+  { id: "inventario", label: "Inventario", grupo: "Equipo", desc: "Qué se le entregó a cada persona: correas, bolsas, arneses.", busca: "entregas insumos correa bolsa arnes materiales" },
+  { id: "usuarios", label: "Usuarios", grupo: "Equipo", desc: "Cuentas del equipo, roles y qué pestañas ve cada uno.", busca: "permisos rol cuenta clave contraseña acceso" },
+  { id: "seguimiento", label: "Seguimiento", grupo: "Prospección", desc: "Prospectos: quién preguntó, en qué va y cuándo volver a contactarlo.", busca: "prospecto venta lead interesado contacto" },
+  { id: "mail", label: "Mail", grupo: "Prospección", desc: "El correo de contacto@howria.cl: leer y responder sin salir de la app.", busca: "correo email responder bandeja mensajes" },
 ];
 const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Agenda general", "Clientes y dinero", "Equipo", "Prospección"];
+
+// Pestañas que hoy casi no se usan y que Javier pidió sacar del camino
+// ("déjalas como +más y que no molesten, en un futuro trabajaré en
+// ellas"). Se midió con el historial de git: entre las seis sumaban 9
+// commits en 15 días, ocupando el 27% del menú.
+//
+// NO se borran ni se les quita el permiso — siguen existiendo con el
+// mismo id, y por eso este cambio no necesita migración: `permisos_roles`
+// guarda las pestañas por id y ninguno cambió. Solo se dibujan en una
+// sección "Más" plegada al final del menú. Para devolver una al menú
+// principal basta sacarla de esta lista.
+export const TABS_SECUNDARIOS = ["paseadores", "mapa", "seguimiento", "inventario", "equipo", "notificaciones"];
+export const esTabSecundario = (id) => TABS_SECUNDARIOS.includes(id);
 
 // Tablas que solo hacen falta en ciertas pestañas. Si el rol no tiene
 // NINGUNA de ellas, no se bajan: un paseador entraba descargando
@@ -3914,7 +3936,7 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab, reprograma
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta, reprogramaciones = [] }) {
+function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta, reprogramaciones = [], onBuscar }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
   const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
@@ -4016,7 +4038,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
           </div>
         )}
         <EvaluacionesPorConfirmar citas={evaluacionesPendientesPropias} setTab={setTab} />
-        <LauncherMobile tabs={tabs} setTab={setTab} destacar={["alumnos", "agenda"]} />
+        <LauncherMobile tabs={tabs} setTab={setTab} destacar={["alumnos", "agenda"]} onBuscar={onBuscar} />
         <div className="howria-card" style={tarjeta}>
           <h2 style={sectionTitle}>Clientes por atender</h2>
           <p style={{ ...hint, marginTop: 8 }}>Citas que ya aceptaste en Agenda — cada una queda acá hasta que la marques como realizada.</p>
@@ -4114,7 +4136,7 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
       {/* De los cuatro roles, paseador era el único sin este launcher en
           su Inicio mobile — justo el rol más "de terreno, en el
           celular" de todos. No pinta nada en desktop (.howria-launcher-mobile). */}
-      <LauncherMobile tabs={tabs} setTab={setTab} destacar={["mis-paseos"]} />
+      <LauncherMobile tabs={tabs} setTab={setTab} destacar={["mis-paseos"]} onBuscar={onBuscar} />
 
       {clientesHoy.length > 0 && pendientesHoy.length > 0 && (
         <div className="howria-card" style={tarjeta}>
@@ -4161,49 +4183,233 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
   );
 }
 
+// Saca los acentos para que "coordinacion" encuentre "Coordinación" y
+// al revés — nadie escribe tildes cuando está buscando algo rápido.
+function sinTildes(texto) {
+  return (texto || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+// Buscador de funciones (la lupa del menú, o Ctrl/Cmd + K).
+//
+// El problema que resuelve: con 22 pestañas repartidas en 6 grupos, el
+// menú dejó de servir para *encontrar* — sirve para navegar cuando ya
+// sabes dónde está la cosa. Acá escribes lo que quieres hacer ("pagar",
+// "cobrar", "tarifa") y salta, sin tener que acordarte de en qué grupo
+// quedó.
+//
+// Con el campo vacío muestra TODAS las pestañas con su descripción, así
+// que también funciona como índice de "para qué sirve cada una".
+function BuscadorFunciones({ tabs, tabActual, onElegir, onCerrar }) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef(null);
+  const listaRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // El orden con campo vacío respeta el del menú (grupo por grupo) para
+  // que el índice se lea igual que la barra lateral. Con texto, manda la
+  // calidad de la coincidencia: primero lo que empieza igual, después lo
+  // que contiene, y al final lo que solo coincide por descripción.
+  const resultados = useMemo(() => {
+    const orden = (t) => {
+      const i = ORDEN_GRUPOS.indexOf(t.grupo);
+      return i === -1 ? -1 : i; // Inicio (grupo "") queda primero
+    };
+    const todas = [...tabs].sort((a, b) => orden(a) - orden(b));
+    const term = sinTildes(q.trim());
+    if (!term) return todas;
+    return todas
+      .map((t) => {
+        const label = sinTildes(t.label);
+        const grupo = sinTildes(t.grupo);
+        const busca = sinTildes(t.busca);
+        const desc = sinTildes(t.desc);
+        let peso = -1;
+        if (label.startsWith(term)) peso = 0;
+        else if (label.includes(term)) peso = 1;
+        else if (busca.includes(term)) peso = 2;
+        else if (grupo.includes(term)) peso = 3;
+        else if (desc.includes(term)) peso = 4;
+        return { t, peso };
+      })
+      .filter((r) => r.peso >= 0)
+      .sort((a, b) => a.peso - b.peso)
+      .map((r) => r.t);
+  }, [tabs, q]);
+
+  // Si el filtro se achica, la selección puede quedar apuntando a una
+  // fila que ya no existe y Enter no haría nada.
+  useEffect(() => { setSel(0); }, [q]);
+
+  function elegir(tabId) {
+    if (!tabId) return;
+    onElegir(tabId);
+  }
+
+  function alTeclear(e) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSel((s) => Math.min(s + 1, resultados.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSel((s) => Math.max(s - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      elegir(resultados[sel]?.id);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCerrar();
+    }
+  }
+
+  // Mantiene visible la fila seleccionada al moverse con las flechas.
+  useEffect(() => {
+    const fila = listaRef.current?.children?.[sel];
+    fila?.scrollIntoView({ block: "nearest" });
+  }, [sel]);
+
+  return (
+    <div
+      onClick={onCerrar}
+      style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(18,42,64,0.42)", backdropFilter: "blur(2px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "12vh 16px 16px" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Buscar una función"
+        style={{ width: "100%", maxWidth: 560, background: "#FFFFFF", borderRadius: 14, boxShadow: "0 24px 60px rgba(18,42,64,0.35)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "70vh" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${CREAM_SOFT}`, flex: "none" }}>
+          <Search size={18} color="#8A7E5C" />
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={alTeclear}
+            placeholder="¿Qué quieres hacer? Ej: pagar, cobrar, tarifa"
+            style={{ flex: 1, border: "none", outline: "none", fontSize: 16, fontFamily: "inherit", color: INK, background: "transparent" }}
+          />
+          <button onClick={onCerrar} style={{ border: "none", background: CREAM, color: "#6B6248", borderRadius: 6, padding: "4px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flex: "none" }}>Esc</button>
+        </div>
+
+        <div ref={listaRef} style={{ overflowY: "auto", padding: 6 }}>
+          {resultados.length === 0 && (
+            <p style={{ margin: 0, padding: "26px 16px", fontSize: 14, color: "#9A9179", textAlign: "center" }}>
+              No hay ninguna función que calce con «{q}».
+            </p>
+          )}
+          {resultados.map((t, i) => {
+            const Icono = ICONOS_TAB[t.id] || Home;
+            const activo = i === sel;
+            return (
+              <button
+                key={t.id}
+                onClick={() => elegir(t.id)}
+                onMouseEnter={() => setSel(i)}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left",
+                  padding: "10px 12px", border: "none", borderRadius: 9, cursor: "pointer", font: "inherit",
+                  background: activo ? CREAM : "transparent",
+                }}
+              >
+                <span style={{ width: 32, height: 32, borderRadius: 9, background: CREAM_SOFT, display: "flex", alignItems: "center", justifyContent: "center", color: NAVY, flex: "none", marginTop: 1 }}>
+                  <Icono size={16} />
+                </span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <b style={{ fontSize: 14.5, color: NAVY, fontWeight: 600 }}>{t.label}</b>
+                    {t.grupo && <span style={{ fontSize: 10.5, color: "#A2977C", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{t.grupo}</span>}
+                    {t.id === tabActual && <span style={{ fontSize: 10.5, color: GOLD, fontWeight: 700 }}>· estás aquí</span>}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12.5, color: "#6B6248", lineHeight: 1.4, marginTop: 2 }}>{t.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Grid de íconos tipo "app launcher" que aparece arriba de Inicio en
 // mobile — mismo para administrador/coordinador y para el entrenador,
 // cada uno con sus propias pestañas permitidas (tabs ya viene filtrado
 // por rol desde App()).
-function LauncherMobile({ tabs, setTab, destacar = [] }) {
+function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
+  const [masAbierto, setMasAbierto] = useState(false);
   if (!tabs) return null;
+
+  const secundarias = tabs.filter((t) => esTabSecundario(t.id));
+
+  // Un mismo dibujo para el grid principal y para el de "Más", así los
+  // dos se ven igual y un cambio de estilo no hay que hacerlo dos veces.
+  function grid(lista) {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        {lista.map((t, i) => {
+          const Icono = ICONOS_TAB[t.id] || Home;
+          const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
+          const esDestacado = destacar.includes(t.id);
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)} title={t.desc}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                padding: "16px 6px", border: "none", borderRadius: 16, background: esDestacado ? GOLD : "#FFFFFF",
+                boxShadow: esDestacado ? "0 4px 14px rgba(201,150,47,0.35)" : "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
+              }}>
+              <span style={{ width: 46, height: 46, borderRadius: 14, background: esDestacado ? NAVY : bg, display: "flex", alignItems: "center", justifyContent: "center", color: esDestacado ? CREAM : color, flex: "none" }}>
+                <Icono size={21} />
+              </span>
+              <span style={{ fontSize: 11.5, color: esDestacado ? NAVY : INK, textAlign: "center", lineHeight: 1.25, fontWeight: esDestacado ? 700 : 500 }}>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="howria-launcher-mobile" style={{ display: "none" }}>
+      {onBuscar && (
+        <button onClick={onBuscar}
+          style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%", marginBottom: 18,
+            padding: "12px 14px", border: "1px solid #E4DBC3", borderRadius: 12, background: "#FFFFFF",
+            cursor: "pointer", font: "inherit", fontSize: 14, color: "#8A7E5C", textAlign: "left",
+            boxShadow: "0 2px 10px rgba(20,33,61,0.06)",
+          }}>
+          <Search size={17} />
+          <span>Buscar una función…</span>
+        </button>
+      )}
       {ORDEN_GRUPOS.map((grupo) => {
-        const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+        const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
         if (tabsDelGrupo.length === 0) return null;
         return (
           <div key={grupo} style={{ marginBottom: 18 }}>
             <p style={{ ...label, marginBottom: 10 }}>{grupo}</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-              {tabsDelGrupo.map((t, i) => {
-                const Icono = ICONOS_TAB[t.id] || Home;
-                const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
-                const esDestacado = destacar.includes(t.id);
-                return (
-                  <button key={t.id} onClick={() => setTab(t.id)}
-                    style={{
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                      padding: "16px 6px", border: "none", borderRadius: 16, background: esDestacado ? GOLD : "#FFFFFF",
-                      boxShadow: esDestacado ? "0 4px 14px rgba(201,150,47,0.35)" : "0 2px 10px rgba(20,33,61,0.08)", cursor: "pointer", font: "inherit",
-                    }}>
-                    <span style={{ width: 46, height: 46, borderRadius: 14, background: esDestacado ? NAVY : bg, display: "flex", alignItems: "center", justifyContent: "center", color: esDestacado ? CREAM : color, flex: "none" }}>
-                      <Icono size={21} />
-                    </span>
-                    <span style={{ fontSize: 11.5, color: esDestacado ? NAVY : INK, textAlign: "center", lineHeight: 1.25, fontWeight: esDestacado ? 700 : 500 }}>{t.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {grid(tabsDelGrupo)}
           </div>
         );
       })}
+      {secundarias.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <button onClick={() => setMasAbierto((v) => !v)} aria-expanded={masAbierto}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: 0, border: "none", background: "none", cursor: "pointer", font: "inherit", ...label, marginBottom: masAbierto ? 10 : 0 }}>
+            <ChevronDown size={13} style={{ transform: masAbierto ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+            Más ({secundarias.length})
+          </button>
+          {masAbierto && grid(secundarias)}
+        </div>
+      )}
     </div>
   );
 }
 
 // ---------- Inicio (dashboard) ----------
-function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta, onBuscar }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
@@ -4211,7 +4417,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   const [detallesAbiertos, setDetallesAbiertos] = useState(true);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirRuta={onAbrirRuta} />;
+    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirRuta={onAbrirRuta} onBuscar={onBuscar} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador, reprogramaciones });
 
@@ -4286,7 +4492,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
       </div>
 
       <div className="howria-inicio-launcher-order">
-        <LauncherMobile tabs={tabs} setTab={setTab} />
+        <LauncherMobile tabs={tabs} setTab={setTab} onBuscar={onBuscar} />
       </div>
 
       {/* Aviso corto: el panel completo para decidir vive en Coordinación
@@ -4934,7 +5140,7 @@ function ItemBarraNav({ activo, Icono, label, onClick, badge }) {
 // Barra de navegación flotante en mobile, tipo apps nativas: Inicio + las
 // secciones más usadas (PRIORIDAD_BARRA_NAV), y "Más" agrupa el resto por
 // categoría en un panel arriba de la barra.
-function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0 }) {
+function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0, onBuscar }) {
   const [masAbierto, setMasAbierto] = useState(false);
   if (!tabs) return null;
 
@@ -4954,8 +5160,15 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0 }) {
         <>
           <div onClick={() => setMasAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
           <div style={{ position: "absolute", bottom: 66, left: 0, right: 0, maxHeight: "60vh", overflowY: "auto", background: "rgba(255,255,255,0.78)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(20,33,61,0.06)", borderRadius: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.25)", padding: 12, zIndex: 70 }}>
+            {onBuscar && (
+              <button onClick={() => { setMasAbierto(false); onBuscar(); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 8px", marginBottom: 4, border: "none", background: "rgba(20,33,61,0.05)", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
+                <Search size={17} color={NAVY} />
+                <span style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>Buscar una función…</span>
+              </button>
+            )}
             {ORDEN_GRUPOS.map((grupo) => {
-              const tabsDelGrupo = resto.filter((t) => t.grupo === grupo);
+              const tabsDelGrupo = resto.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
               if (tabsDelGrupo.length === 0) return null;
               return (
                 <div key={grupo} style={{ marginBottom: 6 }}>
@@ -4977,6 +5190,28 @@ function BarraNavegacionMobile({ tabs, tab, setTab, correosNoLeidos = 0 }) {
                 </div>
               );
             })}
+            {/* Las secundarias van al final, bajo su propio rótulo, para
+                que no se mezclen con las de todos los días. */}
+            {(() => {
+              const secundarias = resto.filter((t) => esTabSecundario(t.id));
+              if (secundarias.length === 0) return null;
+              return (
+                <div style={{ marginBottom: 6 }}>
+                  <p style={{ margin: "4px 0 2px 8px", fontSize: 10.5, color: "#B0A587", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>Más</p>
+                  {secundarias.map((t) => {
+                    const Icono = ICONOS_TAB[t.id] || Home;
+                    const activo = tab === t.id;
+                    return (
+                      <button key={t.id} onClick={() => ir(t.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 8px", border: "none", background: activo ? CREAM_SOFT : "none", borderRadius: 8, cursor: "pointer", font: "inherit" }}>
+                        <Icono size={17} color={NAVY} />
+                        <span style={{ fontSize: 13.5, color: INK, fontWeight: activo ? 700 : 400 }}>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </>
       )}
@@ -5143,6 +5378,26 @@ export default function HowriaAdmin() {
       return "inicio";
     }
   });
+  // Buscador de funciones: la lupa del menú o Ctrl/Cmd + K.
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false);
+  // Sección "Más" del menú lateral, donde viven las pestañas secundarias.
+  const [masMenuAbierto, setMasMenuAbierto] = useState(false);
+  useEffect(() => {
+    function atajo(e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setBuscadorAbierto(true);
+      }
+    }
+    window.addEventListener("keydown", atajo);
+    return () => window.removeEventListener("keydown", atajo);
+  }, []);
+  // Si el usuario entra directo a una pestaña secundaria (por ?tab= o
+  // desde el buscador), la sección "Más" se abre sola — si no, el menú
+  // no muestra ninguna marca de dónde está parado.
+  useEffect(() => {
+    if (esTabSecundario(tab)) setMasMenuAbierto(true);
+  }, [tab]);
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
@@ -5627,8 +5882,18 @@ export default function HowriaAdmin() {
             <LogoHowria height={38} />
           </div>
           <nav style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+            <button onClick={() => setBuscadorAbierto(true)} title="Buscar una función (Ctrl + K)"
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", marginBottom: 6,
+                border: "1px solid rgba(255,255,255,0.16)", borderRadius: 8, background: "rgba(255,255,255,0.05)",
+                cursor: "pointer", textAlign: "left", color: "#9BAAB8", fontSize: 13, fontFamily: "inherit",
+              }}>
+              <Search size={15} />
+              <span style={{ flex: 1 }}>Buscar…</span>
+              <span style={{ fontSize: 10.5, color: "#6E7B8C", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
+            </button>
             {tabs.some((t) => t.id === "inicio") && (
-              <button onClick={() => setTab("inicio")}
+              <button onClick={() => setTab("inicio")} title={TODOS_LOS_TABS.find((t) => t.id === "inicio")?.desc}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "none", borderRadius: 8,
                   background: tab === "inicio" ? "rgba(201,150,47,0.16)" : "none", cursor: "pointer", textAlign: "left",
@@ -5638,7 +5903,7 @@ export default function HowriaAdmin() {
               </button>
             )}
             {ORDEN_GRUPOS.map((grupo) => {
-              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo);
+              const tabsDelGrupo = tabs.filter((t) => t.grupo === grupo && !esTabSecundario(t.id));
               if (tabsDelGrupo.length === 0) return null;
               return (
                 <div key={grupo} style={{ marginTop: 14 }}>
@@ -5647,7 +5912,7 @@ export default function HowriaAdmin() {
                     const Icono = ICONOS_TAB[t.id] || Home;
                     const activo = tab === t.id;
                     return (
-                      <button key={t.id} onClick={() => setTab(t.id)}
+                      <button key={t.id} onClick={() => setTab(t.id)} title={t.desc}
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 10,
                           padding: "10px 12px", border: "none", borderRadius: 8, background: activo ? "rgba(201,150,47,0.16)" : "none",
@@ -5663,6 +5928,42 @@ export default function HowriaAdmin() {
                 </div>
               );
             })}
+            {/* Las pestañas secundarias, plegadas para que no compitan por
+                la atención con las que se usan todos los días. Siguen
+                accesibles acá y por el buscador. */}
+            {(() => {
+              const secundarias = tabs.filter((t) => esTabSecundario(t.id));
+              if (secundarias.length === 0) return null;
+              return (
+                <div style={{ marginTop: 14 }}>
+                  <button onClick={() => setMasMenuAbierto((v) => !v)}
+                    aria-expanded={masMenuAbierto}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", border: "none",
+                      borderRadius: 8, background: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                      fontSize: 10.5, color: "#7C8797", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700,
+                    }}>
+                    <ChevronDown size={13} style={{ transform: masMenuAbierto ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+                    Más
+                    <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0, fontWeight: 600, color: "#5E6A7A" }}>{secundarias.length}</span>
+                  </button>
+                  {masMenuAbierto && secundarias.map((t) => {
+                    const Icono = ICONOS_TAB[t.id] || Home;
+                    const activo = tab === t.id;
+                    return (
+                      <button key={t.id} onClick={() => setTab(t.id)} title={t.desc}
+                        style={{
+                          display: "flex", alignItems: "center", width: "100%", gap: 10,
+                          padding: "10px 12px", border: "none", borderRadius: 8, background: activo ? "rgba(201,150,47,0.16)" : "none",
+                          cursor: "pointer", textAlign: "left", color: activo ? GOLD : "#C9CEDA", fontWeight: activo ? 700 : 500, fontSize: 13.5,
+                        }}>
+                        <Icono size={16} /> {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </nav>
 
           <div style={{ flex: "none", borderTop: "1px solid rgba(255,255,255,0.12)", marginTop: 12, paddingTop: 14, paddingBottom: 14 }}>
@@ -5685,6 +5986,15 @@ export default function HowriaAdmin() {
 
         {mostrarCambiarPassword && <ModalCambiarPassword onCerrar={() => setMostrarCambiarPassword(false)} />}
 
+        {buscadorAbierto && (
+          <BuscadorFunciones
+            tabs={tabs}
+            tabActual={tab}
+            onElegir={(id) => { setTab(id); setBuscadorAbierto(false); }}
+            onCerrar={() => setBuscadorAbierto(false)}
+          />
+        )}
+
         <div className="howria-shell-contenido" style={{ flex: "1 1 auto", minWidth: 0 }}>
           {/* Facturas/Finanzas/Pago trabajadores tienen tablas anchas que en
               un monitor grande dejaban espacio vacío a los costados con el
@@ -5704,7 +6014,7 @@ export default function HowriaAdmin() {
       }>
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab("inicio")}>
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} onBuscar={() => setBuscadorAbierto(true)} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
@@ -5745,7 +6055,7 @@ export default function HowriaAdmin() {
           onEnviarMensaje={(mensaje) => enviarReclamoPago({ pagoDbId: pagoSinVer._dbId, trabajador: user.nombre, mensaje })} />
       )}
 
-      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} correosNoLeidos={correosNoLeidos} />
+      <BarraNavegacionMobile tabs={tabs} tab={tab} setTab={setTab} correosNoLeidos={correosNoLeidos} onBuscar={() => setBuscadorAbierto(true)} />
       <ChatEquipo user={user} mensajes={mensajesEquipo} enviarMensaje={enviarMensajeEquipo} cargando={cargandoMensajesEquipo} ultimaLectura={ultimaLecturaChat} marcarLeido={marcarChatLeido} />
     </div>
   );
