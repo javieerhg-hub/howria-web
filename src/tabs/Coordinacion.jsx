@@ -10,6 +10,7 @@ import {
   textoClienteEnLista,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";
+import { sinDiasAsignados } from "../lib/revisiones.js";
 
 const DIAS_LARGOS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -587,11 +588,10 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   // Es el punto ciego de esta pestaña: todo lo demás muestra lo que hay,
   // y esto muestra lo que falta. Sin el aviso no hay forma de notarlo,
   // justamente porque no aparecen.
-  const sinDiasAsignados = useMemo(() => clientes.filter((c) =>
-    (!(c.tipoServicio || []).length || (c.tipoServicio || []).includes("paseos")) &&
-    (c.estadoCliente || "activo") === "activo" &&
-    !(c.diasHabituales || []).length &&
-    !(c.diasPuntuales || []).length), [clientes]);
+  // La regla vive en lib/revisiones.js, compartida con el aviso de Inicio y
+  // con el filtro rápido de Clientes: si los tres no cuentan exactamente lo
+  // mismo, el que pierde la confianza es el aviso.
+  const clientesSinDias = useMemo(() => clientes.filter(sinDiasAsignados), [clientes]);
 
   const calendarioDia = useMemo(() => construirEstadoDia(diaVista, esHoyVista), [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
 
@@ -839,16 +839,16 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <PanelClientesEntrantes clientes={clientes} setClientes={setClientes} usuarios={usuarios} citasAgenda={citasAgenda} />
 
-      {sinDiasAsignados.length > 0 && (
+      {clientesSinDias.length > 0 && (
         <div style={{ background: "#F3E3B4", border: "1px solid #E0CB84", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#6B5312" }}>
-            {sinDiasAsignados.length} cliente(s) de paseos no aparecen en ningún día
+            {clientesSinDias.length} cliente(s) de paseos no aparecen en ningún día
           </p>
           <p style={{ margin: "2px 0 8px", fontSize: 12, color: "#8A6A1E" }}>
             No tienen días marcados, así que no salen en el calendario y nadie les puede marcar un paseo. En su ficha: ponles sus días de la semana, o marca <b>&ldquo;No tiene días fijos&rdquo;</b> y elige las fechas si sale cuando el tutor avisa.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {sinDiasAsignados.map((c) => (
+            {clientesSinDias.map((c) => (
               <span key={c.id} style={{ fontSize: 12, background: "#FFFDF7", border: "1px solid #E0CB84", borderRadius: 20, padding: "3px 10px", color: "#6B5312" }}>
                 {c.nombre.trim()}{c.perro ? ` · 🐾 ${c.perro}` : ""}{c.paseadorNombre ? ` · ${c.paseadorNombre}` : " · sin paseador"}
               </span>

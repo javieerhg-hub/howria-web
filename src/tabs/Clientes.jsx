@@ -11,6 +11,7 @@ import {
 } from "../HowriaAdmin.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
+import { FILTROS_REVISION, cumpleRevision } from "../lib/revisiones.js";
 import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, fechaISOaInputLocal, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
 
 // Los dos negocios de Howria. Un cliente cae en uno o en otro (hoy
@@ -1018,7 +1019,7 @@ function estiloPillaFiltro(activo, color, bg) {
   };
 }
 
-export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades, packsClases = [], planesClases = [], setPlanesClases, clasesRealizadas = [] }) {
+export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmitidas, boletasAdiestramiento, setBoletasAdiestramiento, usuarios, puedeEliminar, cargandoClientes, correos = [], citasAgenda = [], setCitas, saltarClienteDbId, limpiarSaltoCliente, nombreUsuario, mascotas, setMascotas, mascotaIncompatibilidades, setMascotaIncompatibilidades, packsClases = [], planesClases = [], setPlanesClases, clasesRealizadas = [], registroPaseos = {} }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [perfilId, setPerfilId] = useState(null);
@@ -1044,6 +1045,17 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   }
   const [soloEvaluacion, setSoloEvaluacion] = useState(filtrosGuardados.soloEvaluacion || false);
   const [orden, setOrden] = useState(filtrosGuardados.orden || "nombre-asc");
+  // Filtro rápido de revisión: "muéstrame solo los que tienen ESTE
+  // problema". Los tres salen de las mismas reglas que los avisos de Inicio
+  // (lib/revisiones.js), que es todo el punto: hasta ahora el aviso decía
+  // "7 clientes sin boleta este mes" y para saber CUÁLES había que
+  // revisarlos uno por uno.
+  //
+  // A propósito NO se guarda en localStorage, al revés que los otros
+  // filtros: es un modo de "voy a arreglar esto ahora", no una preferencia.
+  // Recordarlo significaría abrir Clientes mañana viendo 5 de 52 sin
+  // acordarse de por qué.
+  const [revision, setRevision] = useState(null);
 
   useEffect(() => {
     try { localStorage.setItem("howria_filtros_clientes", JSON.stringify({ filtroPaseador, filtroEstado, soloEvaluacion, orden, negocio })); } catch {}
@@ -1115,6 +1127,16 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
   delNegocio.forEach((c) => { conteoPorEstado[c.estadoCliente || "activo"] = (conteoPorEstado[c.estadoCliente || "activo"] || 0) + 1; });
   const totalEvaluacion = delNegocio.filter((c) => c.tipoServicio?.includes("evaluacion")).length;
 
+  // Los conteos de las pastillas de revisión, sobre el negocio que se está
+  // mirando, así que suman exactamente lo que muestra la lista al tocarlas
+  // — un contador que no cuadra con su propio filtro es peor que no tener
+  // contador.
+  const todasLasBoletas = [...boletasEmitidas, ...boletasAdiestramiento];
+  const revisionesVisibles = FILTROS_REVISION
+    .filter((f) => !f.soloPaseos || esVistaPaseos)
+    .map((f) => ({ ...f, n: delNegocio.filter((c) => cumpleRevision(f.id, c, { boletas: todasLasBoletas, registroPaseos })).length }))
+    .filter((f) => f.n > 0 || revision === f.id);
+
   const filtrados = delNegocio
     .filter((c) => {
       const q = busqueda.trim().toLowerCase();
@@ -1122,6 +1144,7 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
       if (esVistaPaseos && filtroPaseador !== "todos" && c.paseadorNombre !== filtroPaseador) return false;
       if (filtroEstado !== "todos" && (c.estadoCliente || "activo") !== filtroEstado) return false;
       if (soloEvaluacion && !c.tipoServicio?.includes("evaluacion")) return false;
+      if (revision && !cumpleRevision(revision, c, { boletas: todasLasBoletas, registroPaseos })) return false;
       return true;
     })
     .sort((a, b) => {
@@ -1203,6 +1226,22 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
           </button>
         )}
       </div>
+
+      {/* Lo que hay que arreglarle a alguien. Las tres reglas son las mismas
+          que usan los avisos de Inicio y Coordinación (lib/revisiones.js):
+          allá se dice cuántos son, y acá se ve quiénes. Una pastilla en cero
+          no se dibuja — no hay nada que revisar. */}
+      {revisionesVisibles.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+          <span style={{ fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 }}>Por revisar</span>
+          {revisionesVisibles.map((f) => (
+            <button key={f.id} onClick={() => setRevision(revision === f.id ? null : f.id)}
+              style={estiloPillaFiltro(revision === f.id, RUST, "#F8ECE6")}>
+              {f.etiqueta} ({f.n})
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, marginBottom: 4 }}>
         <div style={{ position: "relative", flex: "1 1 220px" }}>

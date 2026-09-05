@@ -3,6 +3,15 @@
 // (ver calculosBoletas.test.js). HowriaAdmin.jsx las usa desde acá en vez
 // de recalcular inline en cada componente.
 
+// ¿Esta boleta es de este cliente? Por id cuando los dos lo tienen, y si
+// no por nombre — las boletas viejas se guardaron antes de que existiera
+// cliente_id. Vivía en HowriaAdmin.jsx; se mudó acá para que
+// lib/revisiones.js pueda usarla sin importar el componente.
+export function esBoletaDeCliente(b, c) {
+  if (b.clienteId && c._dbId) return b.clienteId === c._dbId;
+  return b.cliente === c.nombre;
+}
+
 export function diasDelMes(mesIdx, anio) {
   return new Date(anio, mesIdx + 1, 0).getDate();
 }

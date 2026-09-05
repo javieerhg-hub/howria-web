@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient.js";
 import { soportaPush, suscripcionActiva, suscribirNotificaciones, desuscribirNotificaciones, esIOSFueraDeApp, cerrarNotificacionRuta, mostrarNotificacionRuta } from "./lib/pushNotificaciones.js";
-import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar } from "./lib/calculosBoletas.js";
+import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta, esPorCobrar, esBoletaDeCliente } from "./lib/calculosBoletas.js";
+import { sinDiasAsignados, sinBoletaEnElMes, conPaseosSinTarifa } from "./lib/revisiones.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 import { montoPrincipal, montoCompartido } from "./lib/reparto.js";
 import { fechaKey, esClienteDePaseosActivo, estaProgramadoEnFecha, diasDelMesProgramados } from "./lib/programacion.js";
@@ -414,10 +415,9 @@ function dbToLoginPendiente(row) {
   return { nombre: row.nombre, email: row.email, eliminadoEn: row.eliminado_en, rol: row.rol };
 }
 
-export function esBoletaDeCliente(b, c) {
-  if (b.clienteId && c._dbId) return b.clienteId === c._dbId;
-  return b.cliente === c.nombre;
-}
+// esBoletaDeCliente vive en lib/calculosBoletas.js — ver ahí por qué. Se
+// re-exporta porque media app la importa desde este archivo.
+export { esBoletaDeCliente };
 
 
 export function boletaAdiestramientoToDb(b) {
@@ -3118,21 +3118,13 @@ export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramient
   // pago calculado, y solo se descubrió mirando "Pago trabajadores" a
   // mano. Solo avisa si YA hay paseos hechos este mes — un cliente recién
   // cargado, todavía sin tarifa y sin paseos, no es un problema.
-  const conPaseosSinTarifa = clientes.filter((c) => {
-    if (!c.paseadorNombre || Number(c.tarifaPaseador || 0) > 0) return false;
-    const cur = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    while (cur <= hoy) {
-      if (registroPaseos[`${c.id}_${fechaKey(cur)}`]?.realizado) return true;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return false;
-  });
-  if (conPaseosSinTarifa.length > 0) {
+  const conTarifaCero = clientes.filter((c) => conPaseosSinTarifa(c, registroPaseos, hoy));
+  if (conTarifaCero.length > 0) {
     avisos.push({
       tipo: "tarifa-cero", urgencia: "alta", icono: "💸",
-      texto: `${conPaseosSinTarifa.length} cliente(s) con paseos hechos este mes y tarifa del paseador en $0`,
-      detalle: conPaseosSinTarifa.map((c) => `${c.nombre} (${c.paseadorNombre})`).join(", "),
-      clave: `tarifa-cero-${hoy.getMonth()}-${conPaseosSinTarifa.length}`, tab: "clientes",
+      texto: `${conTarifaCero.length} cliente(s) con paseos hechos este mes y tarifa del paseador en $0`,
+      detalle: conTarifaCero.map((c) => `${c.nombre} (${c.paseadorNombre})`).join(", "),
+      clave: `tarifa-cero-${hoy.getMonth()}-${conTarifaCero.length}`, tab: "clientes",
     });
   }
 
@@ -3143,12 +3135,14 @@ export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramient
   // abajo; ahora empuja a que se generen las boletas atrasadas en vez de
   // quedar enterrado.
   const todasLasBoletasDelMes = [...boletasEmitidas, ...boletasAdiestramiento];
-  const sinBoletaEsteMes = clientes.filter((c) => !todasLasBoletasDelMes.some((b) => {
-    const f = new Date(b.fechaISO);
-    return esBoletaDeCliente(b, c) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
-  }));
+  const sinBoletaEsteMes = clientes.filter((c) => sinBoletaEnElMes(c, todasLasBoletasDelMes, hoy));
   if (sinBoletaEsteMes.length > 0) {
     avisos.push({ tipo: "boleta-pendiente", urgencia: "alta", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
+  }
+
+  const sinDias = clientes.filter(sinDiasAsignados);
+  if (sinDias.length > 0) {
+    avisos.push({ tipo: "sin-dias", urgencia: "alta", icono: "📅", texto: `${sinDias.length} cliente(s) de paseos sin ningún día asignado`, detalle: sinDias.map((c) => c.nombre.trim()).join(", "), clave: `sin-dias-${sinDias.length}`, tab: "clientes" });
   }
 
   const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c) && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
@@ -6326,7 +6320,7 @@ export default function HowriaAdmin() {
             rolActual={user.rol} registroPaseos={registroPaseos} />
         )}
         {tab === "facturas" && tabsPermitidosRol.includes("facturas") && <Facturas boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} clientes={clientes} setClientes={setClientes} usuarios={usuarios} cargandoBoletas={cargandoBoletas || cargandoBoletasAdiestramiento} nombreUsuario={user.nombre} />}
-        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} />}
+        {tab === "clientes" && tabsPermitidosRol.includes("clientes") && <Clientes clientes={clientes} setClientes={setClientes} boletasEmitidas={boletasEmitidas} setBoletasEmitidas={setBoletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} setBoletasAdiestramiento={setBoletasAdiestramiento} usuarios={usuarios} puedeEliminar={esAdmin} cargandoClientes={cargandoClientes} correos={correos} citasAgenda={citasAgenda} setCitas={setCitasAgenda} saltarClienteDbId={saltarClienteDbId} limpiarSaltoCliente={() => setSaltarClienteDbId(null)} nombreUsuario={user.nombre} mascotas={mascotas} setMascotas={setMascotas} mascotaIncompatibilidades={mascotaIncompatibilidades} setMascotaIncompatibilidades={setMascotaIncompatibilidades} packsClases={packsClases} planesClases={planesClases} setPlanesClases={setPlanesClases} clasesRealizadas={clasesRealizadas} registroPaseos={registroPaseos} />}
         {tab === "finanzas" && tabsPermitidosRol.includes("finanzas") && <Finanzas boletasEmitidas={boletasEmitidas} onRegistrarBoleta={(b) => setBoletasEmitidas((prev) => [...prev, b])} boletasAdiestramiento={boletasAdiestramiento} clientes={clientes} citasAgenda={citasAgenda} pagosRegistrados={pagosRegistrados} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} costosNegocio={costosNegocio} setCostosNegocio={setCostosNegocio} nombreUsuario={user.nombre} user={user} onVerPagos={tabsPermitidosRol.includes("pagos") ? () => setTab("pagos") : undefined} onVerBoletas={tabsPermitidosRol.includes("boletas") ? () => setTab("boletas") : undefined} />}
         {tab === "paseadores" && tabsPermitidosRol.includes("paseadores") && <Paseadores clientes={clientes} setClientes={setClientes} usuarios={usuarios} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} cargandoClientes={cargandoClientes} />}
         {tab === "finanzas-personales" && tabsPermitidosRol.includes("finanzas-personales") && <FinanzasPersonales usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} citasAgenda={citasAgenda} registroPaseos={registroPaseos} reprogramaciones={reprogramaciones} gastosPersonales={gastosPersonales} setGastosPersonales={setGastosPersonales} cargandoGastos={cargandoGastosPersonales} user={user} cargando={cargandoClientes || cargandoBoletas} />}
