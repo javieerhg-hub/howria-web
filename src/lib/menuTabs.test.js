@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -201,5 +201,79 @@ describe("pestañas por rol", () => {
     expect(pestanasDelRol("cliente", permisos)).toEqual([]);
     expect(pestanasDelRol("paseador", null)).toEqual([]);
     expect(pestanasDelRol("administrador", undefined)).toEqual(["usuarios"]);
+  });
+});
+
+// La lista de "Hoy hay que…" del Inicio. Un aviso sin urgencia no rompe
+// nada: cae a "baja" y se hunde al final de la lista, en silencio. Como los
+// avisos se agregan de a uno y a mano, es justo el error que se comete al
+// agregar el número once.
+describe("urgencia de los avisos", () => {
+  const hoy = new Date();
+  const clave = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const entrada = {
+    // Cliente de paseos sin paseador, sin boleta este mes, y con evaluación
+    // pendiente: dispara tres avisos distintos de una.
+    clientes: [{ id: 1, nombre: "Ana", perro: "Nube", tipoServicio: ["paseos", "evaluacion"], diasHabituales: [], estadoCliente: "activo" }],
+    boletasEmitidas: [
+      { id: 1, estado: "no_enviada", total: 30000, fechaISO: hoy.toISOString(), clienteNombre: "Otro" },
+      { id: 2, estado: "pendiente_pago", total: 45000, fechaISO: hoy.toISOString(), clienteNombre: "Otro" },
+    ],
+    boletasAdiestramiento: [],
+    registroPaseos: {},
+    tareasEquipo: [{ id: 1, fechaISO: hoy.toISOString(), estado: "pendiente", asignadoA: "Javier" }],
+    citasAgenda: [],
+    prospectos: [{ id: 1, proximoSeguimiento: clave(hoy), estado: "contactado" }],
+    ausenciasPaseador: { Beatriz: "resfriada" },
+    reprogramaciones: [],
+  };
+
+  const avisos = calcularAvisos(entrada);
+
+  it("la fixture dispara varios avisos, si no el test no probaría nada", () => {
+    expect(avisos.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("todos traen una urgencia conocida", () => {
+    for (const a of avisos) {
+      expect(Object.keys(URGENCIAS), `el aviso "${a.tipo}" no tiene urgencia`).toContain(a.urgencia);
+    }
+  });
+
+  it("todos traen clave, texto y una pestaña a dónde ir", () => {
+    for (const a of avisos) {
+      expect(a.clave, `el aviso "${a.tipo}" no tiene clave — sin ella no se puede descartar`).toBeTruthy();
+      expect(a.texto).toBeTruthy();
+      expect(a.tab).toBeTruthy();
+    }
+  });
+
+  it("no hay dos avisos con la misma clave", () => {
+    // Descartar uno descartaría los dos, y React repetiría la key.
+    const claves = avisos.map((a) => a.clave);
+    expect(new Set(claves).size).toBe(claves.length);
+  });
+
+  it("lo urgente queda arriba y lo que puede esperar abajo", () => {
+    const ordenados = ordenarPorUrgencia([
+      { clave: "c", urgencia: "baja" },
+      { clave: "a", urgencia: "alta" },
+      { clave: "b", urgencia: "media" },
+    ]);
+    expect(ordenados.map((x) => x.clave)).toEqual(["a", "b", "c"]);
+  });
+
+  it("dentro de una misma urgencia se respeta el orden de llegada", () => {
+    const ordenados = ordenarPorUrgencia([
+      { clave: "primera", urgencia: "media" },
+      { clave: "segunda", urgencia: "media" },
+    ]);
+    expect(ordenados.map((x) => x.clave)).toEqual(["primera", "segunda"]);
+  });
+
+  it("una urgencia desconocida se hunde al final en vez de romper la lista", () => {
+    const ordenados = ordenarPorUrgencia([{ clave: "rara", urgencia: "🤷" }, { clave: "alta", urgencia: "alta" }]);
+    expect(ordenados[0].clave).toBe("alta");
   });
 });

@@ -3058,7 +3058,7 @@ export function inicioSemana(fecha) {
 
 
 // ---------- Pago a trabajadores ----------
-function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [] }) {
+export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const hoyStr0 = fechaKey(hoy);
   const avisos = [];
@@ -3069,7 +3069,7 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
   // aviso arriba, igual que el resto de las cosas que necesitan mirarse.
   const ausentesHoy = Object.keys(ausenciasPaseador);
   if (ausentesHoy.length > 0) {
-    avisos.push({ tipo: "ausencia", icono: "🚫", texto: `${ausentesHoy.length} persona(s) del equipo ausente(s) hoy: ${ausentesHoy.join(", ")}`, clave: `ausencia-${hoyStr0}-${ausentesHoy.join(",")}`, tab: "coordinacion" });
+    avisos.push({ tipo: "ausencia", urgencia: "alta", icono: "🚫", texto: `${ausentesHoy.length} persona(s) del equipo ausente(s) hoy: ${ausentesHoy.join(", ")}`, clave: `ausencia-${hoyStr0}-${ausentesHoy.join(",")}`, tab: "coordinacion" });
   }
 
   // "No enviada" necesita que el equipo la revise y la acepte primero —
@@ -3077,13 +3077,13 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
   // necesita que el cliente pague, así que van en avisos separados.
   const porRevisar = boletasEmitidas.filter((b) => b.estado === "no_enviada");
   if (porRevisar.length > 0) {
-    avisos.push({ tipo: "factura-revisar", icono: "📝", texto: `${porRevisar.length} factura(s) por revisar y aceptar`, clave: `revisar-${porRevisar.length}`, tab: "facturas" });
+    avisos.push({ tipo: "factura-revisar", urgencia: "alta", icono: "📝", texto: `${porRevisar.length} factura(s) por revisar y aceptar`, clave: `revisar-${porRevisar.length}`, tab: "facturas" });
   }
 
   const pendientes = boletasEmitidas.filter(esPorCobrar);
   const montoPendiente = pendientes.reduce((acc, b) => acc + b.total, 0);
   if (pendientes.length > 0) {
-    avisos.push({ tipo: "factura", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}`, tab: "facturas" });
+    avisos.push({ tipo: "factura", urgencia: "media", icono: "💰", texto: `${pendientes.length} boleta(s) por cobrar — ${fmtCLP(montoPendiente)}`, clave: `factura-${pendientes.length}-${montoPendiente}`, tab: "facturas" });
   }
 
   // Mismo criterio que el KPI "Paseos de hoy" de esta misma pantalla y que
@@ -3094,12 +3094,12 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
   const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const sinMarcar = clientesHoy.filter((c) => { const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`]; return !r?.realizado && !r?.cancelado; });
   if (sinMarcar.length > 0) {
-    avisos.push({ tipo: "paseo", icono: "🐾", texto: `${sinMarcar.length} paseo(s) de hoy sin marcar como realizado`, detalle: sinMarcar.map((c) => `${c.nombre} (${c.paseadorNombre || "sin paseador"})`).join(", "), clave: `paseo-${hoyStr0}-${sinMarcar.length}`, tab: "coordinacion" });
+    avisos.push({ tipo: "paseo", urgencia: "media", icono: "🐾", texto: `${sinMarcar.length} paseo(s) de hoy sin marcar como realizado`, detalle: sinMarcar.map((c) => `${c.nombre} (${c.paseadorNombre || "sin paseador"})`).join(", "), clave: `paseo-${hoyStr0}-${sinMarcar.length}`, tab: "coordinacion" });
   }
 
   const tareasHoy = tareasEquipo.filter((t) => fechaKey(new Date(t.fechaISO)) === fechaKey(hoy) && t.estado !== "hecho");
   if (tareasHoy.length > 0) {
-    avisos.push({ tipo: "tarea", icono: "📋", texto: `${tareasHoy.length} tarea(s) del equipo pendiente(s) para hoy`, clave: `tarea-${hoyStr0}-${tareasHoy.length}`, tab: "equipo" });
+    avisos.push({ tipo: "tarea", urgencia: "baja", icono: "📋", texto: `${tareasHoy.length} tarea(s) del equipo pendiente(s) para hoy`, clave: `tarea-${hoyStr0}-${tareasHoy.length}`, tab: "equipo" });
   }
 
   // clientes sin tipoServicio guardado (o vacío) se tratan como "paseos"
@@ -3109,7 +3109,7 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
   // paseador, así que no deben generar este aviso.
   const sinPaseador = clientes.filter((c) => !c.paseadorNombre && (!c.tipoServicio?.length || c.tipoServicio.includes("paseos")));
   if (sinPaseador.length > 0) {
-    avisos.push({ tipo: "asignacion", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
+    avisos.push({ tipo: "asignacion", urgencia: "media", icono: "⚠️", texto: `${sinPaseador.length} cliente(s) sin paseador asignado`, clave: `asignacion-${sinPaseador.length}`, tab: "clientes" });
   }
 
   // Un cliente con paseador asignado y tarifa en $0 le suma paseos al
@@ -3129,7 +3129,7 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
   });
   if (conPaseosSinTarifa.length > 0) {
     avisos.push({
-      tipo: "tarifa-cero", icono: "💸",
+      tipo: "tarifa-cero", urgencia: "alta", icono: "💸",
       texto: `${conPaseosSinTarifa.length} cliente(s) con paseos hechos este mes y tarifa del paseador en $0`,
       detalle: conPaseosSinTarifa.map((c) => `${c.nombre} (${c.paseadorNombre})`).join(", "),
       clave: `tarifa-cero-${hoy.getMonth()}-${conPaseosSinTarifa.length}`, tab: "clientes",
@@ -3148,18 +3148,18 @@ function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [],
     return esBoletaDeCliente(b, c) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
   }));
   if (sinBoletaEsteMes.length > 0) {
-    avisos.push({ tipo: "boleta-pendiente", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
+    avisos.push({ tipo: "boleta-pendiente", urgencia: "alta", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
   }
 
   const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c) && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
   if (necesitanEvaluacion.length > 0) {
-    avisos.push({ tipo: "evaluacion", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda" });
+    avisos.push({ tipo: "evaluacion", urgencia: "media", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda" });
   }
 
   const hoyStr = fechaKey(hoy);
   const prospectosVencidos = prospectos.filter((p) => p.proximoSeguimiento && p.proximoSeguimiento <= hoyStr && p.estado !== "ganado" && p.estado !== "perdido");
   if (prospectosVencidos.length > 0) {
-    avisos.push({ tipo: "prospecto", icono: "📞", texto: `${prospectosVencidos.length} prospecto(s) con seguimiento pendiente`, clave: `prospecto-${hoyStr}-${prospectosVencidos.length}`, tab: "seguimiento" });
+    avisos.push({ tipo: "prospecto", urgencia: "baja", icono: "📞", texto: `${prospectosVencidos.length} prospecto(s) con seguimiento pendiente`, clave: `prospecto-${hoyStr}-${prospectosVencidos.length}`, tab: "seguimiento" });
   }
 
   return avisos;
@@ -4551,6 +4551,91 @@ function LauncherMobile({ tabs, setTab, destacar = [], onBuscar }) {
 }
 
 // ---------- Inicio (dashboard) ----------
+// Las tres urgencias de la lista de "Hoy hay que...". El orden de acá es
+// el orden en que se dibuja la lista.
+export const URGENCIAS = {
+  alta:  { orden: 0, color: RUST,      bg: "#F8ECE6", borde: "#E4C3B4" },
+  media: { orden: 1, color: "#8A6A1E", bg: "#FBF4E2", borde: "#E6D5A4" },
+  baja:  { orden: 2, color: "#6B6248", bg: "#FAF7EF", borde: "#E4DBC3" },
+};
+
+// Ordena la lista de cosas por hacer: primero lo que cuesta plata o
+// bloquea el día, después lo de esta semana, al final lo que puede
+// esperar. Dentro de cada nivel se respeta el orden en que llegaron, que
+// ya viene pensado desde calcularAvisos.
+export function ordenarPorUrgencia(items) {
+  return [...items].sort((a, b) => (URGENCIAS[a.urgencia] || URGENCIAS.baja).orden - (URGENCIAS[b.urgencia] || URGENCIAS.baja).orden);
+}
+
+// Antes esto eran CINCO cajas apiladas: clientes entrantes (dorada),
+// Evaluación (blanca), Evaluaciones por confirmar (blanca), "Lo tuyo hoy"
+// (verde) y Avisos (amarilla). Cada una con su propio color y su propia
+// forma, y las cinco diciendo lo mismo: algo requiere tu atención hoy. Con
+// cinco colores compitiendo, el color dejó de significar urgencia y pasó a
+// ser decoración.
+//
+// Ahora es una lista sola, ordenada por urgencia, donde el color vuelve a
+// decir algo: rojo si cuesta plata o bloquea el día, dorado si es de esta
+// semana, gris si puede esperar.
+//
+// Una fila con `detalle` se despliega en vez de navegar — ahí viven los
+// nombres, las fichas y los accesos directos que antes tenía cada caja.
+function ListaDeHoy({ items, onDescartar }) {
+  const [abierta, setAbierta] = useState(null);
+  if (items.length === 0) return null;
+  const ordenados = ordenarPorUrgencia(items);
+
+  return (
+    <div className="howria-card" style={tarjeta}>
+      <h2 style={sectionTitle}>Hoy hay que&hellip;</h2>
+      <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+        {ordenados.map((a) => {
+          const u = URGENCIAS[a.urgencia] || URGENCIAS.baja;
+          const desplegable = Boolean(a.detalle);
+          const abiertaEsta = abierta === a.clave;
+          return (
+            <div key={a.clave} style={{ border: `1px solid ${u.borde}`, borderLeft: `4px solid ${u.color}`, borderRadius: 8, background: u.bg }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px 4px 0" }}>
+                <button
+                  onClick={() => (desplegable ? setAbierta(abiertaEsta ? null : a.clave) : a.onIr?.())}
+                  disabled={!desplegable && !a.onIr}
+                  style={{
+                    flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 9, textAlign: "left",
+                    border: "none", background: "none", font: "inherit", padding: "9px 4px 9px 12px",
+                    cursor: desplegable || a.onIr ? "pointer" : "default", color: u.color,
+                  }}>
+                  <span style={{ flex: "none", fontSize: 15 }}>{a.icono}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, minWidth: 0 }}>{a.texto}</span>
+                  {desplegable && <span style={{ flex: "none", fontSize: 11, opacity: 0.7 }}>{abiertaEsta ? "▴" : "▾"}</span>}
+                </button>
+                {a.onDescartar && (
+                  <button onClick={a.onDescartar} title="Descartar" aria-label={`Descartar: ${a.texto}`}
+                    style={{ flex: "none", border: "none", background: "none", color: u.color, opacity: 0.55, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "8px 6px" }}>
+                    &#10005;
+                  </button>
+                )}
+              </div>
+              {abiertaEsta && (
+                <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${u.borde}`, paddingTop: 10 }}>
+                  {typeof a.detalle === "string"
+                    ? <p style={{ margin: 0, fontSize: 12.5, color: u.color, opacity: 0.9 }}>{a.detalle}</p>
+                    : a.detalle}
+                  {a.onIr && (
+                    <button onClick={a.onIr}
+                      style={{ marginTop: 12, border: `1px solid ${u.color}`, background: "none", color: u.color, borderRadius: 8, padding: "7px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                      {a.irTexto || "Ir"} →
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta, onBuscar }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
@@ -4627,6 +4712,86 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   const clientesEntrantes = clientes.filter((c) => c.triagePendiente);
   const equipoActivo = usuarios.filter((u) => u.rol === "paseador" || u.rol === "entrenador");
 
+  // Todo lo que pide atención hoy, en una sola lista (ver ListaDeHoy). Cada
+  // fuente arma sus filas acá y el componente solo las ordena y las dibuja.
+  //
+  // `irSiPuede` respeta los permisos: una fila que llevaría a una pestaña
+  // que este rol no tiene se queda sin botón en vez de mandarlo a una
+  // pantalla en blanco.
+  const irSiPuede = (id) => (tabs.some((t) => t.id === id) ? () => setTab(id) : undefined);
+  const chip = { display: "flex", alignItems: "center", gap: 8, padding: "7px 11px", borderRadius: 20, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer", font: "inherit" };
+
+  const itemsDeHoy = [
+    // Los clientes que entraron solos por el link público y esperan que
+    // alguien decida qué servicio toman. El panel para decidirlo vive en
+    // Coordinación (PanelClientesEntrantes); acá solo se avisa.
+    ...(clientesEntrantes.length > 0 ? [{
+      clave: "entrantes", urgencia: "alta", icono: "🆕",
+      texto: `${clientesEntrantes.length} cliente(s) nuevo(s) por definir`,
+      detalle: `${clientesEntrantes.map((c) => c.perro || c.nombre).join(", ")} — entraron por el link público. Falta decidir qué servicio toman y quién los atiende.`,
+      onIr: irSiPuede("coordinacion"), irTexto: "Abrir Coordinación",
+    }] : []),
+
+    // Pidieron hora por el link público y siguen sin respuesta.
+    ...(evaluacionesPendientesTodas.length > 0 ? [{
+      clave: "eval-por-confirmar", urgencia: "alta", icono: "📆",
+      texto: `${evaluacionesPendientesTodas.length} evaluación(es) por confirmar`,
+      detalle: (
+        <div style={{ display: "grid", gap: 8 }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: "#8A6A1E" }}>Pidieron hora por el link público — quedan acá hasta que se acepten o rechacen en Agenda.</p>
+          {evaluacionesPendientesTodas.map((c) => (
+            <div key={c.id} style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: 10, borderRadius: 8, border: "1px solid #E4DBC3", background: "#FFFDF7" }}>
+              <PuntoClave label="Tutor" valor={c.clienteNombre} />
+              <PuntoClave label="Perro" valor={c.perro || "—"} />
+              <PuntoClave label="Fecha" valor={new Date(c.fechaISO).toLocaleString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />
+            </div>
+          ))}
+        </div>
+      ),
+      onIr: irSiPuede("agenda"), irTexto: "Abrir Agenda",
+    }] : []),
+
+    // Lo asignado a quien está mirando, separado de lo del equipo: un
+    // coordinador también tiene tareas y prospectos propios, y antes se
+    // perdían entre los totales de la empresa.
+    ...(misTareasHoy.length > 0 ? [{
+      clave: "mis-tareas", urgencia: "media", icono: "📋",
+      texto: `${misTareasHoy.length} tarea(s) tuya(s) pendiente(s) para hoy`,
+      onIr: irSiPuede("equipo"),
+    }] : []),
+    ...(misProspectosVencidos.length > 0 ? [{
+      clave: "mis-prospectos", urgencia: "media", icono: "📞",
+      texto: `${misProspectosVencidos.length} prospecto(s) tuyo(s) con seguimiento vencido`,
+      onIr: irSiPuede("seguimiento"),
+    }] : []),
+
+    // Los avisos calculados (ver calcularAvisos), cada uno con su urgencia
+    // y su ✕ para descartarlo, que ya se guardaba por usuario.
+    ...avisos.map((a) => ({
+      clave: a.clave, urgencia: a.urgencia, icono: a.icono, texto: a.texto,
+      detalle: a.detalle, onIr: a.tab ? irSiPuede(a.tab) : undefined,
+      onDescartar: () => descartarAviso(a.clave),
+    })),
+
+    // Quiénes entraron pidiendo evaluación. No es una alerta sino un acceso
+    // directo a su ficha, así que va al final: lo accionable de este grupo
+    // ya lo dice el aviso "con evaluación pendiente de agendar".
+    ...(clientesEvaluacionTodos.length > 0 ? [{
+      clave: "en-evaluacion", urgencia: "baja", icono: "🐕",
+      texto: `${clientesEvaluacionTodos.length} cliente(s) en evaluación`,
+      detalle: (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {clientesEvaluacionTodos.map((c) => (
+            <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)} style={chip}>
+              <span style={{ width: 24, height: 24, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+              <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro || c.nombre}</span>
+            </button>
+          ))}
+        </div>
+      ),
+    }] : []),
+  ];
+
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
   function iconoStat(i) {
     const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
@@ -4653,69 +4818,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
         <LauncherMobile tabs={tabs} setTab={setTab} onBuscar={onBuscar} />
       </div>
 
-      {/* Aviso corto: el panel completo para decidir vive en Coordinación
-          (ver PanelClientesEntrantes). Acá solo se avisa que hay gente
-          esperando, para que no se pase por no entrar a la pestaña. */}
-      {clientesEntrantes.length > 0 && tabs.some((t) => t.id === "coordinacion") && (
-        <button onClick={() => setTab("coordinacion")} className="howria-card"
-          style={{ ...tarjeta, border: `1px solid ${GOLD}`, background: "#FBF6E9", cursor: "pointer", textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
-          <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "#8A6A1E" }}>
-            🆕 {clientesEntrantes.length} cliente(s) nuevo(s) por definir
-          </p>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B5518" }}>
-            {clientesEntrantes.map((c) => c.perro || c.nombre).join(", ")} — entraron por el link público. Tócalo para decidir qué servicio toman y quién los atiende.
-          </p>
-        </button>
-      )}
-
-      {clientesEvaluacionTodos.length > 0 && (
-        <div className="howria-card" style={tarjeta}>
-          <h2 style={sectionTitle}>Evaluación</h2>
-          <p style={{ ...hint, marginTop: 8 }}>Clientes que entraron pidiendo evaluación por el link público.</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
-            {clientesEvaluacionTodos.map((c) => (
-              <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 20, border: "1px solid #E4DBC3", background: "#FFFDF7", cursor: "pointer" }}>
-                <span style={{ width: 26, height: 26, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
-                <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <EvaluacionesPorConfirmar citas={evaluacionesPendientesTodas} setTab={setTab} />
-
-      {(misTareasHoy.length > 0 || misProspectosVencidos.length > 0) && (
-        <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
-          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#2F6A46", textTransform: "uppercase", letterSpacing: 0.5 }}>Lo tuyo hoy</p>
-          {misTareasHoy.length > 0 && (
-            <button onClick={() => setTab("equipo")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "4px 0", font: "inherit" }}>
-              <p style={{ margin: 0, fontSize: 13.5, color: "#2E5C41" }}>📋 {misTareasHoy.length} tarea(s) tuya(s) pendiente(s) para hoy</p>
-            </button>
-          )}
-          {misProspectosVencidos.length > 0 && (
-            <button onClick={() => setTab("seguimiento")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "4px 0", font: "inherit" }}>
-              <p style={{ margin: 0, fontSize: 13.5, color: "#2E5C41" }}>📞 {misProspectosVencidos.length} prospecto(s) tuyo(s) con seguimiento vencido</p>
-            </button>
-          )}
-        </div>
-      )}
-
-      {avisos.length > 0 && (
-        <div className="howria-card" style={{ ...tarjeta, background: "#F3E3B4", border: "1px solid #E3D08C" }}>
-          <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#6B5518", textTransform: "uppercase", letterSpacing: 0.5 }}>Avisos</p>
-          {avisos.map((a) => (
-            <div key={a.clave} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <p style={{ margin: 0, fontSize: 13.5, color: "#6B5518" }}>{a.icono} {a.texto}</p>
-              <button onClick={() => descartarAviso(a.clave)} title="Descartar"
-                style={{ border: "none", background: "none", color: "#9A8641", cursor: "pointer", fontSize: 15, lineHeight: 1, flexShrink: 0 }}>
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <ListaDeHoy items={itemsDeHoy} />
 
       <div className="howria-inicio-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <button onClick={irAPaseosDeHoy} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: irAPaseosDeHoy ? "pointer" : "default" }}>
