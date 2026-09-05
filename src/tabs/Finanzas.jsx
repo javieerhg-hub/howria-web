@@ -86,6 +86,10 @@ function ModalDetalleFinanzas({ detalle, onCerrar }) {
   );
 }
 
+// La vista elegida en Finanzas (Caja / Rentabilidad / Clientes), recordada
+// como la de Mis paseos y la del Calendario.
+const CLAVE_VISTA_FINANZAS = "howria_finanzas_vista";
+
 function variacion(actual, anterior) {
   if (anterior === 0) return actual > 0 ? 100 : 0;
   return ((actual - anterior) / anterior) * 100;
@@ -95,6 +99,27 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
   // Arranca en el mes: con facturación mensual por adelantado, el mes es
   // la unidad real del negocio.
   const [periodo, setPeriodo] = useState("mes");
+  // Finanzas era un scroll único de quince bloques: la caja del día a día
+  // convivía con el margen, el churn y el costo por cliente nuevo, que se
+  // miran una vez al mes. Ahora son tres vistas.
+  //
+  // Los bloques NO se movieron de lugar: cada uno quedó donde estaba y
+  // solo se envolvió en la vista que le toca. Así el orden dentro de cada
+  // vista es el que ya existía, y la vista personal (paseador,
+  // responsable, entrenador) sigue viendo todo seguido como siempre —
+  // cada guarda lleva "vistaPersonal ||".
+  const [vistaFin, setVistaFin] = useState(() => {
+    try {
+      const v = localStorage.getItem(CLAVE_VISTA_FINANZAS);
+      return v === "rentabilidad" || v === "clientes" ? v : "caja";
+    } catch {
+      return "caja";
+    }
+  });
+  function elegirVistaFin(v) {
+    setVistaFin(v);
+    try { localStorage.setItem(CLAVE_VISTA_FINANZAS, v); } catch {}
+  }
   // A cuántos meses (o años) de distancia del actual se está mirando.
   // 0 = el de ahora, -1 = el anterior. Reemplaza al rango personalizado
   // como forma de mirar un período pasado.
@@ -1165,6 +1190,31 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         que="boletas por el mes que cubren"
         desde={actualDesde} hasta={actualHasta}
         nota={periodo === "mes" ? "una emitida el 28 de agosto que cubre septiembre cuenta en septiembre" : undefined} />
+
+      {/* Caja es lo que se mira seguido; las otras dos, una vez al mes. Por
+          eso arranca en Caja. La vista personal no lleva selector: ve todo
+          seguido, como antes. */}
+      {!vistaPersonal && (
+        <div role="group" aria-label="Vista de Finanzas" className="no-imprimir" style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {[
+            { id: "caja", nombre: "Caja" },
+            { id: "rentabilidad", nombre: "Rentabilidad" },
+            { id: "clientes", nombre: "Clientes" },
+          ].map((v) => {
+            const activo = vistaFin === v.id;
+            return (
+              <button key={v.id} type="button" onClick={() => elegirVistaFin(v.id)} aria-pressed={activo}
+                style={{
+                  flex: 1, padding: "11px 14px", borderRadius: 10, cursor: "pointer", fontSize: 14, minHeight: 46,
+                  border: "none", fontWeight: activo ? 700 : 500, fontFamily: "inherit",
+                  background: activo ? NAVY : CREAM_SOFT, color: activo ? CREAM : INK,
+                }}>
+                {v.nombre}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {/* La caja del período: entró, salió, queda. Es lo que Javier pidió
           poder mirar de un vistazo, y el número que manda es el de CAJA —
           plata cobrada de verdad, no boletas emitidas. Lo que está en
@@ -1172,6 +1222,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           existe. */}
       {!vistaPersonal && (
         <>
+        {vistaFin === "caja" && (
+          <>
           {/* Lo más accionable de la pestaña: plata ya trabajada que todavía
           no se le cobró a nadie. No suma en ningún total de abajo a
           propósito — un borrador se puede seguir editando, así que darlo
@@ -1251,7 +1303,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#8A7E5C" }}>Paseos hechos que aún no registras como pagados</p>
             </div>
           </div>
+          </>
+        )}
 
+        {vistaFin === "rentabilidad" && (
+          <>
           <p style={{ ...label, marginBottom: 8 }}>Rentabilidad {etiquetaPeriodo}</p>
           <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 10 }}>
             <div {...abre(detalleMargen)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
@@ -1277,7 +1333,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           <p style={{ fontSize: 12, color: "#8A7E5C", margin: "0 0 22px" }}>
             Del dinero cobrado, {fmtCLP(ingresoRecurrente)} viene de paseos (se repite solo el mes que viene) y {fmtCLP(ingresoPuntual)} de evaluaciones y clases, que hay que volver a vender.
           </p>
+          </>
+        )}
 
+        {vistaFin === "clientes" && (
+          <>
           <p style={{ ...label, marginBottom: 8 }}>Clientes {etiquetaPeriodo}</p>
           <div className="howria-finanzas-camino" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 26 }}>
             <div {...abre(detalleClientes)} style={{ background: "#FFFDF7", border: "1px solid #E4DBC3", borderRadius: 10, padding: 16, cursor: "pointer" }}>
@@ -1298,7 +1358,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               </p>
             </div>
           </div>
+          </>
+        )}
 
+        {vistaFin === "rentabilidad" && (
+          <>
           {ocupacion && ocupacion.turnos.length > 0 && (
             <>
               <p style={{ ...label, marginBottom: 8 }}>Capacidad de las rutas (hoy, no del período)</p>
@@ -1325,7 +1389,11 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               </p>
             </>
           )}
+          </>
+        )}
 
+        {vistaFin === "rentabilidad" && (
+          <>
           {margenPorTrabajador.length > 0 && (
             <>
               <p style={{ ...label, marginBottom: 2 }}>Cuánto deja cada persona de terreno {etiquetaPeriodo}</p>
@@ -1347,6 +1415,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               </div>
             </>
           )}
+          </>
+        )}
         </>
       )}
 
@@ -1393,6 +1463,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
 
       <ModalDetalleFinanzas detalle={detalle} onCerrar={() => setDetalle(null)} />
 
+      {(vistaPersonal || vistaFin === "caja") && (
       <div className="howria-finanzas-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${vistaPersonal ? (esResponsable ? 4 : 3) : 2}, 1fr)`, gap: 14, marginBottom: 26 }}>
         {vistaPersonal && (
           <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 18 }}>
@@ -1414,8 +1485,9 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         <TarjetaResumenFactura titulo="Boletas emitidas" valor={actual.cantidad} color="#8A7E5C" bg={CREAM_SOFT} />
         <TarjetaResumenFactura titulo="Ticket promedio" valor={fmtCLP(promedioBoleta)} color="#8A7E5C" bg={CREAM_SOFT} />
       </div>
+      )}
 
-      {!vistaPersonal && (
+      {!vistaPersonal && vistaFin === "caja" && (
         <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <div>
@@ -1485,7 +1557,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         </p>
       )}
 
-      {periodo !== "año" && (
+      {periodo !== "año" && (vistaPersonal || vistaFin === "rentabilidad") && (
       <div className="howria-card" style={{ background: CREAM_SOFT, borderRadius: 10, padding: 18, marginBottom: 26 }}>
         <p style={{ ...label, marginBottom: 2 }}>Proyección de {tituloPeriodo} (si se factura todo el plan habitual de cada cliente activo)</p>
         <p style={{ margin: "0 0 8px", fontSize: 11.5, color: "#8A7E5C" }}>Sirve para pillar lo que falta emitir: el plan habitual de los clientes activos contra lo que ya facturaste.</p>
@@ -1496,6 +1568,8 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
       </div>
       )}
 
+      {(vistaPersonal || vistaFin === "rentabilidad") && (
+      <>
       <p style={label}>Ingresos por tipo de servicio {etiquetaPeriodo} (un cliente puede contar en más de un tipo)</p>
       <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 26 }}>
         {porTipoServicio.map((t) => (
@@ -1518,7 +1592,10 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </BarChart>
         </ResponsiveContainer>
       </div>
+      </>
+      )}
 
+      {(vistaPersonal || vistaFin === "clientes") && (
       <div className="howria-g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         <div>
           <p style={label}>Ingresos por cliente {etiquetaPeriodo}</p>
@@ -1571,6 +1648,7 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
