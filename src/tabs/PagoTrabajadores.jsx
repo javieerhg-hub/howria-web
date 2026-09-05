@@ -11,7 +11,7 @@ import {
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoCompartido } from "../lib/reparto.js";
 import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
-import { CeldaDiaMes, filasDetalleMes, detalleMesCliente } from "./_compartido.jsx";
+import { CeldaDiaMes, filasDetalleMes, detalleMesCliente, QueSeCuenta } from "./_compartido.jsx";
 import { descargarLiquidacionPaseador } from "./_compartido_pdf.jsx";
 
 
@@ -476,7 +476,15 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
         <button onClick={() => setPeriodoOffset(0)} disabled={periodoOffset === 0} style={{ ...botonSecundario, opacity: periodoOffset === 0 ? 0.5 : 1 }}>Actual</button>
         <button onClick={() => setPeriodoOffset((o) => Math.min(o + 1, 0))} disabled={periodoOffset >= 0} style={{ ...botonSecundario, opacity: periodoOffset >= 0 ? 0.5 : 1 }}>Siguiente →</button>
       </div>
-      <p style={{ ...hint, marginBottom: 6 }}>Período: <b style={{ color: NAVY }}>{etiqueta}</b></p>
+      {/* Acá se cuentan PASEOS REALIZADOS por la fecha en que se hicieron.
+          Finanzas cuenta BOLETAS por el mes que cubren. Las dos llaman
+          "mes" a lo suyo y no tienen por qué dar el mismo número — pero
+          hasta acá ninguna lo decía, así que la única forma de notarlo era
+          que los totales no calzaran. */}
+      <QueSeCuenta
+        que="paseos realizados, por el día en que se hicieron"
+        desde={desde} hasta={new Date(hasta.getTime() - 1)}
+        nota={periodo === "semana" ? "Finanzas parte en el mes, esta pantalla en la semana" : undefined} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 8 }}>
         <p style={{ ...hint, margin: 0 }}>💚 Asegurado (cliente ya pagó): <b style={{ color: "#2F6A46" }}>{fmtCLP(totalAsegurado)}</b></p>
         <p style={{ ...hint, margin: 0 }}>🕓 Proyectado (falta cobrar/confirmar): <b style={{ color: "#8A6A1E" }}>{fmtCLP(totalProyectado)}</b></p>

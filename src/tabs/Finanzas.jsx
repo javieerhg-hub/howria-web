@@ -12,7 +12,7 @@ import {
 import { diasSegunPlan, calcularTotales, esVenta, montoParaResponsable, periodoDeBoleta } from "../lib/calculosBoletas.js";
 import { diasDelMesProgramados } from "../lib/programacion.js";
 import { resumenPaseadorEnRango } from "../lib/pagos.js";
-import { TarjetaResumenFactura } from "./_compartido.jsx";
+import { TarjetaResumenFactura, QueSeCuenta } from "./_compartido.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 
 // Ventana con el respaldo de una cifra. Cada tarjeta de Finanzas puede
@@ -1156,6 +1156,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           </button>
         )}
       </div>
+      {/* "Boletas" y no "ingresos", y "por el mes que cubren" y no "del
+          mes": son las dos cosas que hacen que este número no cuadre con el
+          de Pago trabajadores, que cuenta paseos por la fecha en que se
+          hicieron. Las dos están bien — son preguntas distintas, y hasta
+          acá ninguna de las dos pantallas lo decía. */}
+      <QueSeCuenta
+        que="boletas por el mes que cubren"
+        desde={actualDesde} hasta={actualHasta}
+        nota={periodo === "mes" ? "una emitida el 28 de agosto que cubre septiembre cuenta en septiembre" : undefined} />
       {/* La caja del período: entró, salió, queda. Es lo que Javier pidió
           poder mirar de un vistazo, y el número que manda es el de CAJA —
           plata cobrada de verdad, no boletas emitidas. Lo que está en

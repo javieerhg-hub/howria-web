@@ -35,6 +35,7 @@ import {
 import { diasDelMesProgramados } from "../lib/programacion.js";
 import { realizadosEnRango, programadosEnRango } from "../lib/pagos.js";
 import { periodoDeBoleta, cicloDeFecha, esVenta } from "../lib/calculosBoletas.js";
+import { QueSeCuenta } from "./_compartido.jsx";
 
 const VERDE = "#2F6A46";
 
@@ -465,6 +466,13 @@ export function FinanzasPersonales({
           </button>
         )}
       </div>
+      {/* Esta pantalla mezcla dos reglas a propósito, y hasta acá no lo
+          decía en ninguna parte: las boletas cuentan por el mes que
+          CUBREN, y las evaluaciones y clases por el ciclo en que se
+          COBRAN (una del 23 de agosto se cobra junto con septiembre). */}
+      <QueSeCuenta
+        que="boletas por el mes que cubren, y clases por el ciclo en que se cobran"
+        desde={new Date(anio, mes, 1)} hasta={new Date(anio, mes + 1, 0)} />
 
       <div className="howria-card" style={{ ...tarjeta, marginBottom: 20 }}>
         <div className="howria-g3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>

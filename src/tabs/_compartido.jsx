@@ -130,6 +130,32 @@ export function ordenarRutaCercanoMasProximo(puntos) {
 
 export const FORMAS_PAGO = ["Transferencia", "Efectivo", "Webpay/Tarjeta", "Otro"];
 
+// Qué está contando esta pantalla, dicho en palabras y con las fechas
+// exactas. Va debajo del selector de período de cada pantalla de plata.
+//
+// EL PROBLEMA QUE RESUELVE, que no es un bug sino dos preguntas distintas
+// que se ven iguales: Finanzas suma BOLETAS por el mes que cubren (una
+// emitida el 28 de agosto que cubre septiembre cuenta en septiembre). Pago
+// trabajadores suma PASEOS REALIZADOS por la fecha en que se hicieron. Las
+// dos llaman "mes" a lo suyo, las dos muestran un número grande, y no
+// tienen por qué cuadrar entre sí. Hasta acá ninguna lo decía, así que la
+// única forma de darse cuenta era que los números no calzaran.
+//
+// Es la misma raíz de "Beatriz pagó 13 paseos, entonces debería decir 13":
+// un número sin decir de qué es.
+export function QueSeCuenta({ que, desde, hasta, nota }) {
+  const fmt = (d) => d.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+  const rango = desde && hasta ? `${fmt(desde)} – ${fmt(hasta)} ${hasta.getFullYear()}` : null;
+  return (
+    <div className="no-imprimir" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", padding: "9px 12px", marginBottom: 18, borderLeft: `3px solid ${GOLD}`, background: "#FBF4E2", borderRadius: "0 6px 6px 0" }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "#8A6A1E", flex: "none" }}>Estás viendo</span>
+      <span style={{ fontSize: 13, color: INK, fontWeight: 600 }}>{que}</span>
+      {rango && <span style={{ fontSize: 12.5, color: "#8A7E5C" }}>· {rango}</span>}
+      {nota && <span style={{ fontSize: 12, color: "#8A7E5C", fontStyle: "italic" }}>· {nota}</span>}
+    </div>
+  );
+}
+
 // Tarjeta chica de resumen para la tira de KPI arriba de Facturas — mismos
 // colores que ya usa cada estado en ESTADOS_FACTURA, para no inventar una
 // paleta nueva que aprender.
