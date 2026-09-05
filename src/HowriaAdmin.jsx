@@ -4572,6 +4572,18 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
 
   const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
   const realizadosHoy = clientesHoy.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
+  // La tarjeta "Paseos de hoy" y la tabla del mismo nombre cuentan los
+  // paseos de TODA la empresa, pero llevaban a "Mis paseos", que solo
+  // tiene los del propio usuario: se tocaba la fila de un cliente de
+  // Beatriz y se aterrizaba en una pantalla donde Beatriz no existe. El
+  // destino correcto es Coordinación, la única que muestra el día
+  // completo del equipo.
+  //
+  // Va con guarda de permiso, igual que el aviso de clientes entrantes
+  // de más abajo: si a alguien le sacaron Coordinación desde Usuarios,
+  // el onClick queda en undefined y la tarjeta simplemente no responde,
+  // en vez de mandarlo a una pestaña que no tiene.
+  const irAPaseosDeHoy = tabs.some((t) => t.id === "coordinacion") ? () => setTab("coordinacion") : undefined;
 
   const pendientesCobro = boletasEmitidas.filter(esPorCobrar);
   const montoPendiente = pendientesCobro.reduce((acc, b) => acc + b.total, 0);
@@ -4704,9 +4716,9 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
       )}
 
       <div className="howria-inicio-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <button onClick={() => setTab("mis-paseos")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
+        <button onClick={irAPaseosDeHoy} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: irAPaseosDeHoy ? "pointer" : "default" }}>
           <div style={iconoStat(0)}><Footprints size={17} /></div>
-          <p style={{ ...label, marginBottom: 8 }}>Paseos de hoy</p>
+          <p style={{ ...label, marginBottom: 8 }}>Paseos de hoy · equipo</p>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{realizadosHoy} / {clientesHoy.length}</p>
         </button>
         <button onClick={() => setTab("facturas")} className="howria-card" style={{ ...tarjeta, textAlign: "left", cursor: "pointer" }}>
@@ -4826,7 +4838,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
                   const colorEstado = registro?.realizado ? "#2F6A46" : registro?.cancelado ? RUST : "#8A6A1E";
                   const bgEstado = registro?.realizado ? "#D8ECDE" : registro?.cancelado ? "#F1DCD2" : "#F3E3B4";
                   return (
-                    <tr key={c.id} onClick={() => setTab("mis-paseos")} style={{ borderTop: "1px solid #EDE4CE", cursor: "pointer" }}>
+                    <tr key={c.id} onClick={irAPaseosDeHoy} style={{ borderTop: "1px solid #EDE4CE", cursor: irAPaseosDeHoy ? "pointer" : "default" }}>
                       <td style={{ padding: "10px" }}>{c.nombre} <span style={{ color: "#8A7E5C" }}>· 🐾 {c.perro}</span></td>
                       <td style={{ padding: "10px", color: "#6B6248" }}>{c.paseadorNombre || "Sin asignar"}</td>
                       <td style={{ padding: "10px", color: "#6B6248" }}>{c.horaHabitual || "—"}</td>
