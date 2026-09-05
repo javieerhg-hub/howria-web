@@ -10,7 +10,7 @@ import {
 } from "../HowriaAdmin.jsx";
 import { montoParaResponsable } from "../lib/calculosBoletas.js";
 import { montoCompartido } from "../lib/reparto.js";
-import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango } from "../lib/pagos.js";
+import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango, pagosQueSeCruzan } from "../lib/pagos.js";
 import { CeldaDiaMes, filasDetalleMes, detalleMesCliente, QueSeCuenta } from "./_compartido.jsx";
 import { descargarLiquidacionPaseador } from "./_compartido_pdf.jsx";
 
@@ -104,7 +104,16 @@ function ModalDetalleMes({ paseador, clientes, registroPaseos, mesInicial, anioI
 }
 
 export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], setBoletasAdiestramiento, clientes, usuarios, registroPaseos, pagosRegistrados, setPagosRegistrados, cargandoPagos, ajustesPago = [], setAjustesPago, nombreUsuario, reclamosPago = [], resolverReclamoPago }) {
-  const [periodo, setPeriodo] = useState("semana");
+  // Mes, igual que Finanzas. Antes esta pantalla abría en la semana y la
+  // otra en el mes, así que al pasar de una a otra los totales no calzaban
+  // y no había nada que dijera por qué.
+  //
+  // Alinearlos destapó una trampa que ya existía: "Pagado" se decide
+  // comparando periodo+etiqueta EXACTOS, así que un pago hecho por semana
+  // no calza al mirar el mes y la fila vuelve a salir impaga, con el monto
+  // del mes entero. Por eso va junto con el aviso de pagos que se pisan
+  // (pagosQueSeCruzan).
+  const [periodo, setPeriodo] = useState("mes");
   const [generandoPdf, setGenerandoPdf] = useState(null);
   const [periodoOffset, setPeriodoOffset] = useState(0);
   const hoy = new Date();
@@ -307,6 +316,18 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
     return pagosRegistrados.find((p) => p.paseador === paseador && p.periodo === periodo && p.etiqueta === etiqueta && !p.deshechoEn);
   }
 
+  // Pagos ya hechos que cubren trabajo DENTRO del rango que se está
+  // mirando, sin ser el de este período exacto. Mirando el mes, las
+  // semanas que ya se pagaron caen acá: la fila sale impaga por el mes
+  // completo y pagarla otra vez pagaría esas semanas dos veces.
+  function cruces(paseador) {
+    return pagosQueSeCruzan(pagosRegistrados, paseador, desde, hasta, periodo, etiqueta);
+  }
+
+  function textoCruces(lista) {
+    return `Ya le pagaste ${lista.map((p) => `${p.periodo === "semana" ? "la semana" : "el mes"} ${p.etiqueta} (${fmtCLP(p.monto)})`).join(", ")}. Este total cubre todo el período, así que pagarlo de nuevo se los paga dos veces.`;
+  }
+
   // Comprobante en PDF de lo que se le paga a un paseador: qué perros
   // paseó, cuántas veces cada uno y a qué tarifa. Sale de los MISMOS
   // helpers que alimentan "Detalle del mes" en pantalla, así que el papel
@@ -483,8 +504,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
           que los totales no calzaran. */}
       <QueSeCuenta
         que="paseos realizados, por el día en que se hicieron"
-        desde={desde} hasta={new Date(hasta.getTime() - 1)}
-        nota={periodo === "semana" ? "Finanzas parte en el mes, esta pantalla en la semana" : undefined} />
+        desde={desde} hasta={new Date(hasta.getTime() - 1)} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 8 }}>
         <p style={{ ...hint, margin: 0 }}>💚 Asegurado (cliente ya pagó): <b style={{ color: "#2F6A46" }}>{fmtCLP(totalAsegurado)}</b></p>
         <p style={{ ...hint, margin: 0 }}>🕓 Proyectado (falta cobrar/confirmar): <b style={{ color: "#8A6A1E" }}>{fmtCLP(totalProyectado)}</b></p>
@@ -511,6 +531,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
           <tbody>
             {resumenPorPaseador.map((r) => {
               const pagado = yaPagado(r.paseador);
+              const seCruzan = pagado ? [] : cruces(r.paseador);
               return (
                 <tr key={r.paseador} style={{ borderTop: "1px solid #EDE4CE" }}>
                   <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{r.paseador}</td>
@@ -544,8 +565,18 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                             style={{ ...botonSecundario, padding: "6px 10px", fontSize: 11.5, borderColor: RUST, color: RUST }} />
                         </>
                       ) : (
-                        <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
-                          style={{ border: "none", background: "#2F6A46", color: "#fff", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, cursor: "pointer" }} />
+                        <>
+                          {seCruzan.length > 0 && (
+                            <span title={textoCruces(seCruzan)}
+                              style={{ fontSize: 11.5, color: RUST, background: "#F8ECE6", border: `1px solid ${RUST}`, padding: "6px 10px", borderRadius: 20, fontWeight: 600, cursor: "help" }}>
+                              ⚠️ Ya pagado en parte
+                            </span>
+                          )}
+                          <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0}
+                            label={seCruzan.length > 0 ? "Pagar igual" : "Marcar como pagado"}
+                            colorConfirmar={seCruzan.length > 0 ? RUST : "#2F6A46"}
+                            style={{ border: "none", background: seCruzan.length > 0 ? RUST : "#2F6A46", color: "#fff", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, cursor: "pointer" }} />
+                        </>
                       )}
                     </div>
                   </td>
@@ -562,6 +593,7 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
       <div className="howria-pagos-tarjetas" style={{ marginBottom: 30 }}>
         {resumenPorPaseador.map((r) => {
           const pagado = yaPagado(r.paseador);
+          const seCruzan = pagado ? [] : cruces(r.paseador);
           return (
             <div key={r.paseador} className="howria-card" style={{ background: "#FFFFFF", border: "1px solid #EDE4CE", borderRadius: 12, padding: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -605,8 +637,17 @@ export function PagoTrabajadores({ boletasEmitidas, boletasAdiestramiento = [], 
                       style={{ ...botonSecundario, padding: "8px 12px", fontSize: 12, borderColor: RUST, color: RUST }} />
                   </>
                 ) : (
-                  <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0} label="Marcar como pagado" colorConfirmar="#2F6A46"
-                    style={{ ...botonPrincipal, background: "#2F6A46", boxShadow: "none", width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
+                  <>
+                    {seCruzan.length > 0 && (
+                      <p style={{ margin: 0, flex: "1 1 100%", fontSize: 12, color: RUST, background: "#F8ECE6", border: `1px solid ${RUST}`, padding: "8px 10px", borderRadius: 8 }}>
+                        ⚠️ {textoCruces(seCruzan)}
+                      </p>
+                    )}
+                    <BotonConfirmable onConfirm={() => setCobrando(r)} disabled={r.monto === 0}
+                      label={seCruzan.length > 0 ? "Pagar igual" : "Marcar como pagado"}
+                      colorConfirmar={seCruzan.length > 0 ? RUST : "#2F6A46"}
+                      style={{ ...botonPrincipal, background: seCruzan.length > 0 ? RUST : "#2F6A46", boxShadow: "none", width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 12.5 }} />
+                  </>
                 )}
               </div>
             </div>

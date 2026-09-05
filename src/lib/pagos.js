@@ -198,3 +198,47 @@ export function resumenPaseadorEnRango({
     },
   };
 }
+
+// ---------- Pagos que se pisan ----------
+
+// El rango de TRABAJO que cubre un pago ya registrado. Se guarda
+// `periodoDesdeISO` (el inicio del trabajo, no el día en que se registró)
+// junto con `periodo` ("semana" | "mes"); el fin se deduce de los dos.
+//
+// Mediodía y no medianoche, por convención del proyecto: las fechas que
+// se mueven de a días se anclan al mediodía para que el cambio de hora no
+// las corra (ver lib/revisiones.js y clavesHabitualesEnRango acá arriba,
+// donde sí llegó a restar un paseo cada septiembre). Acá no se comprobó
+// que hiciera diferencia — se usa igual para no dejar la excepción.
+export function rangoDePago(pago) {
+  if (!pago?.periodoDesdeISO) return null;
+  const desde = new Date(`${pago.periodoDesdeISO}T12:00:00`);
+  if (Number.isNaN(desde.getTime())) return null;
+  const hasta = new Date(desde);
+  if (pago.periodo === "semana") hasta.setDate(hasta.getDate() + 7);
+  else hasta.setMonth(hasta.getMonth() + 1);
+  return { desde, hasta };
+}
+
+// Pagos ya hechos a esta persona cuyo trabajo se PISA con el rango que se
+// está mirando, sin ser el de este período exacto.
+//
+// POR QUÉ EXISTE: la pantalla marca "Pagado" comparando periodo+etiqueta
+// exactos. Un pago de la semana del 1 al 7 no calza con "mes de
+// septiembre", así que al mirar el mes esa fila sale como IMPAGA y con el
+// monto del mes entero. Pagarla ahí le paga esa semana dos veces, sin que
+// nada avise. La trampa ya existía —basta cambiar de semana a mes a
+// mano— y se volvió importante al alinear los defaults de las pantallas
+// de plata.
+//
+// Los pagos viejos sin `periodoDesdeISO` (anteriores a que se guardara) se
+// omiten: no hay forma de saber qué cubrían, y adivinar sería peor.
+export function pagosQueSeCruzan(pagos, paseador, desde, hasta, periodo, etiqueta) {
+  return (pagos || []).filter((p) => {
+    if (p.paseador !== paseador || p.deshechoEn) return false;
+    // Ese ya se ve como "Pagado" en la misma fila; no es un cruce.
+    if (p.periodo === periodo && p.etiqueta === etiqueta) return false;
+    const r = rangoDePago(p);
+    return !!r && r.desde < hasta && r.hasta > desde;
+  });
+}

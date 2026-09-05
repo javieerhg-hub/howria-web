@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango, resumenPaseadorEnRango } from "./pagos.js";
+import { programadosEnRango, realizadosEnRango, montoRealizadoEnRango, resumenPaseadorEnRango, rangoDePago, pagosQueSeCruzan } from "./pagos.js";
 
 // Semana de lunes 17 a domingo 23 de agosto de 2026. `hasta` es exclusivo,
 // así que para cubrir la semana completa se pasa el lunes siguiente.
@@ -367,5 +367,83 @@ describe("resumenPaseadorEnRango — cambio de hora de Chile", () => {
     for (let mes = 0; mes < 12; mes++) {
       expect(delMesDe(2026, mes), `mes ${mes + 1} de 2026`).toBe(realesDe(2026, mes));
     }
+  });
+});
+
+// Pagos que se pisan. Esto vale plata de verdad: la pantalla marca
+// "Pagado" comparando periodo+etiqueta exactos, así que un pago hecho por
+// semana no calza al mirar el mes y la fila vuelve a salir impaga con el
+// monto del mes ENTERO. Sin aviso, se le paga esa semana dos veces.
+describe("pagosQueSeCruzan", () => {
+  const SEPT = new Date(2026, 8, 1);
+  const OCT = new Date(2026, 9, 1);
+  const pagoSemana = { paseador: "Beatriz", periodo: "semana", etiqueta: "01 sep – 07 sep", monto: 80000, periodoDesdeISO: "2026-09-01" };
+
+  it("una semana ya pagada aparece al mirar el mes que la contiene", () => {
+    const r = pagosQueSeCruzan([pagoSemana], "Beatriz", SEPT, OCT, "mes", "septiembre 2026");
+    expect(r).toHaveLength(1);
+  });
+
+  it("el pago del período exacto NO es un cruce: ese ya se ve como Pagado", () => {
+    const pagoMes = { paseador: "Beatriz", periodo: "mes", etiqueta: "septiembre 2026", monto: 320000, periodoDesdeISO: "2026-09-01" };
+    expect(pagosQueSeCruzan([pagoMes], "Beatriz", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(0);
+  });
+
+  it("una semana de agosto no se cruza con septiembre", () => {
+    const agosto = { ...pagoSemana, etiqueta: "17 ago – 23 ago", periodoDesdeISO: "2026-08-17" };
+    expect(pagosQueSeCruzan([agosto], "Beatriz", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(0);
+  });
+
+  it("una semana a caballo entre dos meses sí se cruza con los dos", () => {
+    // 31 de agosto a 6 de septiembre: entra en agosto y en septiembre.
+    const aCaballo = { ...pagoSemana, etiqueta: "31 ago – 06 sep", periodoDesdeISO: "2026-08-31" };
+    expect(pagosQueSeCruzan([aCaballo], "Beatriz", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(1);
+    expect(pagosQueSeCruzan([aCaballo], "Beatriz", new Date(2026, 7, 1), SEPT, "mes", "agosto 2026")).toHaveLength(1);
+  });
+
+  it("el pago de otro paseador no cuenta", () => {
+    expect(pagosQueSeCruzan([pagoSemana], "Ana", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(0);
+  });
+
+  it("un pago deshecho no cuenta", () => {
+    const deshecho = { ...pagoSemana, deshechoEn: "2026-09-10" };
+    expect(pagosQueSeCruzan([deshecho], "Beatriz", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(0);
+  });
+
+  it("los pagos viejos sin periodoDesdeISO se omiten en vez de adivinar", () => {
+    // Se guardaron antes de que existiera el campo. No hay forma de saber
+    // qué cubrían, y avisar de un cruce falso es peor que no avisar.
+    const viejo = { paseador: "Beatriz", periodo: "semana", etiqueta: "01 sep – 07 sep", monto: 80000 };
+    expect(rangoDePago(viejo)).toBeNull();
+    expect(pagosQueSeCruzan([viejo], "Beatriz", SEPT, OCT, "mes", "septiembre 2026")).toHaveLength(0);
+  });
+
+  it("no se cae con la lista vacía ni sin lista", () => {
+    expect(pagosQueSeCruzan([], "Beatriz", SEPT, OCT, "mes", "x")).toEqual([]);
+    expect(pagosQueSeCruzan(undefined, "Beatriz", SEPT, OCT, "mes", "x")).toEqual([]);
+  });
+});
+
+describe("rangoDePago", () => {
+  it("una semana cubre 7 días desde su inicio", () => {
+    const r = rangoDePago({ periodo: "semana", periodoDesdeISO: "2026-09-01" });
+    expect(r.desde.getDate()).toBe(1);
+    expect(r.hasta.getDate()).toBe(8);
+  });
+
+  it("un mes cubre hasta el mismo día del mes siguiente", () => {
+    const r = rangoDePago({ periodo: "mes", periodoDesdeISO: "2026-09-01" });
+    expect(r.hasta.getMonth()).toBe(9);
+    expect(r.hasta.getDate()).toBe(1);
+  });
+
+  it("una semana que cruza el cambio de hora sigue siendo de 7 días", () => {
+    // Chile cambia la hora el primer domingo de septiembre. Acá el anclaje
+    // a mediodía no cambió el resultado (se probó quitándolo y el test
+    // pasa igual), pero el caso queda fijado: es donde se rompieron dos
+    // veces los recorridos por día de este proyecto.
+    const r = rangoDePago({ periodo: "semana", periodoDesdeISO: "2026-08-31" });
+    expect(r.hasta.getMonth()).toBe(8);
+    expect(r.hasta.getDate()).toBe(7);
   });
 });
