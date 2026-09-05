@@ -6,6 +6,7 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import { Receipt, GraduationCap } from "lucide-react";
 import { supabase } from "../lib/supabaseClient.js";
+import { esClienteDeAdiestramiento } from "../lib/negocios.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PANEL_BG, PLANES, MESES, DIAS_SEMANA, DIAS_SEMANA_LARGO,
   LOGO_B64, HUELLA_B64, tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
@@ -841,8 +842,18 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
     img2.onload = () => { huellaImgRef.current = img2; };
   }, []);
 
+  // La misma regla que usa Clientes para partir la lista en dos negocios
+  // (lib/negocios.js). Antes acá se pedía solo "clases", así que a un
+  // cliente que entró pidiendo una evaluación no se le podía emitir la
+  // boleta de esa evaluación — aunque este mismo formulario tiene un modo
+  // "Solo evaluación" hecho para eso. Había que marcarle "clases" en la
+  // ficha primero, o sea decirle alumno a alguien que todavía no lo es.
+  //
+  // No se filtra por estado: "evaluado" es justo el momento en que se
+  // cobra la evaluación, así que esconderlos ahí sería esconder lo que se
+  // viene a buscar.
   const clientesAdiestramiento = useMemo(
-    () => clientes.filter((c) => c.tipoServicio?.includes("clases")),
+    () => clientes.filter(esClienteDeAdiestramiento),
     [clientes]
   );
 
@@ -1120,9 +1131,9 @@ function FormularioBoletaAdiestramiento({ clientes, onRegistrarBoleta }) {
           </>
         ) : (
           <>
-            <label style={label} htmlFor="badiestramiento-cliente">Cliente (con "Clases de adiestramiento" marcado en su ficha)</label>
+            <label style={label} htmlFor="badiestramiento-cliente">Cliente (con "Clases de adiestramiento" o "Evaluación" en su ficha)</label>
             <select id="badiestramiento-cliente" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setEmitida(null); }} style={input}>
-              {clientesAdiestramiento.length === 0 && <option value="">No hay clientes marcados con "Clases"</option>}
+              {clientesAdiestramiento.length === 0 && <option value="">No hay clientes de clases ni de evaluación</option>}
               {clientesAdiestramiento.map((c) => <option key={c.id} value={c.id}>{textoClienteEnLista(c)}</option>)}
             </select>
           </>

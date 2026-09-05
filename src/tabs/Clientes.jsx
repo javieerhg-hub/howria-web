@@ -12,18 +12,11 @@ import {
 import { supabase } from "../lib/supabaseClient.js";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
 import { FILTROS_REVISION, cumpleRevision } from "../lib/revisiones.js";
+// Los dos negocios viven en lib/negocios.js: Boletas hace la misma
+// pregunta y las dos copias se habían separado.
+import { esClienteDePaseos as esDePaseos, esClienteDeAdiestramiento as esDeAdiestramiento } from "../lib/negocios.js";
 import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, fechaISOaInputLocal, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
 
-// Los dos negocios de Howria. Un cliente cae en uno o en otro (hoy
-// ninguno hace las dos cosas, pero el filtro soporta que lo haga: en ese
-// caso aparecería en las dos vistas, que es lo correcto).
-function esDePaseos(c) {
-  return (c.tipoServicio || []).includes("paseos");
-}
-function esDeAdiestramiento(c) {
-  const t = c.tipoServicio || [];
-  return t.includes("evaluacion") || t.includes("clases");
-}
 
 // Lo que hay que saber de un cliente de adiestramiento sin abrir su
 // ficha: en qué va la evaluación, cuántas clases lleva y cuándo vuelve.
