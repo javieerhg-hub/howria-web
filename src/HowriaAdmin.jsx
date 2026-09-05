@@ -1518,6 +1518,27 @@ export const TODOS_LOS_TABS = [
 // grupo de cada una, así que sacarlos dejaría esos resultados sin
 // contexto. Un grupo sin pestañas visibles no pinta nada (entradasDeMenu
 // devuelve vacío), así que no estorban.
+// Las pestanas que ve un rol. Sale de permisos_roles, con dos ajustes que
+// no viven en la base:
+//
+//  - Administrador siempre llega a "Usuarios" — es la unica pantalla desde
+//    donde se arregla permisos_roles, asi que si esa fila llegara a quedar
+//    sin "usuarios" (edicion a mano, migracion a medias) esto evita que
+//    quede sin forma de recuperarse desde la propia app. El checkbox de
+//    "Permisos por rol" ya sugeria esta garantia visualmente, pero antes
+//    no era real: dependia solo de lo que hubiera en la base.
+//
+//  - El paseador no tiene "Inicio": se fusiono con Mis paseos ("Hoy" /
+//    "Mi mes"), que es ademas donde el login lo deja. Se filtra aca y no
+//    en permisos_roles a proposito — sin migracion, y para devolverselo
+//    basta borrar esa linea.
+export function pestanasDelRol(rol, permisosRoles) {
+  const base = permisosRoles?.[rol] || [];
+  if (rol === "administrador") return Array.from(new Set([...base, "usuarios"]));
+  if (rol === "paseador") return base.filter((id) => id !== "inicio");
+  return base;
+}
+
 export const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Clientes y dinero", "Administración", "Equipo", "Prospección"];
 
 // Pestañas que hoy casi no se usan y que Javier pidió sacar del camino
@@ -3339,6 +3360,10 @@ function TarjetaPaseoDia({ cliente: c, registro, hoy, diaActivo, notaAbiertaId, 
   );
 }
 
+// La vista elegida dentro de Mis paseos (Hoy / Mi mes), recordada por
+// telefono igual que la del Calendario.
+const CLAVE_VISTA_MIS_PASEOS = "howria_mis_paseos_vista";
+
 function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios, faseDiaPaseador = {}, actualizarFaseDia, mascotas = [], ausenciasPaseador = {}, justificarAusencia, deshacerAusencia, abrirRutaGuiada = false, limpiarAbrirRutaGuiada, reprogramaciones = [] }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -3355,6 +3380,30 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   });
   const [mostrarJustificar, setMostrarJustificar] = useState(false);
   const [motivoAusencia, setMotivoAusencia] = useState("");
+
+  // Mis paseos hace dos trabajos distintos. Uno es lo de HOY: se abre
+  // varias veces al dia, en la calle, con una mano, para marcar un paseo.
+  // El otro es lo del MES —cuanto llevas, tus clientes, tu capacitacion—,
+  // que se mira de vez en cuando y con calma. Estaban en un mismo scroll.
+  //
+  // Y lo del mes estaba ademas repartido: el calendario del mes y los
+  // avisos de seguridad vivian en el Inicio del paseador, una pantalla que
+  // el login se salta (entra directo aca), asi que casi no se veian.
+  //
+  // La eleccion se recuerda, mismo criterio que el selector Mes/Dia del
+  // Calendario: devolver a la vista equivocada en cada entrada seria
+  // molesto para quien vive en una sola de las dos.
+  const [vista, setVista] = useState(() => {
+    try {
+      return localStorage.getItem(CLAVE_VISTA_MIS_PASEOS) === "mes" ? "mes" : "hoy";
+    } catch {
+      return "hoy";
+    }
+  });
+  function elegirVista(v) {
+    setVista(v);
+    try { localStorage.setItem(CLAVE_VISTA_MIS_PASEOS, v); } catch {}
+  }
 
   // Se abre solo la primera vez que este paseador entra a Mis Paseos en
   // este teléfono — después queda disponible para volver a verlo a mano
@@ -3387,6 +3436,10 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
   useEffect(() => {
     if (abrirRutaGuiada) {
       limpiarSalidaGuardada();
+      // La ruta guiada vive dentro de la vista "Hoy": si el push llega
+      // mientras la vista recordada es "Mi mes", hay que traerlo de vuelta
+      // o el modal no se monta y el enlace no hace nada.
+      setVista("hoy");
       setRutaAbierta(true);
       limpiarAbrirRutaGuiada?.();
     }
@@ -3556,284 +3609,320 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
-      <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
-          <h2 style={{ ...sectionTitle, color: CREAM }}>Mi ruta de hoy</h2>
-          <span style={{ fontSize: 12, color: "#9BAAB8", textTransform: "capitalize" }}>{hoyLargo}</span>
-        </div>
-
-        {clientesHoyAnillo.length === 0 ? (
-          <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "#B7C2CE" }}>No tienes paseos asignados hoy. Disfruta el día 🐾</p>
-        ) : rutaCompletada ? (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 Completaste tu ruta de hoy — reuniste {fmtCLP(montoHoy)} hoy.</p>
-            <button onClick={() => setRutaAbierta(true)} style={{ ...botonSecundario, marginTop: 12, width: "auto", padding: "10px 20px", background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>
-              Ver resumen
+      <div role="group" aria-label="Vista de Mis paseos" style={{ display: "flex", gap: 8 }}>
+        {[
+          { id: "hoy", nombre: "Hoy" },
+          { id: "mes", nombre: "Mi mes" },
+        ].map((v) => {
+          const activo = vista === v.id;
+          return (
+            <button key={v.id} type="button" onClick={() => elegirVista(v.id)} aria-pressed={activo}
+              style={{
+                flex: 1, padding: "11px 14px", borderRadius: 10, cursor: "pointer", fontSize: 14, minHeight: 46,
+                border: "none", fontWeight: activo ? 700 : 500, fontFamily: "inherit",
+                background: activo ? NAVY : CREAM_SOFT, color: activo ? CREAM : INK,
+              }}>
+              {v.nombre}
             </button>
-          </div>
-        ) : ausenciaHoy ? (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, fontSize: 13.5, color: "#B7C2CE" }}>Justificaste tu ausencia de hoy: <b style={{ color: CREAM }}>"{ausenciaHoy}"</b></p>
-            <button onClick={() => deshacerAusencia(user.nombre)} style={{ marginTop: 10, background: "none", border: "none", color: GOLD, fontSize: 12.5, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-              Deshacer
-            </button>
-          </div>
-        ) : rutaEnCurso ? (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Ruta en curso — {hechosHoy + canceladosHoy}/{clientesHoyAnillo.length} resueltos.</p>
-            <button onClick={() => { limpiarSalidaGuardada(); setRutaAbierta(true); mostrarNotificacionRuta(clientesHoyAnillo.length - (hechosHoy + canceladosHoy)); }}
-              style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
-              Continuar mi ruta
-            </button>
-          </div>
-        ) : (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Hoy tienes {clientesHoyAnillo.length} perro{clientesHoyAnillo.length === 1 ? "" : "s"} para pasear.</p>
-            <button onClick={iniciarRuta}
-              style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
-              Iniciar ruta
-            </button>
-            {!mostrarJustificar ? (
-              <button onClick={() => setMostrarJustificar(true)}
-                style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
-                Justificar ausencia
-              </button>
-            ) : (
-              <div style={{ marginTop: 12 }}>
-                <input value={motivoAusencia} onChange={(e) => setMotivoAusencia(e.target.value)} placeholder="Ej. me enfermé, tuve una urgencia..."
-                  onKeyDown={(e) => e.key === "Enter" && confirmarAusencia()} autoFocus
-                  style={{ ...input, marginBottom: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)", color: CREAM }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={confirmarAusencia} style={{ ...botonSecundario, background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>Confirmar</button>
-                  <button onClick={() => { setMostrarJustificar(false); setMotivoAusencia(""); }} style={{ ...botonSecundario, background: "transparent", color: "#9BAAB8", border: "1.5px solid rgba(255,255,255,0.2)" }}>Cancelar</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })}
       </div>
 
-      {rutaAbierta && (
-        <Suspense fallback={<p style={hint}>Cargando tu ruta…</p>}>
-          <RutaGuiada
-            clientesHoy={clientesHoyAnillo}
-            registroPaseos={registroPaseos}
-            setRegistroPaseos={setRegistroPaseos}
-            user={user}
-            faseHoy={faseHoy}
-            actualizarFaseDia={actualizarFaseDia}
-            metaMensual={miUsuario.metaMensual}
-            totalMontoMes={totalMontoMes}
-            onSalir={salirDeRuta}
-          />
-        </Suspense>
-      )}
-
-      {tutorialAbierto && (
-        <Suspense fallback={<p style={hint}>Cargando el tutorial…</p>}>
-          <TutorialPaseador onCerrar={cerrarTutorial} />
-        </Suspense>
-      )}
-
-      <div className="howria-card" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{diaActivo.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button onClick={() => cambiarDia(-1)} style={botonSecundario}>← Día anterior</button>
-            <button onClick={() => setDiaSel(fechaKey(hoy))} style={botonSecundario}>Hoy</button>
-            <input type="date" value={diaSel} max={fechaKey(hoy)} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
-            <button onClick={() => cambiarDia(1)} disabled={diaSel >= fechaKey(hoy)} style={{ ...botonSecundario, opacity: diaSel >= fechaKey(hoy) ? 0.5 : 1 }}>Día siguiente →</button>
+      {vista === "hoy" ? (
+        <>
+        <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+            <h2 style={{ ...sectionTitle, color: CREAM }}>Mi ruta de hoy</h2>
+            <span style={{ fontSize: 12, color: "#9BAAB8", textTransform: "capitalize" }}>{hoyLargo}</span>
           </div>
+
+          {clientesHoyAnillo.length === 0 ? (
+            <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "#B7C2CE" }}>No tienes paseos asignados hoy. Disfruta el día 🐾</p>
+          ) : rutaCompletada ? (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: 0, fontSize: 14.5, color: "#8FD3A8", fontWeight: 600 }}>🎉 Completaste tu ruta de hoy — reuniste {fmtCLP(montoHoy)} hoy.</p>
+              <button onClick={() => setRutaAbierta(true)} style={{ ...botonSecundario, marginTop: 12, width: "auto", padding: "10px 20px", background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>
+                Ver resumen
+              </button>
+            </div>
+          ) : ausenciaHoy ? (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#B7C2CE" }}>Justificaste tu ausencia de hoy: <b style={{ color: CREAM }}>"{ausenciaHoy}"</b></p>
+              <button onClick={() => deshacerAusencia(user.nombre)} style={{ marginTop: 10, background: "none", border: "none", color: GOLD, fontSize: 12.5, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+                Deshacer
+              </button>
+            </div>
+          ) : rutaEnCurso ? (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Ruta en curso — {hechosHoy + canceladosHoy}/{clientesHoyAnillo.length} resueltos.</p>
+              <button onClick={() => { limpiarSalidaGuardada(); setRutaAbierta(true); mostrarNotificacionRuta(clientesHoyAnillo.length - (hechosHoy + canceladosHoy)); }}
+                style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
+                Continuar mi ruta
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "#9BAAB8" }}>Hoy tienes {clientesHoyAnillo.length} perro{clientesHoyAnillo.length === 1 ? "" : "s"} para pasear.</p>
+              <button onClick={iniciarRuta}
+                style={{ width: "100%", marginTop: 14, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15.5, fontWeight: 700 }}>
+                Iniciar ruta
+              </button>
+              {!mostrarJustificar ? (
+                <button onClick={() => setMostrarJustificar(true)}
+                  style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: "#9BAAB8", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
+                  Justificar ausencia
+                </button>
+              ) : (
+                <div style={{ marginTop: 12 }}>
+                  <input value={motivoAusencia} onChange={(e) => setMotivoAusencia(e.target.value)} placeholder="Ej. me enfermé, tuve una urgencia..."
+                    onKeyDown={(e) => e.key === "Enter" && confirmarAusencia()} autoFocus
+                    style={{ ...input, marginBottom: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)", color: CREAM }} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={confirmarAusencia} style={{ ...botonSecundario, background: "transparent", color: CREAM, border: "1.5px solid rgba(255,255,255,0.35)" }}>Confirmar</button>
+                    <button onClick={() => { setMostrarJustificar(false); setMotivoAusencia(""); }} style={{ ...botonSecundario, background: "transparent", color: "#9BAAB8", border: "1.5px solid rgba(255,255,255,0.2)" }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <p style={{ ...label, marginTop: 18, marginBottom: 2 }}>Clientes programados este día</p>
-        <p style={{ ...hint, marginTop: 0 }}>Desliza una tarjeta hacia la derecha para marcarla realizada, sin tener que acertarle al botón.</p>
-        {clientesDelDia.length === 0 ? (
-          <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados este día.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {clientesDelDia.map((c) => {
-              const key = `${c.id}_${fechaKey(diaActivo)}`;
-              const registro = registroPaseos[key] || {};
-              return (
-                <TarjetaPaseoDia key={c.id} cliente={c} registro={registro} hoy={hoy} diaActivo={diaActivo}
-                  notaAbiertaId={notaAbiertaId} notaTexto={notaTexto} setNotaAbiertaId={setNotaAbiertaId} setNotaTexto={setNotaTexto}
-                  toggleRealizado={toggleRealizado} toggleCancelado={toggleCancelado} guardarNota={guardarNota} />
-              );
-            })}
-          </div>
+        {rutaAbierta && (
+          <Suspense fallback={<p style={hint}>Cargando tu ruta…</p>}>
+            <RutaGuiada
+              clientesHoy={clientesHoyAnillo}
+              registroPaseos={registroPaseos}
+              setRegistroPaseos={setRegistroPaseos}
+              user={user}
+              faseHoy={faseHoy}
+              actualizarFaseDia={actualizarFaseDia}
+              metaMensual={miUsuario.metaMensual}
+              totalMontoMes={totalMontoMes}
+              onSalir={salirDeRuta}
+            />
+          </Suspense>
         )}
 
-        {clientesCompartidosDelDia.length > 0 && (
-          <>
-            <p style={{ ...label, marginTop: 18 }}>Paseos compartidos contigo este día</p>
+        {tutorialAbierto && (
+          <Suspense fallback={<p style={hint}>Cargando el tutorial…</p>}>
+            <TutorialPaseador onCerrar={cerrarTutorial} />
+          </Suspense>
+        )}
+
+        <div className="howria-card" style={tarjeta}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <h2 style={{ ...sectionTitle, textTransform: "capitalize" }}>{diaActivo.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={() => cambiarDia(-1)} style={botonSecundario}>← Día anterior</button>
+              <button onClick={() => setDiaSel(fechaKey(hoy))} style={botonSecundario}>Hoy</button>
+              <input type="date" value={diaSel} max={fechaKey(hoy)} onChange={(e) => e.target.value && setDiaSel(e.target.value)} style={{ ...input, margin: 0, width: 150 }} />
+              <button onClick={() => cambiarDia(1)} disabled={diaSel >= fechaKey(hoy)} style={{ ...botonSecundario, opacity: diaSel >= fechaKey(hoy) ? 0.5 : 1 }}>Día siguiente →</button>
+            </div>
+          </div>
+
+          <p style={{ ...label, marginTop: 18, marginBottom: 2 }}>Clientes programados este día</p>
+          <p style={{ ...hint, marginTop: 0 }}>Desliza una tarjeta hacia la derecha para marcarla realizada, sin tener que acertarle al botón.</p>
+          {clientesDelDia.length === 0 ? (
+            <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados este día.</p>
+          ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {clientesCompartidosDelDia.map(({ cliente: c, registro }) => (
-                <div key={c.id} style={{ padding: "14px 16px", borderRadius: 8, border: `1.5px dashed ${GOLD}`, background: "#FBF3E0" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
-                      <div>
-                        <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{c.nombre}</div>
-                        <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>🐾 {c.perro}</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "#F3E3B4", borderRadius: 20, padding: "5px 11px" }}>
-                      🤝 Mitad y mitad — {registro.porcentajeCompartido ?? 50}% para ti
-                    </span>
-                  </div>
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>Su paseador habitual es {c.paseadorNombre} — ayudaste con este paseo ese día.</p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Tu pago — {MESES[mesActual]} {anioActual}</h2>
-        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
-          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosMes} / {totalProgramadosMes}</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Avance del mes</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{totalProgramadosMes ? Math.round((totalRealizadosMes / totalProgramadosMes) * 100) : 0}%</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Monto estimado a recibir</p>
-            <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(totalMontoMes)}</p>
-          </div>
-        </div>
-        <p style={hint}>Los días marcados "cliente canceló" no cuentan en tu meta ni en tu pago. Este monto es un estimado según tus paseos marcados este mes — no es la misma cifra que ves en Finanzas, que refleja lo facturado al cliente, no lo que se te paga a ti.</p>
-
-        <p style={label}>Detalle por cliente</p>
-        <div>
-          {resumenMensual.map((r) => (
-            <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-              <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre} · {r.cliente.perro}</span>
-              <span style={{ color: "#8A7E5C", flex: "none" }}>{r.realizados} / {r.programados} paseos</span>
-              <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(r.monto)}</b>
-            </div>
-          ))}
-        </div>
-        {misPaseosCompartidos.length > 0 && (
-          <>
-            <p style={{ ...label, marginTop: 18 }}>Paseos que compartiste</p>
-            <div>
-              {misPaseosCompartidos.map((x, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
-                  <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.cliente.nombre} · {x.cliente.perro}</span>
-                  <span style={{ color: "#8A7E5C", flex: "none" }}>{new Date(x.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</span>
-                  <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(x.monto)}</b>
-                </div>
-              ))}
-            </div>
-            <p style={hint}>Ayudaste en estos — no son tus clientes, pero un coordinador repartió el pago contigo ese día.</p>
-          </>
-        )}
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={() => setMostrarClientes((v) => !v)}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flex: "1 1 220px", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
-            <span>
-              <h2 style={{ ...sectionTitle, marginBottom: mostrarClientes ? 6 : 0 }}>Mis clientes y horarios ({misClientes.length})</h2>
-              {!mostrarClientes && <p style={{ ...hint, margin: 0 }}>Tu horario completo, para tenerlo siempre a mano.</p>}
-            </span>
-            <span style={{ fontSize: 13, color: "#8A7E5C", flex: "none", marginLeft: 10 }}>{mostrarClientes ? "▴" : "▾"}</span>
-          </button>
-          <button onClick={agregarACalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "9px 16px", fontSize: 12.5 }}>
-            📅 Agregar a mi calendario
-          </button>
-        </div>
-        {mostrarClientes && (
-          <>
-            <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba suscribe tu Calendario de iPhone (u otro que uses) a este horario — se mantiene al día solo, sin que tengas que repetirlo si algo cambia.</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: CREAM_SOFT, borderRadius: 8, padding: "10px 12px", marginBottom: 14, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: "#8A7E5C", flex: "none", textTransform: "uppercase", letterSpacing: 0.3 }}>Enlace de suscripción</span>
-              <code style={{ fontSize: 11.5, color: NAVY, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {urlSuscripcionCalendarioHttps(miUsuario.calendarioToken)}
-              </code>
-              <button onClick={copiarEnlaceCalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "6px 12px", fontSize: 11.5 }}>
-                Copiar
-              </button>
-            </div>
-            <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
-                    <th style={{ padding: "8px 10px" }}>Cliente</th>
-                    <th style={{ padding: "8px 10px" }}>Perro</th>
-                    <th style={{ padding: "8px 10px" }}>Días</th>
-                    <th style={{ padding: "8px 10px" }}>Hora</th>
-                    <th style={{ padding: "8px 10px" }}>Dirección</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {misClientes.map((c) => (
-                    <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
-                      <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
-                      <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
-                      <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
-                      <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
-                      <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="howria-mispaseos-tarjetas" style={{ display: "none", marginTop: 12 }}>
-              {misClientes.map((c) => (
-                <div key={c.id} style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· 🐾 {c.perro}</span></p>
-                      <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.direccion || "sin dirección"}</p>
-                    </div>
-                  </div>
-                  <p style={{ margin: "8px 0 0", fontSize: 12.5, color: INK }}>
-                    {(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "Sin días asignados"}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="howria-card" style={tarjeta}>
-        <button onClick={() => setMostrarCapacitacion((v) => !v)}
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
-          <h2 style={{ ...sectionTitle, marginBottom: 0 }}>Mi capacitación</h2>
-          <span style={{ fontSize: 12.5, color: "#8A7E5C", flex: "none", marginLeft: 10, fontWeight: 600 }}>
-            {(miUsuario.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {mostrarCapacitacion ? "▴" : "▾"}
-          </span>
-        </button>
-        {mostrarCapacitacion && (
-          <>
-            <p style={{ ...hint, marginTop: 6 }}>La marca tu coordinador o administrador a medida que la vas completando.</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-              {PASOS_CAPACITACION.map((paso) => {
-                const hecho = (miUsuario.capacitacionCompletada || []).includes(paso.id);
+              {clientesDelDia.map((c) => {
+                const key = `${c.id}_${fechaKey(diaActivo)}`;
+                const registro = registroPaseos[key] || {};
                 return (
-                  <div key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: hecho ? "#2F6A46" : "#8A7E5C" }}>
-                    <span>{hecho ? "✓" : "○"}</span>
-                    {paso.texto}
-                  </div>
+                  <TarjetaPaseoDia key={c.id} cliente={c} registro={registro} hoy={hoy} diaActivo={diaActivo}
+                    notaAbiertaId={notaAbiertaId} notaTexto={notaTexto} setNotaAbiertaId={setNotaAbiertaId} setNotaTexto={setNotaTexto}
+                    toggleRealizado={toggleRealizado} toggleCancelado={toggleCancelado} guardarNota={guardarNota} />
                 );
               })}
             </div>
-            <button onClick={() => setTutorialAbierto(true)}
-              style={{ marginTop: 14, background: "none", border: "none", color: NAVY, fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-              Volver a ver el tutorial de la app
+          )}
+
+          {clientesCompartidosDelDia.length > 0 && (
+            <>
+              <p style={{ ...label, marginTop: 18 }}>Paseos compartidos contigo este día</p>
+              <div style={{ display: "grid", gap: 10 }}>
+                {clientesCompartidosDelDia.map(({ cliente: c, registro }) => (
+                  <div key={c.id} style={{ padding: "14px 16px", borderRadius: 8, border: `1.5px dashed ${GOLD}`, background: "#FBF3E0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
+                        <div>
+                          <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{c.nombre}</div>
+                          <div style={{ fontSize: 12.5, color: "#8A7E5C" }}>🐾 {c.perro}</div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "#F3E3B4", borderRadius: 20, padding: "5px 11px" }}>
+                        🤝 Mitad y mitad — {registro.porcentajeCompartido ?? 50}% para ti
+                      </span>
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8A7E5C" }}>Su paseador habitual es {c.paseadorNombre} — ayudaste con este paseo ese día.</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+
+        {/* Tambien venia del Inicio del paseador. Va al final de "Hoy" y no
+            en "Mi mes" porque es un recordatorio para antes de salir, no algo
+            que se repase una vez al mes. */}
+        <CarruselAvisos />
+        </>
+      ) : (
+        <>
+        <div className="howria-card" style={tarjeta}>
+          <h2 style={sectionTitle}>Tu pago — {MESES[mesActual]} {anioActual}</h2>
+          <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, margin: "16px 0 22px" }}>
+            <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9BAAB8", textTransform: "uppercase" }}>Paseos realizados</p>
+              <p style={{ margin: 0, fontSize: 21, fontWeight: 700, fontFamily: "Georgia, serif" }}>{totalRealizadosMes} / {totalProgramadosMes}</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Avance del mes</p>
+              <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{totalProgramadosMes ? Math.round((totalRealizadosMes / totalProgramadosMes) * 100) : 0}%</p>
+            </div>
+            <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#8A7E5C", textTransform: "uppercase" }}>Monto estimado a recibir</p>
+              <p style={{ margin: 0, fontSize: 21, fontWeight: 700, color: NAVY, fontFamily: "Georgia, serif" }}>{fmtCLP(totalMontoMes)}</p>
+            </div>
+          </div>
+          <p style={hint}>Los días marcados "cliente canceló" no cuentan en tu meta ni en tu pago. Este monto es un estimado según tus paseos marcados este mes — no es la misma cifra que ves en Finanzas, que refleja lo facturado al cliente, no lo que se te paga a ti.</p>
+
+          <p style={label}>Detalle por cliente</p>
+          <div>
+            {resumenMensual.map((r) => (
+              <div key={r.cliente.id} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.cliente.nombre} · {r.cliente.perro}</span>
+                <span style={{ color: "#8A7E5C", flex: "none" }}>{r.realizados} / {r.programados} paseos</span>
+                <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(r.monto)}</b>
+              </div>
+            ))}
+          </div>
+          {misPaseosCompartidos.length > 0 && (
+            <>
+              <p style={{ ...label, marginTop: 18 }}>Paseos que compartiste</p>
+              <div>
+                {misPaseosCompartidos.map((x, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 12px", padding: "10px 0", borderBottom: "1px solid #EDE4CE", fontSize: 13.5 }}>
+                    <span style={{ color: INK, flex: "1 1 140px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.cliente.nombre} · {x.cliente.perro}</span>
+                    <span style={{ color: "#8A7E5C", flex: "none" }}>{new Date(x.fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</span>
+                    <b style={{ color: NAVY, flex: "none" }}>{fmtCLP(x.monto)}</b>
+                  </div>
+                ))}
+              </div>
+              <p style={hint}>Ayudaste en estos — no son tus clientes, pero un coordinador repartió el pago contigo ese día.</p>
+            </>
+          )}
+        </div>
+
+        {/* Venia del Inicio del paseador, que el login se salta. Sin setTab
+            porque su boton "Ir a Mis paseos" ya no lleva a ninguna parte:
+            esto ES Mis paseos. */}
+        <CalendarioExpres misClientes={misClientes} registroPaseos={registroPaseos} hoy={hoy} reprogramaciones={reprogramaciones} />
+
+        <div className="howria-card" style={tarjeta}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={() => setMostrarClientes((v) => !v)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flex: "1 1 220px", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+              <span>
+                <h2 style={{ ...sectionTitle, marginBottom: mostrarClientes ? 6 : 0 }}>Mis clientes y horarios ({misClientes.length})</h2>
+                {!mostrarClientes && <p style={{ ...hint, margin: 0 }}>Tu horario completo, para tenerlo siempre a mano.</p>}
+              </span>
+              <span style={{ fontSize: 13, color: "#8A7E5C", flex: "none", marginLeft: 10 }}>{mostrarClientes ? "▴" : "▾"}</span>
             </button>
-          </>
-        )}
-      </div>
+            <button onClick={agregarACalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "9px 16px", fontSize: 12.5 }}>
+              📅 Agregar a mi calendario
+            </button>
+          </div>
+          {mostrarClientes && (
+            <>
+              <p style={hint}>Tu horario completo, para tenerlo siempre a mano. El botón de arriba suscribe tu Calendario de iPhone (u otro que uses) a este horario — se mantiene al día solo, sin que tengas que repetirlo si algo cambia.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: CREAM_SOFT, borderRadius: 8, padding: "10px 12px", marginBottom: 14, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11.5, color: "#8A7E5C", flex: "none", textTransform: "uppercase", letterSpacing: 0.3 }}>Enlace de suscripción</span>
+                <code style={{ fontSize: 11.5, color: NAVY, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {urlSuscripcionCalendarioHttps(miUsuario.calendarioToken)}
+                </code>
+                <button onClick={copiarEnlaceCalendario} style={{ ...botonSecundario, width: "auto", flex: "none", padding: "6px 12px", fontSize: 11.5 }}>
+                  Copiar
+                </button>
+              </div>
+              <div className="howria-mispaseos-tabla" style={{ overflowX: "auto", marginTop: 12 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "#8A7E5C", fontSize: 11.5, textTransform: "uppercase" }}>
+                      <th style={{ padding: "8px 10px" }}>Cliente</th>
+                      <th style={{ padding: "8px 10px" }}>Perro</th>
+                      <th style={{ padding: "8px 10px" }}>Días</th>
+                      <th style={{ padding: "8px 10px" }}>Hora</th>
+                      <th style={{ padding: "8px 10px" }}>Dirección</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {misClientes.map((c) => (
+                      <tr key={c.id} style={{ borderTop: "1px solid #EDE4CE" }}>
+                        <td style={{ padding: "10px", color: NAVY, fontWeight: 600 }}>{c.nombre}</td>
+                        <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
+                        <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
+                        <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
+                        <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="howria-mispaseos-tarjetas" style={{ display: "none", marginTop: 12 }}>
+                {misClientes.map((c) => (
+                  <div key={c.id} style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid #EDE4CE", background: "#FFFFFF" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· 🐾 {c.perro}</span></p>
+                        <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.direccion || "sin dirección"}</p>
+                      </div>
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: 12.5, color: INK }}>
+                      {(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "Sin días asignados"}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="howria-card" style={tarjeta}>
+          <button onClick={() => setMostrarCapacitacion((v) => !v)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0, font: "inherit", textAlign: "left" }}>
+            <h2 style={{ ...sectionTitle, marginBottom: 0 }}>Mi capacitación</h2>
+            <span style={{ fontSize: 12.5, color: "#8A7E5C", flex: "none", marginLeft: 10, fontWeight: 600 }}>
+              {(miUsuario.capacitacionCompletada || []).length}/{PASOS_CAPACITACION.length} {mostrarCapacitacion ? "▴" : "▾"}
+            </span>
+          </button>
+          {mostrarCapacitacion && (
+            <>
+              <p style={{ ...hint, marginTop: 6 }}>La marca tu coordinador o administrador a medida que la vas completando.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                {PASOS_CAPACITACION.map((paso) => {
+                  const hecho = (miUsuario.capacitacionCompletada || []).includes(paso.id);
+                  return (
+                    <div key={paso.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: hecho ? "#2F6A46" : "#8A7E5C" }}>
+                      <span>{hecho ? "✓" : "○"}</span>
+                      {paso.texto}
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => setTutorialAbierto(true)}
+                style={{ marginTop: 14, background: "none", border: "none", color: NAVY, fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+                Volver a ver el tutorial de la app
+              </button>
+            </>
+          )}
+        </div>
+        </>
+      )}
     </div>
   );
 }
@@ -4035,18 +4124,22 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab, reprograma
         <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#F1EEE4", marginRight: 4 }} />Cancelado</span>
       </div>
 
-      <button onClick={() => setTab("mis-paseos")}
-        style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-        <Footprints size={18} /> Ir a Mis paseos
-      </button>
+      {/* Solo cuando este calendario se dibuja fuera de Mis paseos. Dentro
+          de "Mi mes" no se pasa setTab y el boton no se pinta: mandaria a
+          la pantalla en la que ya estas. */}
+      {setTab && (
+        <button onClick={() => setTab("mis-paseos")}
+          style={{ width: "100%", marginTop: 18, padding: "15px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Footprints size={18} /> Ir a Mis paseos
+        </button>
+      )}
     </div>
   );
 }
 
-function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onAbrirRuta, reprogramaciones = [], onBuscar }) {
+function InicioEntrenador({ clientes, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onBuscar }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
-  const misClientes = clientes.filter((c) => c.paseadorNombre === user.nombre);
   const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
   const esEntrenador = user.rol === "entrenador";
   // El dashboard de administrador/coordinador ya mostraba la fase de todo
@@ -4186,108 +4279,13 @@ function InicioPaseador({ clientes, registroPaseos, setRegistroPaseos, usuarios,
     );
   }
 
-  const clientesHoy = misClientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
-  const pendientesHoy = clientesHoy.filter((c) => {
-    const r = registroPaseos[`${c.id}_${fechaKey(hoy)}`];
-    return !r?.realizado && !r?.cancelado;
-  });
-
-  // Acceso directo desde Inicio a la ruta guiada de Mis Paseos — antes
-  // solo se podía retomar entrando a Mis Paseos y tocando "Continuar mi
-  // ruta". Ordenado por horaHabitual (el horario real del cliente, mismo
-  // dato que ya se ve en "Mis clientes y horarios") y recortado a los
-  // primeros 4 para que el acceso directo sea un vistazo rápido, no una
-  // lista larga — el detalle completo sigue viviendo en la ruta guiada.
-  const faseHoy = faseDiaPaseador[user.nombre] || "pendiente";
-  const rutaEnCurso = faseHoy === "en_recoleccion" || faseHoy === "en_parque" || faseHoy === "en_retorno";
-  const proximosPaseos = ordenarPorHora(pendientesHoy).slice(0, 4);
-
-  function resolverPaseo(clienteId, cambios) {
-    const key = `${clienteId}_${fechaKey(hoy)}`;
-    setRegistroPaseos((prev) => ({ ...prev, [key]: { ...prev[key], ...cambios } }));
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 20 }}>
-      {encabezado}
-      <CarruselAvisos />
-
-      {rutaEnCurso && onAbrirRuta && (
-        <div className="howria-card" style={{ ...tarjeta, background: NAVY, border: "none" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
-            <h2 style={{ ...sectionTitle, color: CREAM }}>Tu ruta de hoy</h2>
-            <span style={{ fontSize: 11.5, color: GOLD, fontWeight: 600 }}>En curso</span>
-          </div>
-          {proximosPaseos.length > 0 ? (
-            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-              {proximosPaseos.map((c) => (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : "rgba(255,255,255,0.14)" }} />
-                  <p style={{ margin: 0, fontSize: 13, color: CREAM, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.nombre} <span style={{ color: "#9BAAB8" }}>· 🐾 {c.perro}</span>
-                  </p>
-                  {c.horaHabitual && <span style={{ fontSize: 12, color: "#9BAAB8", flex: "none" }}>{c.horaHabitual}</span>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ margin: "12px 0 0", fontSize: 13, color: "#9BAAB8" }}>Ya resolviste todos los paseos de hoy.</p>
-          )}
-          <button onClick={() => { onAbrirRuta(); mostrarNotificacionRuta(pendientesHoy.length); }}
-            style={{ width: "100%", marginTop: 16, padding: "14px", borderRadius: 10, border: "none", cursor: "pointer", background: GOLD, color: NAVY, fontSize: 14.5, fontWeight: 700 }}>
-            Volver a mi ruta
-          </button>
-        </div>
-      )}
-
-      {/* De los cuatro roles, paseador era el único sin este launcher en
-          su Inicio mobile — justo el rol más "de terreno, en el
-          celular" de todos. No pinta nada en desktop (.howria-launcher-mobile). */}
-      <LauncherMobile tabs={tabs} setTab={setTab} destacar={["mis-paseos"]} onBuscar={onBuscar} />
-
-      {clientesHoy.length > 0 && pendientesHoy.length > 0 && (
-        <div className="howria-card" style={tarjeta}>
-          <h2 style={sectionTitle}>Paseo de hoy</h2>
-          <p style={{ ...hint, marginTop: 8 }}>Confirma o rechaza — al tocar, desaparece de la lista.</p>
-          <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
-            {pendientesHoy.map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid #E4DBC3", background: "#FFFDF7" }}>
-                <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT, flex: "none" }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>🐾 {c.perro}{c.horaHabitual ? ` · ${c.horaHabitual}` : ""}</p>
-                </div>
-                <div style={{ display: "flex", gap: 6, flex: "none" }}>
-                  <button onClick={() => resolverPaseo(c.id, { realizado: true, cancelado: false })} title="Confirmar"
-                    style={{ width: 38, height: 38, borderRadius: 8, border: "none", cursor: "pointer", background: "#2F6A46", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CircleCheck size={19} />
-                  </button>
-                  <button onClick={() => resolverPaseo(c.id, { cancelado: true, realizado: false })} title="Rechazar"
-                    style={{ width: 38, height: 38, borderRadius: 8, border: "none", cursor: "pointer", background: "rgba(168,92,59,0.15)", color: RUST, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CircleX size={19} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {clientesHoy.length === 0 && (
-        <div className="howria-card" style={tarjeta}>
-          <h2 style={sectionTitle}>Paseo de hoy</h2>
-          <p style={{ ...hint, marginTop: 8 }}>No tienes paseos programados para hoy.</p>
-        </div>
-      )}
-      {clientesHoy.length > 0 && pendientesHoy.length === 0 && (
-        <div className="howria-card" style={{ ...tarjeta, background: "#D8ECDE", border: "1px solid #2F6A46" }}>
-          <h2 style={{ ...sectionTitle, color: "#2F6A46" }}>Paseo de hoy</h2>
-          <p style={{ ...hint, marginTop: 8, color: "#2F6A46" }}>✓ Ya resolviste todos tus paseos de hoy.</p>
-        </div>
-      )}
-
-      <CalendarioExpres misClientes={misClientes} registroPaseos={registroPaseos} hoy={hoy} setTab={setTab} reprogramaciones={reprogramaciones} />
-    </div>
-  );
+  // Solo se llama con rol entrenador, asi que el if de arriba siempre
+  // entra. Queda como red: antes esta funcion tambien dibujaba el Inicio
+  // del paseador, y ese Inicio se fusiono con Mis paseos ("Hoy" / "Mi
+  // mes"), que es ademas donde el login deja al paseador. El calendario
+  // del mes y los avisos de seguridad —lo unico que esa pantalla tenia y
+  // Mis paseos no— se mudaron alla.
+  return null;
 }
 
 // Saca los acentos para que "coordinacion" encuentre "Coordinación" y
@@ -4560,8 +4558,12 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   // sección plegable.
   const [detallesAbiertos, setDetallesAbiertos] = useState(true);
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  if (user.rol === "paseador" || user.rol === "entrenador") {
-    return <InicioPaseador clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirRuta={onAbrirRuta} onBuscar={onBuscar} />;
+  // El paseador ya no pasa por aca: su Inicio se fusiono con Mis paseos
+  // (Hoy / Mi mes). El entrenador si conserva el suyo, que es otra
+  // pantalla —sus alumnos destacados y sus evaluaciones por confirmar— y
+  // que ademas no es mia para rediseniar sin preguntarle a Marcela.
+  if (user.rol === "entrenador") {
+    return <InicioEntrenador clientes={clientes} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onBuscar={onBuscar} />;
   }
   const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador, reprogramaciones });
 
@@ -5648,6 +5650,7 @@ export default function HowriaAdmin() {
   // Mientras los permisos no llegan devuelve null: no se baja nada de lo
   // opcional hasta saber si el rol lo necesita.
   const tabsDelRol = permisosRoles && user ? (permisosRoles[user.rol] || []) : null;
+
   function versionSiSeUsa(tabla) {
     const necesarias = TABS_QUE_USAN_TABLA[tabla];
     if (!necesarias) return sessionVersion;
@@ -5690,12 +5693,22 @@ export default function HowriaAdmin() {
   );
   useSuscripcionRefresco(refrescarDatos);
 
+  // Si la pestana abierta no esta permitida, se cae a una que si: cada
+  // pestana se dibuja solo si lo esta, y ninguna se hace cargo del resto,
+  // asi que sin esto la pantalla queda en blanco.
+  //
+  // Tiene que usar pestanasDelRol, la MISMA lista que el render, y no
+  // permisosRoles crudo: si no, un paseador con "inicio" en la tabla pasa
+  // este control (esta en la fila) pero no llega a dibujarse (el render ya
+  // no se lo da, su Inicio se fusiono con Mis paseos) y queda en blanco.
+  //
+  // Y prefiere Mis paseos antes que la primera de la lista, que segun como
+  // quede ordenada la fila podria ser cualquier cosa.
   useEffect(() => {
     if (!user || !permisosRoles) return;
-    const permitidos = permisosRoles[user.rol] || [];
-    if (!permitidos.includes(tab)) {
-      setTab(permitidos[0] || "inicio");
-    }
+    const permitidos = pestanasDelRol(user.rol, permisosRoles);
+    if (permitidos.length === 0 || permitidos.includes(tab)) return;
+    setTab(permitidos.includes("mis-paseos") ? "mis-paseos" : permitidos[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permisosRoles, user, tab]);
 
@@ -5827,12 +5840,6 @@ export default function HowriaAdmin() {
   // arranca en Mis paseos), no para permisos: qué pestañas ve cada rol se
   // define aparte en permisos_roles.
   const esPaseador = user.rol === "entrenador" || user.rol === "paseador";
-  // Administrador siempre debe poder llegar a "Usuarios" — es la única
-  // pantalla desde donde se arregla permisos_roles, así que si esa fila
-  // llegara a quedar sin "usuarios" (edición manual, migración a medias),
-  // esto evita que quede sin forma de recuperarse desde la propia app. El
-  // checkbox de "Permisos por rol" ya sugería esta garantía visualmente,
-  // pero antes no era real — dependía solo de lo que hubiera en la base.
   // El pago más reciente de esta persona que todavía no vio. Solo para
   // quien cobra paseos: un coordinador no recibe este aviso aunque
   // aparezca en la tabla de pagos.
@@ -5842,9 +5849,7 @@ export default function HowriaAdmin() {
         .sort((a, b) => new Date(b.fechaPagoISO || 0) - new Date(a.fechaPagoISO || 0))[0]
     : null;
 
-  const tabsPermitidosRol = esAdmin
-    ? Array.from(new Set([...(permisosRoles?.[user.rol] || []), "usuarios"]))
-    : (permisosRoles?.[user.rol] || []);
+  const tabsPermitidosRol = pestanasDelRol(user.rol, permisosRoles);
   const tabs = TODOS_LOS_TABS.filter((t) => tabsPermitidosRol.includes(t.id));
 
   return (
@@ -6205,7 +6210,7 @@ export default function HowriaAdmin() {
         </div>
       }>
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
-      <LimiteDeError onVolver={() => setTab("inicio")}>
+      <LimiteDeError onVolver={() => setTab(tabsPermitidosRol.includes("inicio") ? "inicio" : (tabsPermitidosRol[0] || "inicio"))}>
         {fusionDeTab(tab) && <SubPestanas fusion={fusionDeTab(tab)} tabs={tabs} tab={tab} setTab={setTab} />}
         {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} onBuscar={() => setBuscadorAbierto(true)} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}

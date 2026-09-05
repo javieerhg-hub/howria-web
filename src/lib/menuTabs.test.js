@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -152,5 +152,54 @@ describe("barra inferior de mobile", () => {
 
   it("alcanza para llenar los 3 accesos rápidos", () => {
     expect(PRIORIDAD_BARRA_NAV.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Qué pestañas ve cada rol. Los dos ajustes que no viven en permisos_roles
+// se hacen en código, y si alguno se cae nadie ve un error: al
+// administrador se le esconde la única pantalla desde donde se arreglan
+// los permisos, o al paseador le vuelve un Inicio que ya no dibuja nada.
+describe("pestañas por rol", () => {
+  const permisos = {
+    administrador: ["inicio", "clientes", "finanzas"],
+    coordinador: ["inicio", "clientes", "coordinacion"],
+    paseador: ["inicio", "mis-paseos", "finanzas"],
+    entrenador: ["inicio", "mis-paseos", "agenda", "alumnos"],
+  };
+
+  it("el administrador siempre llega a Usuarios, aunque no esté en la tabla", () => {
+    expect(pestanasDelRol("administrador", permisos)).toContain("usuarios");
+  });
+
+  it("no se le duplica Usuarios si ya lo tenía", () => {
+    const tabs = pestanasDelRol("administrador", { administrador: ["inicio", "usuarios"] });
+    expect(tabs.filter((t) => t === "usuarios")).toHaveLength(1);
+  });
+
+  it("el paseador no tiene Inicio: lo suyo vive en Mis paseos", () => {
+    const tabs = pestanasDelRol("paseador", permisos);
+    expect(tabs).not.toContain("inicio");
+    expect(tabs).toContain("mis-paseos");
+  });
+
+  it("y le queda a dónde caer, para que la pantalla no quede en blanco", () => {
+    // El efecto que corrige la pestaña activa manda a "mis-paseos" cuando
+    // la abierta no existe. Si el filtro dejara la lista vacía, no habría
+    // dónde caer.
+    expect(pestanasDelRol("paseador", permisos).length).toBeGreaterThan(0);
+  });
+
+  it("al entrenador NO se le toca el Inicio: es otra pantalla y es suya", () => {
+    expect(pestanasDelRol("entrenador", permisos)).toContain("inicio");
+  });
+
+  it("el coordinador conserva su Inicio", () => {
+    expect(pestanasDelRol("coordinador", permisos)).toContain("inicio");
+  });
+
+  it("un rol sin fila en permisos_roles devuelve lista vacía, no explota", () => {
+    expect(pestanasDelRol("cliente", permisos)).toEqual([]);
+    expect(pestanasDelRol("paseador", null)).toEqual([]);
+    expect(pestanasDelRol("administrador", undefined)).toEqual(["usuarios"]);
   });
 });
