@@ -2,7 +2,7 @@
 // reprogramar paseos puntuales. Ver src/HowriaAdmin.jsx (React.lazy) por
 // la lista completa de pestañas y src/tabs/_compartido.jsx para lo compartido.
 import { useState, useMemo, useEffect, useRef } from "react";
-import { CalendarClock, CheckCircle2 } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
@@ -490,7 +490,10 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
   // Sección "Paseos de hoy" (al inicio de la pestaña) — independiente del
   // navegador de días de más abajo ("Hoy"/diaOffset): siempre muestra el
   // día de hoy, sea cual sea el día que se esté mirando en el detalle.
-  const [vistaRapida, setVistaRapida] = useState("no_realizados");
+  // Todos / Pendientes / Realizados sobre la lista del día. Arranca en
+  // "todos" porque es lo que la pantalla mostraba por defecto: la grilla
+  // completa, que es donde se marca un paseo.
+  const [vistaEstado, setVistaEstado] = useState("todos");
   const [reprogramarModal, setReprogramarModal] = useState(null);
   const [fechaRapida, setFechaRapida] = useState("");
   const [motivoRapido, setMotivoRapido] = useState("");
@@ -591,35 +594,50 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     !(c.diasPuntuales || []).length), [clientes]);
 
   const calendarioDia = useMemo(() => construirEstadoDia(diaVista, esHoyVista), [clientes, registroPaseos, diaVista, dowVista, esHoyVista, tickReloj, reprogramaciones]);
-  const calendarioPorPaseador = useMemo(() => agruparPorPaseador(calendarioDia), [calendarioDia]);
 
-  // Sección "Paseos de hoy" — siempre el día de hoy de verdad, no diaVista.
-  const calendarioHoy = useMemo(() => construirEstadoDia(hoy, true), [clientes, registroPaseos, tickReloj, reprogramaciones]);
-  const calendarioHoyPorPaseador = useMemo(
-    // "Sin asignar" queda afuera — reprogramar necesita un paseador
-    // asignado (mismo requisito que ya tiene la sección "Reprogramar
-    // paseos" de más abajo, clientesConPaseador).
-    () => agruparPorPaseador(calendarioHoy).filter((g) => g.paseador !== "Sin asignar"),
-    [calendarioHoy]
+  // TODO lo del día sale de acá. Antes esta pantalla contaba el mismo día
+  // tres veces, con dos nociones distintas de "el día": "Paseos de hoy" y
+  // "Resumen de hoy" iban clavados a hoy de verdad, y la sección de abajo
+  // seguía a diaVista. Al mirar mañana con "Siguiente →", los dos bloques
+  // de arriba seguían mostrando hoy sin decirlo en ninguna parte.
+  const itemsDelDia = useMemo(
+    () => (filtroPaseador === "todos"
+      ? calendarioDia
+      : calendarioDia.filter((i) => (i.cliente.paseadorNombre || "Sin asignar") === filtroPaseador)),
+    [calendarioDia, filtroPaseador],
   );
-  // Mismo filtro que ya acota "Resumen de hoy" y "Hoy" — antes "Paseos de
-  // hoy" seguía mostrando a todo el equipo aunque se hubiera filtrado a
-  // una sola persona más abajo.
-  const gruposVistaRapida = useMemo(() => {
-    return calendarioHoyPorPaseador
-      .filter((g) => filtroPaseador === "todos" || g.paseador === filtroPaseador)
+  const realizadosDia = itemsDelDia.filter((i) => i.estado === "realizado").length;
+  const canceladosDia = itemsDelDia.filter((i) => i.estado === "cancelado").length;
+  const pendientesDia = itemsDelDia.length - realizadosDia - canceladosDia;
+
+  // Los grupos que se dibujan, ya acotados por el filtro de estado.
+  //
+  // `hechos` y `total` se calculan ANTES de filtrar y viajan con el grupo:
+  // son el avance real del paseador ese día, y la cabecera los muestra sin
+  // importar qué filtro esté puesto. Sacándolos de `items` —que es lo
+  // natural— en "Pendientes" quedaba "0/4 hecho(s)" para alguien que
+  // llevaba 3: el filtro se había llevado justo los que contaban.
+  const gruposDelDia = useMemo(() => {
+    return agruparPorPaseador(itemsDelDia)
       .map(({ paseador, items }) => ({
         paseador,
-        items: items.filter((item) => (vistaRapida === "no_realizados" ? item.estado !== "realizado" : item.estado === "realizado")),
+        hechos: items.filter((i) => i.estado === "realizado").length,
+        total: items.length,
+        // Los pendientes reales del día, con filtro o sin él: son los que
+        // hay que reasignar cuando el paseador está ausente, y ese botón
+        // no puede desaparecer solo porque estés mirando "Realizados".
+        pendientes: items.filter((i) => i.estado === "pendiente"),
+        items: vistaEstado === "todos"
+          ? items
+          : items.filter((i) => (vistaEstado === "realizados" ? i.estado === "realizado" : i.estado === "pendiente")),
       }))
       .filter((g) => g.items.length > 0);
-  }, [calendarioHoyPorPaseador, vistaRapida, filtroPaseador]);
-  const calendarioHoyFiltrado = filtroPaseador === "todos" ? calendarioHoy : calendarioHoy.filter((i) => (i.cliente.paseadorNombre || "Sin asignar") === filtroPaseador);
-  const totalNoRealizadosHoy = calendarioHoyFiltrado.filter((i) => i.estado !== "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
-  const totalRealizadosHoy = calendarioHoyFiltrado.filter((i) => i.estado === "realizado" && (i.cliente.paseadorNombre || "Sin asignar") !== "Sin asignar").length;
+  }, [itemsDelDia, vistaEstado]);
 
   function abrirReprogramarRapido(cliente) {
-    const manana = new Date(hoy);
+    // Al día siguiente del que se está mirando, no al de mañana: ahora
+    // esta lista puede estar parada en cualquier fecha.
+    const manana = new Date(diaVista);
     manana.setDate(manana.getDate() + 1);
     setFechaRapida(fechaKey(manana));
     setMotivoRapido("");
@@ -631,27 +649,17 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
     if (!cliente || !fechaRapida || reprogramandoRapido) return;
     setReprogramandoRapido(true);
     const fechaNuevaDate = new Date(fechaRapida + "T00:00:00");
-    const ok = await moverPaseo({ cliente, fechaOrigen: hoy, fechaNueva: fechaNuevaDate, motivo: motivoRapido.trim(), creadoPor: user.nombre });
+    // fechaOrigen es el día que se está mirando, no hoy. Cuando esto vivía
+    // en un bloque clavado a hoy daba lo mismo; ahora la lista navega, y
+    // mandar `hoy` movería el paseo del día equivocado.
+    const ok = await moverPaseo({ cliente, fechaOrigen: diaVista, fechaNueva: fechaNuevaDate, motivo: motivoRapido.trim(), creadoPor: user.nombre });
     if (ok) {
-      actualizarRegistroDia(cliente.id, hoy, { cancelado: true, realizado: false });
+      actualizarRegistroDia(cliente.id, diaVista, { cancelado: true, realizado: false });
       showToast(`Paseo de ${cliente.nombre} reprogramado a ${fechaNuevaDate.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} — a ${cliente.paseadorNombre} le va a aparecer ese día.`, "exito");
       setReprogramarModal(null);
     }
     setReprogramandoRapido(false);
   }
-
-  // El mismo filtro de arriba también acota qué tarjetas de "Hoy" se ven
-  // (sea cual sea el día que se esté mirando con Anterior/Siguiente) — no
-  // solo los números del resumen.
-  const calendarioPorPaseadorFiltrado = filtroPaseador === "todos"
-    ? calendarioPorPaseador
-    : calendarioPorPaseador.filter((g) => g.paseador === filtroPaseador);
-
-  const clientesHoy = clientes.filter((c) => estaProgramadoEnFecha(c, hoy, reprogramaciones));
-  const clientesHoyFiltrados = filtroPaseador === "todos" ? clientesHoy : clientesHoy.filter((c) => (c.paseadorNombre || "Sin asignar") === filtroPaseador);
-  const realizadosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.realizado).length;
-  const canceladosHoy = clientesHoyFiltrados.filter((c) => registroPaseos[`${c.id}_${fechaKey(hoy)}`]?.cancelado).length;
-  const pendientesHoy = clientesHoyFiltrados.length - realizadosHoy - canceladosHoy;
 
   // Misma regla que el detalle del día, compartida a propósito: acá
   // faltaba excluir a los pausados, así que el resumen de la semana los
@@ -849,64 +857,6 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
         </div>
       )}
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Paseos de hoy</h2>
-        <p style={hint}>Quién falta por marcar, agrupado por paseador. Desliza un paseo sin marcar hacia la izquierda para reprogramarlo al tiro.</p>
-        <div role="group" aria-label="No realizados o realizados" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button type="button" onClick={() => setVistaRapida("no_realizados")} aria-pressed={vistaRapida === "no_realizados"}
-            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: vistaRapida === "no_realizados" ? RUST : CREAM_SOFT, color: vistaRapida === "no_realizados" ? "#FFFFFF" : INK }}>
-            No realizados ({totalNoRealizadosHoy})
-          </button>
-          <button type="button" onClick={() => setVistaRapida("realizados")} aria-pressed={vistaRapida === "realizados"}
-            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: vistaRapida === "realizados" ? "#2F6A46" : CREAM_SOFT, color: vistaRapida === "realizados" ? "#FFFFFF" : INK }}>
-            Realizados ({totalRealizadosHoy})
-          </button>
-        </div>
-
-        {cargandoClientes ? (
-          <SkeletonLista filas={3} alto={44} gap={8} />
-        ) : gruposVistaRapida.length === 0 ? (
-          <p style={hint}>{vistaRapida === "no_realizados" ? "Todo marcado — no queda ningún paseo pendiente hoy. 🎉" : "Todavía nadie ha sido marcado como realizado hoy."}</p>
-        ) : (
-          <div style={{ display: "grid", gap: 18 }}>
-            {gruposVistaRapida.map(({ paseador, items }) => {
-              const motivoAusente = ausenciasPaseador[paseador];
-              const faseHoy = FASES_PASEADOR.find((x) => x.id === (faseDiaPaseador[paseador] || "pendiente"));
-              return (
-              <div key={paseador}>
-                <p style={{ margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: NAVY }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· {items.length}</span></span>
-                  {motivoAusente ? (
-                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivoAusente}</span>
-                  ) : (
-                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: faseHoy.bg, color: faseHoy.color }}>{faseHoy.nombre}</span>
-                  )}
-                </p>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {items.map((item) =>
-                    vistaRapida === "no_realizados" ? (
-                      <FilaSwipeReprogramar key={item.cliente.id} item={item}
-                        yaReprogramada={reprogramaciones.some((r) => r.clienteId === item.cliente._dbId && r.fechaOrigen === fechaKey(hoy))}
-                        onReprogramar={() => abrirReprogramarRapido(item.cliente)} />
-                    ) : (
-                      <div key={item.cliente.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#D8ECDE", borderRadius: 10, padding: "10px 12px" }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", flex: "none", background: item.cliente.fotoUrl ? `url(${item.cliente.fotoUrl}) center/cover` : "#FFFFFF" }} />
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.cliente.nombre} · 🐾 {item.cliente.perro}</p>
-                          <p style={{ margin: 0, fontSize: 11, color: "#2E5C41" }}>{item.cliente.horaHabitual || "—"}</p>
-                        </div>
-                        <CheckCircle2 size={16} color="#2F6A46" />
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {reprogramarModal && (
         <ModalReprogramarRapido cliente={reprogramarModal} hoy={hoy} fecha={fechaRapida} onFecha={setFechaRapida} motivo={motivoRapido} onMotivo={setMotivoRapido}
           onConfirmar={reprogramarRapido} onCerrar={() => setReprogramarModal(null)} cargando={reprogramandoRapido} />
@@ -923,42 +873,12 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           onConfirmar={confirmarReasignoMasivo} onCerrar={() => setAusenciaModal(null)} cargando={reasignandoAusencia} />
       )}
 
-      <div className="howria-card" style={tarjeta}>
-        <h2 style={sectionTitle}>Resumen de hoy</h2>
-        <p style={hint}>Toca a alguien del equipo para ver solo lo suyo — el resumen y las tarjetas de abajo se acotan a esa persona.</p>
-        <div role="group" aria-label="Filtrar por paseador" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0 16px" }}>
-          <button type="button" onClick={() => setFiltroPaseador("todos")} aria-pressed={filtroPaseador === "todos"} style={estiloCuboFiltro(filtroPaseador === "todos")}>
-            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Todos</span>
-            <span style={{ fontSize: 10.5, opacity: 0.75 }}>{clientesHoy.length} hoy</span>
-          </button>
-          {equipoPaseo.map((u) => {
-            const cuenta = clientesHoy.filter((c) => c.paseadorNombre === u.nombre).length;
-            const ausente = ausenciasPaseador[u.nombre];
-            return (
-              <button key={u.id} type="button" onClick={() => setFiltroPaseador(u.nombre)} aria-pressed={filtroPaseador === u.nombre} style={estiloCuboFiltro(filtroPaseador === u.nombre)} title={ausente ? `Ausente: ${ausente}` : undefined}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{ausente ? "⚠️ " : ""}{u.nombre}</span>
-                <span style={{ fontSize: 10.5, opacity: 0.75 }}>{ausente ? "Ausente hoy" : `${cuenta} hoy`}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="howria-stats-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-          <div style={{ background: NAVY, color: CREAM, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9BAAB8" }}>Programados hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{clientesHoyFiltrados.length}</p>
-          </div>
-          <div style={{ background: "#E7F0EA", borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#2E5C41" }}>Realizados hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#2E5C41" }}>{realizadosHoy}</p>
-          </div>
-          <div style={{ background: CREAM_SOFT, borderRadius: 10, padding: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "#8A7E5C" }}>Pendientes hoy</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: RUST }}>{pendientesHoy}{canceladosHoy > 0 ? ` (${canceladosHoy} cancelado(s))` : ""}</p>
-          </div>
-        </div>
-      </div>
 
-      <SeccionPlegable titulo="Hoy" subtitulo="Quién pasea a quién, a qué hora, y si ya se hizo." defaultAbierta>
+      {/* La pantalla contaba el mismo día en tres bloques seguidos: la
+          lista rápida de pendientes, el resumen con los números, y esta
+          sección con la grilla. Ahora es una sola: un día, un filtro por
+          paseador, unos números y una lista. */}
+      <SeccionPlegable titulo="El día" subtitulo="Quién pasea a quién, a qué hora, y si ya se hizo." defaultAbierta>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
           <p style={{ ...hint, margin: 0 }}>
             {/* El año solo aparece si NO es el año en curso — navegando unos
@@ -997,30 +917,86 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
           </div>
         </div>
 
+        <p style={{ ...hint, marginTop: 10 }}>Toca a alguien del equipo para ver solo lo suyo — los números y la lista se acotan a esa persona.</p>
+        <div role="group" aria-label="Filtrar por paseador" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0 16px" }}>
+          <button type="button" onClick={() => setFiltroPaseador("todos")} aria-pressed={filtroPaseador === "todos"} style={estiloCuboFiltro(filtroPaseador === "todos")}>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Todos</span>
+            <span style={{ fontSize: 10.5, opacity: 0.75 }}>{calendarioDia.length} este día</span>
+          </button>
+          {equipoPaseo.map((u) => {
+            const cuenta = calendarioDia.filter((i) => i.cliente.paseadorNombre === u.nombre).length;
+            // La ausencia es de hoy, así que solo se avisa cuando se está
+            // mirando hoy — en la lista de otro día no significa nada.
+            const ausente = esHoyVista ? ausenciasPaseador[u.nombre] : null;
+            return (
+              <button key={u.id} type="button" onClick={() => setFiltroPaseador(u.nombre)} aria-pressed={filtroPaseador === u.nombre} style={estiloCuboFiltro(filtroPaseador === u.nombre)} title={ausente ? `Ausente: ${ausente}` : undefined}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{ausente ? "⚠️ " : ""}{u.nombre}</span>
+                <span style={{ fontSize: 10.5, opacity: 0.75 }}>{ausente ? "Ausente hoy" : `${cuenta} este día`}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Un solo juego de números, y encima se puede tocar. Antes había
+            tres tarjetas de resumen (Programados / Realizados / Pendientes)
+            y justo debajo un selector "No realizados / Realizados": los
+            mismos tres números dos veces, y solo la mitad servía para algo.
+            Estos son las tarjetas Y el filtro. */}
+        <div role="group" aria-label="Filtrar por estado" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "4px 0" }}>
+          {[
+            { id: "todos", nombre: "Programados", cuenta: itemsDelDia.length, bg: NAVY, color: CREAM, apagado: "#9BAAB8" },
+            { id: "pendientes", nombre: "Pendientes", cuenta: pendientesDia, bg: RUST, color: "#FFFFFF", apagado: "#8A7E5C" },
+            { id: "realizados", nombre: "Realizados", cuenta: realizadosDia, bg: "#2F6A46", color: "#FFFFFF", apagado: "#2E5C41" },
+          ].map((v) => {
+            const activo = vistaEstado === v.id;
+            return (
+              <button key={v.id} type="button" onClick={() => setVistaEstado(v.id)} aria-pressed={activo}
+                style={{
+                  padding: 14, borderRadius: 10, cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                  border: activo ? "none" : "1px solid #E4DBC3",
+                  background: activo ? v.bg : "#FFFFFF",
+                  color: activo ? v.color : INK,
+                }}>
+                <span style={{ display: "block", fontSize: 11.5, marginBottom: 4, color: activo ? v.color : v.apagado, opacity: activo ? 0.8 : 1 }}>{v.nombre}</span>
+                <span style={{ display: "block", fontSize: 24, fontWeight: 700 }}>{v.cuenta}</span>
+              </button>
+            );
+          })}
+        </div>
+        {canceladosDia > 0 && (
+          <p style={{ ...hint, marginTop: 10 }}>{canceladosDia} cancelado(s) este día — salen en &ldquo;Programados&rdquo;, y no cuentan como pendientes.</p>
+        )}
+        {vistaEstado === "pendientes" && (
+          <p style={{ ...hint, marginTop: 8 }}>Desliza un paseo hacia la izquierda para reprogramarlo al tiro.</p>
+        )}
+
         {cargandoClientes ? (
           <div style={{ marginTop: 12 }}><SkeletonLista filas={3} alto={72} gap={10} /></div>
-        ) : calendarioPorPaseadorFiltrado.length === 0 ? (
+        ) : gruposDelDia.length === 0 ? (
           <p style={{ ...hint, marginTop: 12 }}>
-            {filtroPaseador === "todos" ? "No hay paseos programados este día." : `${filtroPaseador} no tiene paseos programados este día.`}
+            {vistaEstado === "pendientes"
+              ? "Todo marcado — no queda ningún paseo pendiente este día. 🎉"
+              : vistaEstado === "realizados"
+                ? "Todavía nadie ha sido marcado como realizado este día."
+                : filtroPaseador === "todos" ? "No hay paseos programados este día." : `${filtroPaseador} no tiene paseos programados este día.`}
           </p>
         ) : (
           <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
-            {calendarioPorPaseadorFiltrado.map(({ paseador, items }) => {
-              const hechos = items.filter((i) => i.estado === "realizado").length;
+            {gruposDelDia.map(({ paseador, items, hechos, total, pendientes }) => {
               return (
                 <div key={paseador} style={{ border: "1px solid #E4DBC3", borderRadius: 10, padding: 14, background: "#FFFFFF" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{items.length} hecho(s)</span></span>
+                      <span style={{ fontWeight: 700, color: NAVY, fontSize: 14.5 }}>{paseador} <span style={{ fontWeight: 400, color: "#8A7E5C", fontSize: 12.5 }}>· {hechos}/{total} hecho(s)</span></span>
                       {esHoyVista && paseador !== "Sin asignar" && (() => {
                         const motivo = ausenciasPaseador[paseador];
                         if (motivo) {
-                          const pendientesAusente = items.filter((i) => i.estado === "pendiente");
+                          const pendientesAusente = pendientes;
                           return (
                             <>
                               <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: "#F1DCD2", color: RUST }}>⚠️ Ausente: {motivo}</span>
                               {pendientesAusente.length > 0 && (
-                                <button onClick={() => abrirResolverAusencia(paseador, items)}
+                                <button onClick={() => abrirResolverAusencia(paseador, pendientes)}
                                   style={{ border: `1px dashed ${RUST}`, background: "none", color: RUST, borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                                   Reasignar {pendientesAusente.length} pendiente{pendientesAusente.length === 1 ? "" : "s"}
                                 </button>
@@ -1036,16 +1012,37 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
                       <button onClick={() => irAMapa(paseador)} style={{ ...botonSecundario, padding: "6px 12px", fontSize: 12 }}>Ver ruta en el mapa →</button>
                     )}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-                    {items.map((item) => (
-                      <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={equipoPaseo} diaVista={diaVista} hoy={hoy}
-                        onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
-                        onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
-                        onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
-                        onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)}
-                        onAbrirCompartir={() => abrirCompartir(item)} />
-                    ))}
-                  </div>
+                  {/* Dos herramientas sobre la misma lista. "Pendientes" es
+                      para repasar lo que falta y sacarlo de encima: una
+                      columna de filas compactas que se deslizan para
+                      reprogramar. Las otras dos son el registro: la grilla
+                      donde se marca, se cancela, se reasigna y se reparte.
+
+                      "Sin asignar" siempre va con la grilla: no se puede
+                      reprogramar un paseo que no tiene paseador, y lo que
+                      esos necesitan —Reasignar— vive en su "Más ▾". Sacarlos
+                      de la lista, que fue lo primero que hice, dejaba el
+                      botón diciendo "Pendientes (5)" y mostrando 4. */}
+                  {vistaEstado === "pendientes" && paseador !== "Sin asignar" ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {items.map((item) => (
+                        <FilaSwipeReprogramar key={item.cliente.id} item={item}
+                          yaReprogramada={reprogramaciones.some((r) => r.clienteId === item.cliente._dbId && r.fechaOrigen === fechaKey(diaVista))}
+                          onReprogramar={() => abrirReprogramarRapido(item.cliente)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                      {items.map((item) => (
+                        <FilaCalendarioCliente key={item.cliente.id} item={item} usuarios={equipoPaseo} diaVista={diaVista} hoy={hoy}
+                          onToggleRealizado={() => toggleRealizadoDia(item.cliente.id, diaVista)}
+                          onToggleCancelado={() => toggleCanceladoDia(item.cliente.id, diaVista)}
+                          onReasignar={(nombre) => asignarPaseadorRapido(item.cliente.id, nombre)}
+                          onGuardarNota={(nota) => guardarNotaDia(item.cliente.id, diaVista, nota)}
+                          onAbrirCompartir={() => abrirCompartir(item)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
