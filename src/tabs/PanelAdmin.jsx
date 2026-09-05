@@ -17,7 +17,7 @@ const EVENTOS_NOTIFICACION = [
 
 // ---------- Utilidades de mapa (OpenStreetMap, sin API key) ----------
 
-export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro, setTareasEquipo, setObjetivosSemanales, setObjetivosMensuales, setProspectos, setCitasAgenda }) {
+export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuarioActual, permisosRoles, actualizarPermisoRol, notificacionesRoles, actualizarNotificacionRol, esAdmin, cargandoUsuarios, loginsPendientes, setLoginsPendientes, solicitudesRegistro, setSolicitudesRegistro, setTareasEquipo, setObjetivosSemanales, setObjetivosMensuales, setProspectos, setCitasAgenda, erroresApp = [], setErroresApp }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("todos");
   const [filtroLogin, setFiltroLogin] = useState("todos");
@@ -252,8 +252,74 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
     setGestionandoSolicitudId(null);
   }
 
+  // Los errores más nuevos arriba. La tabla ya viene ordenada por
+  // creado_en, pero ascendente.
+  const errores = [...erroresApp].sort((a, b) => new Date(b.creadoEn || 0) - new Date(a.creadoEn || 0));
+
+  async function borrarErrores() {
+    const antes = erroresApp;
+    setErroresApp([]);
+    // Se borra en la base, no solo en pantalla: la tabla no la limpia nada
+    // (la app no tiene trabajos programados) y este es el único lugar
+    // desde donde se puede vaciar.
+    const { error } = await supabase.from("errores_app").delete().gte("creado_en", "1970-01-01");
+    if (error) { showToast(`No se pudieron borrar: ${error.message}`); setErroresApp(antes); }
+    else showToast("Registro de errores vaciado.", "exito");
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Antes, si algo se rompía en el celular de un paseador en la calle,
+          la única forma de enterarse era que esa persona escribiera. Acá
+          quedan anotados solos (ver database/126 y lib/errores.js). */}
+      <div className="howria-card" style={tarjeta}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ ...sectionTitle, marginBottom: 4 }}>Errores de la app</h2>
+            <p style={{ ...hint, margin: 0 }}>
+              {errores.length === 0
+                ? "Nada roto por ahora. Cuando a alguien del equipo le falle una pantalla, va a quedar acá sin que tenga que avisar."
+                : "Lo que reventó en el navegador de alguien del equipo. El mensaje y la pantalla son lo que sirve para reproducirlo."}
+            </p>
+          </div>
+          {errores.length > 0 && (
+            <BotonEliminar onConfirm={borrarErrores} label="Vaciar"
+              style={{ ...botonSecundario, flex: "none", padding: "8px 14px", fontSize: 12.5, borderColor: RUST, color: RUST }} />
+          )}
+        </div>
+        {errores.length > 0 && (
+          <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+            {errores.slice(0, 30).map((e, i) => (
+              <div key={`${e.creadoEn}-${i}`} style={{ border: "1px solid #E4DBC3", borderLeft: `3px solid ${RUST}`, borderRadius: 8, padding: "10px 12px", background: "#FFFDF7" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: NAVY, wordBreak: "break-word" }}>{e.mensaje}</span>
+                  <span style={{ fontSize: 11.5, color: "#8A7E5C", flex: "none" }}>
+                    {e.creadoEn ? new Date(e.creadoEn).toLocaleString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: "#8A7E5C" }}>
+                  {e.donde ? `En ${e.donde}` : "Sin pantalla"}
+                  {e.usuarioEmail ? ` · ${e.usuarioEmail}${e.rol ? ` (${e.rol})` : ""}` : ""}
+                  {e.versionApp ? ` · versión ${String(e.versionApp).slice(0, 7)}` : ""}
+                </p>
+                {e.detalle && (
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ fontSize: 12, color: NAVY, cursor: "pointer" }}>Ver detalle técnico</summary>
+                    <pre style={{ margin: "6px 0 0", fontSize: 11, color: "#6B6248", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 220, overflowY: "auto" }}>{e.detalle}</pre>
+                  </details>
+                )}
+                {e.navegador && (
+                  <p style={{ margin: "6px 0 0", fontSize: 10.5, color: "#B0A587", wordBreak: "break-word" }}>{e.navegador}</p>
+                )}
+              </div>
+            ))}
+            {errores.length > 30 && (
+              <p style={{ ...hint, margin: 0 }}>Y {errores.length - 30} más. Vacía el registro cuando ya los hayas revisado.</p>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="howria-card" style={tarjeta}>
         <h2 style={sectionTitle}>Permisos por rol — qué pestañas ve cada uno</h2>
         <p style={{ fontSize: 13, color: "#6B6248", marginTop: -8, marginBottom: 16 }}>

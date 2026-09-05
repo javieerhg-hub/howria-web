@@ -41,6 +41,15 @@ if (esAdmin && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
+// Los errores del panel se anotan en la base (ver lib/errores.js). Se
+// instala acá y no dentro de la app para que un error durante la carga
+// inicial —justo el que deja la pantalla en "Cargando..." para siempre—
+// también quede registrado. Solo en /admin: las páginas públicas no tienen
+// sesión y su insert quedaría rechazado por RLS.
+if (esAdmin) {
+  import("./lib/errores.js").then((m) => m.instalarCapturaDeErrores()).catch(() => {});
+}
+
 function Cargando() {
   return (
     <div style={{ minHeight: "100vh", background: "#122A40", display: "flex", alignItems: "center", justifyContent: "center", color: "#9BAAB8", fontFamily: "'Helvetica Neue', Arial, sans-serif", fontSize: 14 }}>

@@ -10,6 +10,7 @@ import { RECARGO_FIN_SEMANA_FERIADO_DEFAULT, diasSegunPlan, diasDelMes, esVenta,
 import { sinDiasAsignados, sinBoletaEnElMes, conPaseosSinTarifa } from "./lib/revisiones.js";
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 import { montoPrincipal, montoCompartido } from "./lib/reparto.js";
+import { registrarError, fijarContextoDeErrores } from "./lib/errores.js";
 import { fechaKey, esClienteDePaseosActivo, estaProgramadoEnFecha, diasDelMesProgramados } from "./lib/programacion.js";
 
 // Cada pestaña (menos Inicio/Mis paseos) vive en su propio archivo bajo
@@ -76,6 +77,10 @@ class LimiteDeError extends React.Component {
   }
   componentDidCatch(error, info) {
     console.error("Error al renderizar la pestaña:", error, info);
+    // La consola no la abre nadie, menos en el celular de un paseador en
+    // la calle. Esto lo deja anotado en la base (ver lib/errores.js).
+    registrarError(error?.message || "Error al renderizar", `${error?.stack || ""}
+${info?.componentStack || ""}`);
   }
   render() {
     if (this.state.error) {
@@ -312,6 +317,26 @@ function gastoPersonalToDb(g) {
     confirmado: g.confirmado !== false,
     origen: g.origen || "manual",
   };
+}
+
+function dbToErrorApp(row) {
+  return {
+    creadoEn: row.creado_en,
+    mensaje: row.mensaje,
+    detalle: row.detalle || "",
+    donde: row.donde || "",
+    usuarioEmail: row.usuario_email || "",
+    rol: row.rol || "",
+    navegador: row.navegador || "",
+    versionApp: row.version_app || "",
+  };
+}
+
+// Esta tabla no se escribe nunca desde la app con useSyncedTable: el
+// insert lo hace lib/errores.js por su cuenta, y acá solo se lee para
+// mostrarla. El mapeo de ida existe porque useSyncedTable lo pide.
+function errorAppToDb(e) {
+  return { mensaje: e.mensaje, detalle: e.detalle || null, donde: e.donde || null };
 }
 
 function dbToGastoPersonal(row) {
@@ -1654,6 +1679,8 @@ const entradaActiva = (e, tab) => (e.esFusion ? e.subs.some((s) => s.id === tab)
 // de una pantalla vacía por un mapeo incompleto es peor que el ahorro.
 const TABS_QUE_USAN_TABLA = {
   logins_pendientes_borrar: ["usuarios"],
+  // Solo el administrador los ve (ver la RLS de database/126).
+  errores_app: ["usuarios"],
   solicitudes_registro: ["usuarios"],
   entregas_inventario: ["inventario"],
   costos_negocio: ["finanzas"],
@@ -3058,7 +3085,7 @@ export function inicioSemana(fecha) {
 
 
 // ---------- Pago a trabajadores ----------
-export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [] }) {
+export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, tareasEquipo, citasAgenda = [], prospectos = [], ausenciasPaseador = {}, reprogramaciones = [], erroresApp = [] }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const hoyStr0 = fechaKey(hoy);
   const avisos = [];
@@ -3138,6 +3165,22 @@ export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramient
   const sinBoletaEsteMes = clientes.filter((c) => sinBoletaEnElMes(c, todasLasBoletasDelMes, hoy));
   if (sinBoletaEsteMes.length > 0) {
     avisos.push({ tipo: "boleta-pendiente", urgencia: "alta", icono: "🧾", texto: `${sinBoletaEsteMes.length} cliente(s) sin boleta este mes`, clave: `boleta-pendiente-${hoy.getMonth()}-${sinBoletaEsteMes.length}`, tab: "boletas" });
+  }
+
+  // Un error de la app va en alta: no cuesta plata hoy, pero puede estar
+  // dejando a alguien del equipo sin poder trabajar, y hasta ahora la
+  // única forma de enterarse era que esa persona escribiera.
+  const haceUnaSemana = new Date(hoy);
+  haceUnaSemana.setDate(haceUnaSemana.getDate() - 7);
+  const erroresRecientes = erroresApp.filter((e) => e.creadoEn && new Date(e.creadoEn) >= haceUnaSemana);
+  if (erroresRecientes.length > 0) {
+    const pantallas = [...new Set(erroresRecientes.map((e) => e.donde).filter(Boolean))];
+    avisos.push({
+      tipo: "errores", urgencia: "alta", icono: "🐞",
+      texto: `${erroresRecientes.length} error(es) de la app en los últimos 7 días`,
+      detalle: pantallas.length ? `En: ${pantallas.join(", ")}. El detalle completo está en Usuarios.` : "El detalle completo está en Usuarios.",
+      clave: `errores-${erroresRecientes.length}`, tab: "usuarios",
+    });
   }
 
   const sinDias = clientes.filter(sinDiasAsignados);
@@ -4630,7 +4673,7 @@ function ListaDeHoy({ items, onDescartar }) {
   );
 }
 
-function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta, onBuscar }) {
+function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registroPaseos, setRegistroPaseos, tareasEquipo, usuarios, citasAgenda, prospectos, mascotas, setTab, user, tabs, faseDiaPaseador = {}, ausenciasPaseador = {}, reprogramaciones = [], onAbrirAlumno, onAbrirCliente, avisosDescartados = [], setAvisosDescartados, onAbrirRuta, onBuscar, erroresApp = [] }) {
   // A diferencia de Coordinación, esta pantalla (la más densa de la app:
   // header, launcher, evaluaciones, avisos, 4 KPIs, ingresos+equipo,
   // prospectos+citas y la tabla de paseos de hoy) no tenía ninguna
@@ -4644,7 +4687,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   if (user.rol === "entrenador") {
     return <InicioEntrenador clientes={clientes} usuarios={usuarios} user={user} setTab={setTab} citasAgenda={citasAgenda} mascotas={mascotas} tabs={tabs} onAbrirAlumno={onAbrirAlumno} onAbrirCliente={onAbrirCliente} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} onBuscar={onBuscar} />;
   }
-  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador, reprogramaciones });
+  const todosLosAvisos = calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramiento, registroPaseos, tareasEquipo, citasAgenda, prospectos, ausenciasPaseador, reprogramaciones, erroresApp });
 
   function descartarAviso(clave) {
     setAvisosDescartados((prev) => [...prev, { id: Date.now() + Math.random(), clave, usuarioEmail: user.email }]);
@@ -5759,6 +5802,7 @@ export default function HowriaAdmin() {
   const [boletasEmitidas, setBoletasEmitidas, cargandoBoletas] = useSyncedTable("boletas", boletaToDb, dbToBoleta, "numero", sessionVersion);
   const [usuarios, setUsuarios, cargandoUsuarios] = useSyncedTable("usuarios", usuarioToDb, dbToUsuario, "nombre", sessionVersion, "usuarios_seguro");
   const [gastosPersonales, setGastosPersonales, cargandoGastosPersonales] = useSyncedTable("gastos_personales", gastoPersonalToDb, dbToGastoPersonal, "fecha", versionSiSeUsa("gastos_personales"));
+  const [erroresApp, setErroresApp] = useSyncedTable("errores_app", errorAppToDb, dbToErrorApp, "creado_en", versionSiSeUsa("errores_app"));
   const [loginsPendientes, setLoginsPendientes] = useSyncedTable("logins_pendientes_borrar", loginPendienteToDb, dbToLoginPendiente, "eliminado_en", versionSiSeUsa("logins_pendientes_borrar"));
   const [pagosRegistrados, setPagosRegistrados, cargandoPagos] = useSyncedTable("pagos_trabajadores", pagoToDb, dbToPago, "fecha_pago", sessionVersion, "pagos_trabajadores", false, COLUMNAS_PAGO_LIVIANO);
   // Borrador de bono/descuento por paseador+período, compartido — antes
@@ -5945,6 +5989,12 @@ export default function HowriaAdmin() {
         .filter((p) => p.paseador === user.nombre && !p.deshechoEn && p._dbId && !pagosVistos.includes(p._dbId))
         .sort((a, b) => new Date(b.fechaPagoISO || 0) - new Date(a.fechaPagoISO || 0))[0]
     : null;
+
+  // Quién está usando la app y dónde, para que el error anotado sirva para
+  // algo: sin esto dice "algo se rompió" y nada más. Va en el render y no
+  // en un efecto porque los handlers globales pueden dispararse en
+  // cualquier momento, incluso antes de que corran los efectos.
+  fijarContextoDeErrores({ usuarioEmail: user.email, rol: user.rol, donde: tab });
 
   const tabsPermitidosRol = pestanasDelRol(user.rol, permisosRoles);
   const tabs = TODOS_LOS_TABS.filter((t) => tabsPermitidosRol.includes(t.id));
@@ -6309,7 +6359,7 @@ export default function HowriaAdmin() {
       <div key={tab} className={`howria-tab-entrada howria-tab-entrada-${direccionTab}`}>
       <LimiteDeError onVolver={() => setTab(tabsPermitidosRol.includes("inicio") ? "inicio" : (tabsPermitidosRol[0] || "inicio"))}>
         {fusionDeTab(tab) && <SubPestanas fusion={fusionDeTab(tab)} tabs={tabs} tab={tab} setTab={setTab} />}
-        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} onBuscar={() => setBuscadorAbierto(true)} />}
+        {tab === "inicio" && tabsPermitidosRol.includes("inicio") && <Inicio clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} tareasEquipo={tareasEquipo} usuarios={usuarios} citasAgenda={citasAgenda} prospectos={prospectos} mascotas={mascotas} setTab={setTab} user={user} tabs={tabs} faseDiaPaseador={faseDiaPaseador} ausenciasPaseador={ausenciasPaseador} reprogramaciones={reprogramaciones} onAbrirAlumno={(dbId) => { setSaltarAlumnoDbId(dbId); setTab("alumnos"); }} onAbrirCliente={(dbId) => { setSaltarClienteDbId(dbId); setTab("clientes"); }} avisosDescartados={avisosDescartados} setAvisosDescartados={setAvisosDescartados} onAbrirRuta={() => { setAbrirRutaGuiada(true); setTab("mis-paseos"); }} onBuscar={() => setBuscadorAbierto(true)} erroresApp={erroresApp} />}
         {tab === "mis-paseos" && tabsPermitidosRol.includes("mis-paseos") && <MisPaseos clientes={clientes} registroPaseos={registroPaseos} setRegistroPaseos={setRegistroPaseos} user={user} usuarios={usuarios} faseDiaPaseador={faseDiaPaseador} actualizarFaseDia={actualizarFaseDia} mascotas={mascotas} ausenciasPaseador={ausenciasPaseador} justificarAusencia={justificarAusencia} deshacerAusencia={deshacerAusencia} abrirRutaGuiada={abrirRutaGuiada} limpiarAbrirRutaGuiada={() => setAbrirRutaGuiada(false)} reprogramaciones={reprogramaciones} />}
         {tab === "boletas" && tabsPermitidosRol.includes("boletas") && (
           <Boletas clientes={clientes} boletasEmitidas={boletasEmitidas} boletasAdiestramiento={boletasAdiestramiento}
@@ -6336,7 +6386,7 @@ export default function HowriaAdmin() {
         {tab === "alumnos" && tabsPermitidosRol.includes("alumnos") && <Alumnos clientes={clientes} setClientes={setClientes} boletasAdiestramiento={boletasAdiestramiento} usuarios={usuarios} citasAgenda={citasAgenda} setCitas={setCitasAgenda} registroPaseos={registroPaseos} planesClases={planesClases} setPlanesClases={setPlanesClases} cargandoPlanesClases={cargandoPlanesClases} packsClases={packsClases} setPacksClases={setPacksClases} clasesRealizadas={clasesRealizadas} marcarClase={marcarClase} deshacerClase={deshacerClase} cargandoClasesRealizadas={cargandoClasesRealizadas} rolActual={user.rol} nombreActual={user.nombre} esAdmin={esAdmin} saltarAlumnoDbId={saltarAlumnoDbId} limpiarSaltoAlumno={() => setSaltarAlumnoDbId(null)} />}
         {tab === "seguimiento" && tabsPermitidosRol.includes("seguimiento") && <Prospectos prospectos={prospectos} setProspectos={setProspectos} setClientes={setClientes} usuarios={usuarios} permisosRoles={permisosRoles} cargando={cargandoProspectos} correos={correos} enfoqueEmail={enfoqueEmailProspecto} limpiarEnfoque={() => setEnfoqueEmailProspecto(null)} rolActual={user.rol} nombreActual={user.nombre} />}
         {tab === "mail" && tabsPermitidosRol.includes("mail") && <Mail correos={correos} setCorreos={setCorreos} cargando={cargandoCorreos} clientes={clientes} prospectos={prospectos} onVerCliente={(id) => { setSaltarClienteDbId(id); setTab("clientes"); }} onVerProspecto={(email) => { setEnfoqueEmailProspecto(email); setTab("seguimiento"); }} />}
-        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} setTareasEquipo={setTareasEquipo} setObjetivosSemanales={setObjetivosSemanales} setObjetivosMensuales={setObjetivosMensuales} setProspectos={setProspectos} setCitasAgenda={setCitasAgenda} />}
+        {tab === "usuarios" && tabsPermitidosRol.includes("usuarios") && <PanelAdmin usuarios={usuarios} setUsuarios={setUsuarios} clientes={clientes} setClientes={setClientes} usuarioActual={user} permisosRoles={permisosRoles} actualizarPermisoRol={actualizarPermisoRol} notificacionesRoles={notificacionesRoles} actualizarNotificacionRol={actualizarNotificacionRol} esAdmin={esAdmin} cargandoUsuarios={cargandoUsuarios} loginsPendientes={loginsPendientes} setLoginsPendientes={setLoginsPendientes} solicitudesRegistro={solicitudesRegistro} setSolicitudesRegistro={setSolicitudesRegistro} setTareasEquipo={setTareasEquipo} setObjetivosSemanales={setObjetivosSemanales} setObjetivosMensuales={setObjetivosMensuales} setProspectos={setProspectos} setCitasAgenda={setCitasAgenda} erroresApp={erroresApp} setErroresApp={setErroresApp} />}
       </LimiteDeError>
       </div>
       </Suspense>
