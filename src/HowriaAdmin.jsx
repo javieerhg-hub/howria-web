@@ -1559,10 +1559,38 @@ export const TODOS_LOS_TABS = [
 //    en permisos_roles a proposito — sin migracion, y para devolverselo
 //    basta borrar esa linea.
 export function pestanasDelRol(rol, permisosRoles) {
-  const base = permisosRoles?.[rol] || [];
+  const base = (permisosRoles?.[rol] || []).filter((id) => !permisoNoAplica(rol, id));
   if (rol === "administrador") return Array.from(new Set([...base, "usuarios"]));
-  if (rol === "paseador") return base.filter((id) => id !== "inicio");
   return base;
+}
+
+// Pestañas que un rol NO puede tener aunque la fila de permisos_roles diga
+// que sí, con el motivo escrito para poder mostrarlo. Devuelve null cuando
+// el permiso sí aplica.
+//
+// EXISTE PARA QUE LA PANTALLA DE PERMISOS NO MIENTA. La regla la usa
+// pestanasDelRol (arriba) para armar el menú, y la tabla de Usuarios para
+// dibujar un "—" explicado en vez de una casilla marcada que no hace nada.
+// Antes solo estaba en el código del menú: la casilla "Inicio / Paseador"
+// aparecía marcada y tocarla no cambiaba nada.
+export function permisoNoAplica(rol, tabId) {
+  if (rol === "paseador" && tabId === "inicio") {
+    return "El paseador no tiene Inicio propio: todo lo suyo vive en Mis paseos, partido en \"Hoy\" y \"Mi mes\".";
+  }
+  return null;
+}
+
+// Cómo se llama esta pestaña EN EL MENÚ. Las fusionadas no existen ahí con
+// su nombre propio: "boletas" se ve como "Cobrar · Emitir".
+//
+// Sin esto, la tabla de permisos hablaba un idioma que el menú ya no usa —
+// decía "Boletas" y "Facturas" mientras el menú dice "Cobrar", así que
+// buscar ahí la pestaña que quieres dar no la encontraba.
+export function nombreEnElMenu(tab) {
+  const f = fusionDeTab(tab.id);
+  if (!f) return tab.label;
+  const sub = f.subs.find((x) => x.id === tab.id);
+  return `${f.label} · ${sub ? sub.label : tab.label}`;
 }
 
 export const ORDEN_GRUPOS = ["Paseos", "Adiestramiento", "Clientes y dinero", "Administración", "Equipo", "Prospección"];

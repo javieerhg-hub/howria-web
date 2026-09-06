@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia, rangoPeriodo, conMayusculaInicial } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia, rangoPeriodo, conMayusculaInicial, permisoNoAplica, nombreEnElMenu } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -333,5 +333,55 @@ describe("conMayusculaInicial", () => {
 
   it("si ya venía en mayúscula, no cambia nada", () => {
     expect(conMayusculaInicial("Lunes 7")).toBe("Lunes 7");
+  });
+});
+
+// Que la pantalla de permisos no mienta. Son dos reglas que antes vivían
+// solo en el código del menú, así que la tabla de Usuarios mostraba otra
+// cosa: una casilla marcada que no hacía nada, y nombres que el menú ya no
+// usa.
+describe("lo que muestra la tabla de permisos", () => {
+  it("el paseador no puede tener Inicio, y la regla dice por qué", () => {
+    const motivo = permisoNoAplica("paseador", "inicio");
+    expect(motivo).toBeTruthy();
+    expect(motivo).toContain("Mis paseos");
+  });
+
+  it("y esa es la MISMA regla que arma el menú", () => {
+    // Si se separaran, la tabla volvería a decir una cosa y el menú otra —
+    // que es exactamente el error que esto viene a cerrar.
+    const permisos = { paseador: ["inicio", "mis-paseos"] };
+    expect(pestanasDelRol("paseador", permisos)).not.toContain("inicio");
+  });
+
+  it("a los demás roles sí les aplica Inicio", () => {
+    for (const rol of ["entrenador", "coordinador", "administrador"]) {
+      expect(permisoNoAplica(rol, "inicio")).toBeNull();
+    }
+  });
+
+  it("ninguna otra pestaña queda bloqueada sin querer", () => {
+    for (const t of TODOS_LOS_TABS) {
+      if (t.id === "inicio") continue;
+      expect(permisoNoAplica("paseador", t.id), `"${t.id}" quedó bloqueada para el paseador`).toBeNull();
+    }
+  });
+
+  it("las pestañas fusionadas se nombran como en el menú", () => {
+    const nombre = (id) => nombreEnElMenu(TODOS_LOS_TABS.find((t) => t.id === id));
+    expect(nombre("boletas")).toBe("Cobrar · Emitir");
+    expect(nombre("facturas")).toBe("Cobrar · Emitidas");
+    expect(nombre("pagos")).toBe("Pagar · Paseadores");
+    expect(nombre("pago-adiestramiento")).toBe("Pagar · Adiestradores");
+  });
+
+  it("las que no están fusionadas conservan su nombre", () => {
+    const nombre = (id) => nombreEnElMenu(TODOS_LOS_TABS.find((t) => t.id === id));
+    expect(nombre("clientes")).toBe("Clientes");
+    expect(nombre("finanzas")).toBe("Finanzas");
+  });
+
+  it("toda pestaña tiene un nombre de menú, sin quedar vacía", () => {
+    for (const t of TODOS_LOS_TABS) expect(nombreEnElMenu(t)).toBeTruthy();
   });
 });

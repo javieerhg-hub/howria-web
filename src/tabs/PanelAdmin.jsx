@@ -5,6 +5,7 @@ import { useState } from "react";
 import { supabase, crearCuentaAcceso } from "../lib/supabaseClient.js";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, DIAS_SEMANA_LARGO, ROLES_APP, TODOS_LOS_TABS,
+  permisoNoAplica, nombreEnElMenu,
   PASOS_CAPACITACION, tarjeta, sectionTitle, hint, label, input, botonPrincipal, botonSecundario,
   Spinner, BotonEliminar, ModalConfirmacion, fmtCLP, slugEmailUsuario, showToast, comprimirFotoPerfil,
 } from "../HowriaAdmin.jsx";
@@ -341,17 +342,28 @@ export function PanelAdmin({ usuarios, setUsuarios, clientes, setClientes, usuar
               <tbody>
                 {TODOS_LOS_TABS.map((t) => (
                   <tr key={t.id}>
-                    <td style={{ padding: "7px 10px", color: INK, borderBottom: "1px solid #F1EAD9" }}>{t.label}</td>
+                    {/* El nombre del MENÚ, no el interno: "boletas" acá se
+                        llama "Cobrar · Emitir". Buscar "Cobrar" en esta
+                        tabla no encontraba nada. */}
+                    <td style={{ padding: "7px 10px", color: INK, borderBottom: "1px solid #F1EAD9" }}>{nombreEnElMenu(t)}</td>
                     {ROLES_APP.map((r) => {
                       const bloqueado = r === "administrador" && t.id === "usuarios";
+                      // Hay combinaciones que no existen aunque la tabla las
+                      // acepte (ver permisoNoAplica). Antes se dibujaba una
+                      // casilla marcada que no hacía nada al tocarla.
+                      const noAplica = permisoNoAplica(r, t.id);
                       const soloLectura = bloqueado || !esAdmin;
                       const activo = permisosRoles[r]?.includes(t.id) || bloqueado;
                       return (
                         <td key={r} style={{ textAlign: "center", padding: "7px 10px", borderBottom: "1px solid #F1EAD9" }}>
-                          <input type="checkbox" checked={activo} disabled={soloLectura}
-                            title={bloqueado ? "El administrador siempre necesita ver Usuarios, para no perder acceso a esta pantalla" : !esAdmin ? "Solo un administrador puede cambiar los permisos" : ""}
-                            onChange={(e) => actualizarPermisoRol(r, t.id, e.target.checked)}
-                            style={{ width: 16, height: 16, cursor: soloLectura ? "not-allowed" : "pointer" }} />
+                          {noAplica ? (
+                            <span title={noAplica} style={{ color: "#B0A587", cursor: "help", fontSize: 15 }}>—</span>
+                          ) : (
+                            <input type="checkbox" checked={activo} disabled={soloLectura}
+                              title={bloqueado ? "El administrador siempre necesita ver Usuarios, para no perder acceso a esta pantalla" : !esAdmin ? "Solo un administrador puede cambiar los permisos" : ""}
+                              onChange={(e) => actualizarPermisoRol(r, t.id, e.target.checked)}
+                              style={{ width: 16, height: 16, cursor: soloLectura ? "not-allowed" : "pointer" }} />
+                          )}
                         </td>
                       );
                     })}
