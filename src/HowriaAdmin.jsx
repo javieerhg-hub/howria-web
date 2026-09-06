@@ -11,6 +11,7 @@ import { sinDiasAsignados, sinBoletaEnElMes, conPaseosSinTarifa } from "./lib/re
 import { urlSuscripcionCalendario, urlSuscripcionCalendarioHttps } from "./lib/ics.js";
 import { montoPrincipal, montoCompartido } from "./lib/reparto.js";
 import { registrarError, fijarContextoDeErrores } from "./lib/errores.js";
+import { urlGoogleMaps } from "./lib/direcciones.js";
 import { fechaKey, esClienteDePaseosActivo, estaProgramadoEnFecha, diasDelMesProgramados } from "./lib/programacion.js";
 
 // Cada pestaña (menos Inicio/Mis paseos) vive en su propio archivo bajo
@@ -3903,7 +3904,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                         <td style={{ padding: "10px" }}>🐾 {c.perro}</td>
                         <td style={{ padding: "10px" }}>{(c.diasHabituales || []).map((d) => DIAS_SEMANA[d]).join(" · ") || "—"}</td>
                         <td style={{ padding: "10px" }}>{c.horaHabitual || "—"}</td>
-                        <td style={{ padding: "10px", color: "#8A7E5C" }}>{c.direccion || "sin dirección"}</td>
+                        <td style={{ padding: "10px", color: "#8A7E5C" }}><EnlaceDireccion direccion={c.direccion} comuna={c.comuna} conIcono={false} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -3916,7 +3917,7 @@ function MisPaseos({ clientes, registroPaseos, setRegistroPaseos, user, usuarios
                       <div style={{ width: 34, height: 34, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
                       <div style={{ minWidth: 0 }}>
                         <p style={{ margin: 0, fontWeight: 600, color: NAVY, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre} <span style={{ fontWeight: 400, color: "#8A7E5C" }}>· 🐾 {c.perro}</span></p>
-                        <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.direccion || "sin dirección"}</p>
+                        <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><EnlaceDireccion direccion={c.direccion} comuna={c.comuna} /></p>
                       </div>
                     </div>
                     <p style={{ margin: "8px 0 0", fontSize: 12.5, color: INK }}>
@@ -5056,6 +5057,29 @@ export function BotonConfirmable({ onConfirm, label, confirmLabel = "Confirmar",
     );
   }
   return <button onClick={() => setConfirmando(true)} disabled={disabled} title={title} style={{ ...style, opacity: disabled ? 0.5 : 1 }}>{label}</button>;
+}
+
+// La dirección de un cliente, tocable: abre Google Maps en esa dirección.
+// En el computador abre el sitio; en un teléfono con la app instalada, la
+// app. Es el mismo enlace para los tres casos (ver lib/direcciones.js).
+//
+// Sin dirección guardada NO se dibuja un enlace muerto: sale el texto gris
+// de siempre, para que se note que falta el dato y no que el enlace falla.
+//
+// stopPropagation porque varias de estas direcciones viven dentro de una
+// fila o tarjeta que ya es clickeable (abrir la ficha, marcar el paseo).
+// Sin eso, tocar la dirección haría las dos cosas.
+export function EnlaceDireccion({ direccion, comuna, vacio = "sin dirección", style, conIcono = true }) {
+  const url = urlGoogleMaps(direccion, comuna);
+  if (!url) return <span style={style}>{vacio}</span>;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      title={`Abrir en Google Maps: ${direccion}`}
+      onClick={(e) => e.stopPropagation()}
+      style={{ color: "inherit", textDecoration: "underline", textDecorationColor: "#C4B99A", textUnderlineOffset: 3, ...style }}>
+      {conIcono ? "📍 " : ""}{direccion}
+    </a>
+  );
 }
 
 export function BotonEliminar({ onConfirm, label = "Eliminar", style, disabled = false, title }) {

@@ -8,6 +8,7 @@ import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM_SOFT, GOLD, RUST, tarjeta, sectionTitle, hint, label, input,
   botonPrincipal, botonSecundario, fmtCLP, showToast,
+  EnlaceDireccion,
 } from "../HowriaAdmin.jsx";
 import { distanciaKm, ordenarRutaCercanoMasProximo } from "./_compartido.jsx";
 
@@ -49,7 +50,7 @@ function TarjetaClienteArrastrable({ cliente: c, enConflicto, onToggle, onUbicar
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
         <GripVertical size={15} color="#C4BCA0" style={{ flexShrink: 0 }} />
         <span style={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          <b style={{ color: NAVY }}>{c.nombre}</b> · 🐾 {c.perro} · {c.direccion || "sin dirección"}
+          <b style={{ color: NAVY }}>{c.nombre}</b> · 🐾 {c.perro} · <EnlaceDireccion direccion={c.direccion} comuna={c.comuna} conIcono={false} />
         </span>
       </div>
       {c.lat && c.lng ? (
@@ -354,7 +355,7 @@ export function MapaRutas({ clientes, setClientes, usuarios, paseadorId: paseado
             </div>
             {ruta.orden.map((c, i) => (
               <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < ruta.orden.length - 1 ? "1px solid #E4DBC3" : "none", fontSize: 13.5 }}>
-                <span>{i + 1}. {c.nombre} · {c.direccion}</span>
+                <span>{i + 1}. {c.nombre} · <EnlaceDireccion direccion={c.direccion} comuna={c.comuna} conIcono={false} /></span>
                 <span style={{ color: "#8A7E5C" }}>{fmtCLP(c.valorPaseoRef)}</span>
               </div>
             ))}

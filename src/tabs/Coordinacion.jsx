@@ -8,6 +8,7 @@ import {
   input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
   estaProgramadoEnFecha, esClienteDePaseosActivo,
   textoClienteEnLista,
+  EnlaceDireccion,
 } from "../HowriaAdmin.jsx";
 import { SeccionPlegable } from "./_compartido.jsx";
 import { sinDiasAsignados } from "../lib/revisiones.js";
@@ -346,7 +347,7 @@ function FichaEntrante({ cliente, citas, equipoPaseo, entrenadores, onGuardar })
       <div style={{ fontSize: 12.5, color: "#6B6248", lineHeight: 1.7, marginBottom: 12 }}>
         {cliente.telefono && <div>📞 {cliente.telefono}</div>}
         {cliente.email && <div>✉️ {cliente.email}</div>}
-        {cliente.direccion && <div>📍 {cliente.direccion}</div>}
+        {cliente.direccion && <div><EnlaceDireccion direccion={cliente.direccion} comuna={cliente.comuna} /></div>}
         {citas.map((c, i) => (
           <div key={i} style={{ marginTop: 6, color: NAVY }}>
             📅 {c.tipo === "evaluacion" ? "Evaluación" : "Clase"} con {c.adiestrador} · {fmtFechaCita(c.fechaISO)}

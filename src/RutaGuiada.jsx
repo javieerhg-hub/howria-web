@@ -12,7 +12,7 @@ import "leaflet/dist/leaflet.css";
 import {
   NAVY, CREAM, CREAM_SOFT, GOLD, RUST,
   fmtCLP, fechaKey, showToast,
-  estadoGlobalUI,
+  estadoGlobalUI, EnlaceDireccion,
 } from "./HowriaAdmin.jsx";
 
 // Copia local — no se importa desde src/tabs/MapaRutas.jsx (traería ese
@@ -220,6 +220,14 @@ function FilaRuta({ cliente, numero, puedeSubir, puedeBajar, onSubir, onBajar, o
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: NAVY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cliente.nombre}</p>
           <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A7E5C" }}>🐾 {cliente.perro}{cliente.horaHabitual ? ` · ${cliente.horaHabitual}` : ""}</p>
+          {/* La dirección no estaba en ninguna parte de la ruta guiada — la
+              pantalla que se usa caminando, con el teléfono en una mano.
+              Toca y se abre Google Maps en la puerta del cliente. */}
+          {cliente.direccion && (
+            <p style={{ margin: "3px 0 0", fontSize: 12, color: "#8A7E5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <EnlaceDireccion direccion={cliente.direccion} comuna={cliente.comuna} />
+            </p>
+          )}
         </div>
         <button onClick={onWhatsapp} type="button" title="Copiar aviso de WhatsApp"
           style={{ border: "none", background: "none", cursor: "pointer", color: NAVY, padding: 4, flex: "none" }}>

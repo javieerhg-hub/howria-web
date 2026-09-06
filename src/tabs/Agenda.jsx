@@ -8,6 +8,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, RUST, MESES, DIAS_SEMANA_LARGO, tarjeta, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, Spinner, BotonEliminar, fechaKey, showToast,
   textoClienteEnLista,
+  EnlaceDireccion,
 } from "../HowriaAdmin.jsx";
 import { diasDelMes } from "../lib/calculosBoletas.js";
 import { CalendarioMes, fechaKeyMes } from "../lib/CalendarioMes.jsx";
@@ -29,7 +30,7 @@ function DatosContactoCita({ cita, onAbrir }) {
       <p style={{ margin: 0, fontSize: 10.5, color: "#8A7E5C", textTransform: "uppercase", letterSpacing: 0.4 }}>Datos que dejó al pedir la cita · toca para ver todo</p>
       {cita.email && <p style={{ margin: "4px 0 0" }}>✉️ {cita.email}</p>}
       {cita.telefono && <p style={{ margin: "2px 0 0" }}>📞 {cita.telefono}</p>}
-      {cita.direccion && <p style={{ margin: "2px 0 0" }}>📍 {cita.direccion}</p>}
+      {cita.direccion && <p style={{ margin: "2px 0 0" }}><EnlaceDireccion direccion={cita.direccion} /></p>}
     </button>
   );
 }

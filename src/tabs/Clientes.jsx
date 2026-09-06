@@ -7,7 +7,7 @@ import {
   NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, PLANES, DIAS_SEMANA, MESES, TIPOS_SERVICIO, ESTADOS_CLIENTE, FORMAS_COBRO,
   NIVELES_ENERGIA, TAGS_TEMPERAMENTO, tarjeta, sectionTitle, hint, label, input, botonPrincipal,
   botonSecundario, SkeletonTarjetaCliente, BotonEliminar, ModalConfirmacion, fmtCLP, esBoletaDeCliente, showToast,
-  comprimirFotoPerfil, tipoServicioComoAlumno, BotonConfirmable,
+  comprimirFotoPerfil, tipoServicioComoAlumno, BotonConfirmable, EnlaceDireccion,
 } from "../HowriaAdmin.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { calcularTotales, esVenta } from "../lib/calculosBoletas.js";
@@ -795,7 +795,7 @@ function PerfilCliente({ cliente, boletasCliente, boletasAdiestramientoCliente, 
               <p style={{ margin: "0 0 4px", color: "#8A7E5C", fontSize: 14 }}>Dueño/a: {cliente.nombre}</p>
               <p style={{ margin: 0, color: "#8A7E5C", fontSize: 14 }}>{cliente.telefono || "sin teléfono"} {cliente.email ? `· ${cliente.email}` : "· sin correo (no puede entrar a su portal)"}</p>
               <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>{cliente.raza || "Raza no especificada"} {cliente.pesoKg ? `· ${cliente.pesoKg} kg` : ""}</p>
-              <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>📍 {cliente.direccion || "Sin dirección registrada"}</p>
+              <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}><EnlaceDireccion direccion={cliente.direccion} comuna={cliente.comuna} vacio="Sin dirección registrada" /></p>
               {cliente.fechaInicio && <p style={{ margin: "4px 0 0", color: "#8A7E5C", fontSize: 14 }}>Cliente desde: {new Date(cliente.fechaInicio + "T00:00:00").toLocaleDateString("es-CL")}</p>}
               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                 {(cliente.tipoServicio || []).map((t) => (
