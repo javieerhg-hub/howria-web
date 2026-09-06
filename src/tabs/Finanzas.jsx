@@ -1188,14 +1188,6 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
         que="boletas del ciclo — por el mes que cubren, no por el día en que se emitieron"
         desde={actualDesde} hasta={actualHasta} />
 
-      {/* Exportar e imprimir van DESPUÉS de elegir período y vista, no
-          antes: son acciones sobre lo que se está mirando, y arriba de todo
-          se ofrecían antes de que hubiera algo decidido que exportar. */}
-      <div className="no-imprimir" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        <button onClick={exportarCsvFinanzas} style={{ ...botonSecundario, flex: "none", margin: 0 }}>Exportar CSV</button>
-        <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none", margin: 0 }}>Imprimir informe</button>
-      </div>
-
       {/* Caja es lo que se mira seguido; las otras dos, una vez al mes. Por
           eso arranca en Caja. La vista personal no lleva selector: ve todo
           seguido, como antes. */}
@@ -1220,6 +1212,15 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           })}
         </div>
       )}
+
+      {/* Exportar e imprimir van DESPUÉS de elegir período y vista, no
+          antes: son acciones sobre lo que se está mirando, y arriba de todo
+          se ofrecían antes de que hubiera algo decidido que exportar. */}
+      <div className="no-imprimir" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        <button onClick={exportarCsvFinanzas} style={{ ...botonSecundario, flex: "none", margin: 0 }}>Exportar CSV</button>
+        <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none", margin: 0 }}>Imprimir informe</button>
+      </div>
+
       {/* La caja del período: entró, salió, queda. Es lo que Javier pidió
           poder mirar de un vistazo, y el número que manda es el de CAJA —
           plata cobrada de verdad, no boletas emitidas. Lo que está en
