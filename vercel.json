@@ -8,5 +8,11 @@
     { "source": "/confirmar-cita", "destination": "/index.html" },
     { "source": "/pago-exitoso", "destination": "/index.html" },
     { "source": "/pago-fallido", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/recordatorios?momento=manana", "schedule": "30 11 * * *" },
+    { "path": "/api/recordatorios?momento=manana", "schedule": "30 12 * * *" },
+    { "path": "/api/recordatorios?momento=tarde", "schedule": "0 21 * * *" },
+    { "path": "/api/recordatorios?momento=tarde", "schedule": "0 22 * * *" }
   ]
 }
