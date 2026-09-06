@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia, rangoPeriodo } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia, rangoPeriodo, conMayusculaInicial } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -315,5 +315,23 @@ describe("etiqueta de la semana", () => {
     expect(desde.getDate()).toBe(31);
     expect(hasta.getDate()).toBe(7);
     expect(hasta.getMonth()).toBe(8);
+  });
+});
+
+describe("conMayusculaInicial", () => {
+  it("pone en mayúscula la primera letra y deja el resto quieto", () => {
+    // El bug que reemplaza: textTransform: capitalize sobre toda la fecha
+    // dejaba "Domingo, 6 De Septiembre", con el "De" en mayúscula.
+    expect(conMayusculaInicial("domingo, 6 de septiembre")).toBe("Domingo, 6 de septiembre");
+  });
+
+  it("no se cae con vacío", () => {
+    expect(conMayusculaInicial("")).toBe("");
+    expect(conMayusculaInicial(null)).toBe("");
+    expect(conMayusculaInicial(undefined)).toBe("");
+  });
+
+  it("si ya venía en mayúscula, no cambia nada", () => {
+    expect(conMayusculaInicial("Lunes 7")).toBe("Lunes 7");
   });
 });

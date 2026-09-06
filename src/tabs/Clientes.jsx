@@ -15,7 +15,7 @@ import { FILTROS_REVISION, cumpleRevision } from "../lib/revisiones.js";
 // Los dos negocios viven en lib/negocios.js: Boletas hace la misma
 // pregunta y las dos copias se habían separado.
 import { esClienteDePaseos as esDePaseos, esClienteDeAdiestramiento as esDeAdiestramiento } from "../lib/negocios.js";
-import { TarjetaResumenFactura, SeccionPlegable, TIPOS_CITA, hayChoqueHorario, fechaISOaInputLocal, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
+import { SeccionPlegable, TIPOS_CITA, hayChoqueHorario, fechaISOaInputLocal, HistorialUnificado, FilaBoletaVenta } from "./_compartido.jsx";
 
 
 // Lo que hay que saber de un cliente de adiestramiento sin abrir su
@@ -1197,18 +1197,21 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
         })}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginTop: 20 }}>
-        <TarjetaResumenFactura titulo={esVistaPaseos ? "Clientes de paseo" : "De adiestramiento"} valor={delNegocio.length} color={NAVY} bg={CREAM_SOFT} />
-        <TarjetaResumenFactura titulo="Activos" valor={conteoPorEstado.activo} color={ESTADOS_CLIENTE[0].color} bg={ESTADOS_CLIENTE[0].bg} />
-        <TarjetaResumenFactura titulo="Pausados" valor={conteoPorEstado.pausado} color={ESTADOS_CLIENTE[1].color} bg={ESTADOS_CLIENTE[1].bg} />
-        {!esVistaPaseos && <TarjetaResumenFactura titulo="Evaluación pendiente" valor={totalEvaluacion} color="#1E5A7A" bg="#D6E6EE" />}
-      </div>
-
+      {/* Acá vivían cuatro tarjetas de resumen (De adiestramiento / Activos
+          / Pausados / Evaluación pendiente) que decían exactamente los
+          mismos números que las pastillas de abajo — y las pastillas además
+          se tocan para filtrar. Mismo criterio que en Finanzas: si el número
+          ya es el filtro, la tarjeta que solo lo repite sobra. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
         <button onClick={() => setFiltroEstado("todos")} style={estiloPillaFiltro(filtroEstado === "todos", NAVY, CREAM)}>
           Todos ({delNegocio.length})
         </button>
-        {ESTADOS_CLIENTE.map((e) => (
+        {/* En cero no se dibuja: tocarla dejaría la lista vacía y no hay
+            nada que mirar. Se mantiene si está puesta, para poder sacarla.
+            Antes se dibujaban siempre, mientras las de "Por revisar" (misma
+            fila, tres líneas más abajo) se escondían — dos reglas opuestas
+            conviviendo a la vista. */}
+        {ESTADOS_CLIENTE.filter((e) => (conteoPorEstado[e.id] || 0) > 0 || filtroEstado === e.id).map((e) => (
           <button key={e.id} onClick={() => setFiltroEstado(e.id)} style={estiloPillaFiltro(filtroEstado === e.id, e.color, e.bg)}>
             {e.nombre} ({conteoPorEstado[e.id] || 0})
           </button>
@@ -1248,12 +1251,6 @@ export function Clientes({ clientes, setClientes, boletasEmitidas, setBoletasEmi
             {paseadoresDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ ...input, margin: 0, width: "auto", flex: "1 1 150px" }}>
-          <option value="todos">Todos los estados</option>
-          <option value="activo">Activo</option>
-          <option value="pausado">Pausado</option>
-          <option value="baja">Baja</option>
-        </select>
         <div style={{ position: "relative", flex: "1 1 190px" }}>
           <ArrowUpDown size={14} color="#B0A587" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
           <select value={orden} onChange={(e) => setOrden(e.target.value)} style={{ ...input, margin: 0, width: "100%", paddingLeft: 34 }}>

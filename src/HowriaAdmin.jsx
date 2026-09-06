@@ -3191,7 +3191,7 @@ export function calcularAvisos({ clientes, boletasEmitidas, boletasAdiestramient
 
   const necesitanEvaluacion = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c) && !citasAgenda.some((cita) => cita.clienteId === c.id && cita.estado === "agendada"));
   if (necesitanEvaluacion.length > 0) {
-    avisos.push({ tipo: "evaluacion", urgencia: "media", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda" });
+    avisos.push({ tipo: "evaluacion", urgencia: "media", icono: "📅", texto: `${necesitanEvaluacion.length} cliente(s) con evaluación pendiente de agendar`, clave: `evaluacion-${necesitanEvaluacion.length}`, tab: "agenda", clientes: necesitanEvaluacion });
   }
 
   const hoyStr = fechaKey(hoy);
@@ -4190,7 +4190,7 @@ function CalendarioExpres({ misClientes, registroPaseos, hoy, setTab, reprograma
 function InicioEntrenador({ clientes, usuarios, user, setTab, citasAgenda = [], mascotas = [], tabs, onAbrirAlumno, onAbrirCliente, faseDiaPaseador = {}, ausenciasPaseador = {}, onBuscar }) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const miUsuario = usuarios.find((u) => u.email === user.email) || user;
-  const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  const fechaLarga = conMayusculaInicial(hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }));
   const esEntrenador = user.rol === "entrenador";
   // El dashboard de administrador/coordinador ya mostraba la fase de todo
   // el equipo ("Estado del equipo") — pero la persona dueña de ese estado
@@ -4214,7 +4214,7 @@ function InicioEntrenador({ clientes, usuarios, user, setTab, citasAgenda = [], 
           </div>
           <div style={{ minWidth: 0 }}>
             <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 21, margin: 0 }}>{user.nombre}</h2>
-            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px", textTransform: "capitalize" }}>{user.rol} · {fechaLarga}</p>
+            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 2px" }}><span style={{ textTransform: "capitalize" }}>{user.rol}</span> · {fechaLarga}</p>
             {diasPaseando !== null && (
               <p style={{ fontSize: 12.5, color: GOLD, margin: 0, fontWeight: 600 }}>
                 {diasPaseando === 0 ? "Hoy es tu primer día 🐾" : `${diasPaseando} día${diasPaseando === 1 ? "" : "s"} paseando con Howria 🐾`}
@@ -4613,6 +4613,13 @@ export const URGENCIAS = {
 // bloquea el día, después lo de esta semana, al final lo que puede
 // esperar. Dentro de cada nivel se respeta el orden en que llegaron, que
 // ya viene pensado desde calcularAvisos.
+// "domingo, 6 de septiembre" -> "Domingo, 6 de septiembre". Solo la primera
+// letra: textTransform: capitalize las pone todas y deja "6 De Septiembre".
+export function conMayusculaInicial(texto) {
+  const s = String(texto || "");
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 export function ordenarPorUrgencia(items) {
   return [...items].sort((a, b) => (URGENCIAS[a.urgencia] || URGENCIAS.baja).orden - (URGENCIAS[b.urgencia] || URGENCIAS.baja).orden);
 }
@@ -4753,10 +4760,6 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
   const evaluacionesPendientesTodas = citasAgenda
     .filter((c) => c.tipo === "evaluacion" && c.estado === "pendiente")
     .sort((a, b) => new Date(a.fechaISO) - new Date(b.fechaISO));
-  // Todos los clientes que entraron por evaluación (cualquier entrenador),
-  // mismo criterio que la vista del entrenador pero sin acotar por quién
-  // los atiende — coordinación/administrador ven el negocio completo.
-  const clientesEvaluacionTodos = clientes.filter((c) => c.tipoServicio?.includes("evaluacion") && !clienteEstaCerrado(c));
   // Clientes que entraron solos por el link público y todavía esperan que
   // alguien decida qué servicio van a tomar (database/107).
   const clientesEntrantes = clientes.filter((c) => c.triagePendiente);
@@ -4819,30 +4822,30 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
     // y su ✕ para descartarlo, que ya se guardaba por usuario.
     ...avisos.map((a) => ({
       clave: a.clave, urgencia: a.urgencia, icono: a.icono, texto: a.texto,
-      detalle: a.detalle, onIr: a.tab ? irSiPuede(a.tab) : undefined,
+      // Un aviso que viaja con sus clientes se despliega en accesos directos
+      // a cada ficha, en vez de en una línea de texto con los nombres.
+      detalle: a.clientes?.length
+        ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {a.clientes.map((c) => (
+              <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)} style={chip}>
+                <span style={{ width: 24, height: 24, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
+                <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro || c.nombre}</span>
+              </button>
+            ))}
+          </div>
+        )
+        : a.detalle,
+      onIr: a.tab ? irSiPuede(a.tab) : undefined,
       onDescartar: () => descartarAviso(a.clave),
     })),
 
-    // Quiénes entraron pidiendo evaluación. No es una alerta sino un acceso
-    // directo a su ficha, así que va al final: lo accionable de este grupo
-    // ya lo dice el aviso "con evaluación pendiente de agendar".
-    ...(clientesEvaluacionTodos.length > 0 ? [{
-      clave: "en-evaluacion", urgencia: "baja", icono: "🐕",
-      texto: `${clientesEvaluacionTodos.length} cliente(s) en evaluación`,
-      detalle: (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {clientesEvaluacionTodos.map((c) => (
-            <button key={c.id} onClick={() => onAbrirCliente && onAbrirCliente(c._dbId)} style={chip}>
-              <span style={{ width: 24, height: 24, borderRadius: "50%", flex: "none", background: c.fotoUrl ? `url(${c.fotoUrl}) center/cover` : CREAM_SOFT }} />
-              <span style={{ fontSize: 12.5, color: NAVY, fontWeight: 600 }}>{c.perro || c.nombre}</span>
-            </button>
-          ))}
-        </div>
-      ),
-    }] : []),
   ];
 
-  const fechaLarga = hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  // toLocaleDateString entrega "domingo, 6 de septiembre". Antes se
+  // arreglaba con textTransform: capitalize, que pone en mayúscula CADA
+  // palabra y dejaba "Domingo, 6 De Septiembre".
+  const fechaLarga = conMayusculaInicial(hoy.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }));
   function iconoStat(i) {
     const { bg, color } = PALETA_LAUNCHER[i % PALETA_LAUNCHER.length];
     return { width: 38, height: 38, borderRadius: 11, background: bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, color };
@@ -4859,7 +4862,7 @@ function Inicio({ clientes, boletasEmitidas, boletasAdiestramiento = [], registr
           </div>
           <div>
             <h2 style={{ ...sectionTitle, color: CREAM, fontSize: 22, margin: 0 }}>Hola, {user.nombre.split(" ")[0]} 🐾</h2>
-            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 0", textTransform: "capitalize" }}>{fechaLarga}</p>
+            <p style={{ fontSize: 12.5, color: "#9BAAB8", margin: "3px 0 0" }}>{fechaLarga}</p>
           </div>
         </div>
       </div>
