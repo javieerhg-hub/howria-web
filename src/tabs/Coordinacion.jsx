@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { CalendarClock } from "lucide-react";
 import {
-  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, tarjeta, sectionTitle, hint, label,
+  NAVY, CREAM, CREAM_SOFT, GOLD, INK, RUST, FASES_PASEADOR, sectionTitle, hint, label,
   input, botonPrincipal, botonSecundario, SkeletonLista, BotonEliminar, fechaKey, showToast,
   estaProgramadoEnFecha, esClienteDePaseosActivo,
   textoClienteEnLista,
@@ -430,13 +430,19 @@ export function PanelClientesEntrantes({ clientes, setClientes, usuarios, citasA
 
   if (entrantes.length === 0) return null;
 
+  // Plegado, y cerrado por defecto. Antes eran fichas completas —teléfono,
+  // correo, selector de servicio y de adiestrador por cada uno— que se
+  // comían la PRIMERA PANTALLA ENTERA de Coordinación y dejaban "El día"
+  // bajo el fold. Lo ocasional tapando lo diario: a Coordinación se entra
+  // todas las mañanas a ver quién pasea a quién, no a definir un cliente
+  // nuevo que llega cada varios días.
+  //
+  // No se pierde el aviso: sigue arriba de todo, con su cuenta y su borde
+  // dorado, y además Inicio lo muestra en rojo en "Hoy hay que…".
   return (
-    <div className="howria-card" style={{ ...tarjeta, border: `1px solid ${GOLD}` }}>
-      <h2 style={sectionTitle}>Clientes nuevos por definir ({entrantes.length})</h2>
-      <p style={hint}>
-        Entraron solos por el link público y ya pidieron cita. Define qué servicio van a tomar y quién los atiende;
-        al guardar salen de esta lista.
-      </p>
+    <SeccionPlegable
+      titulo={`🆕 Clientes nuevos por definir (${entrantes.length})`}
+      subtitulo="Entraron solos por el link público y ya pidieron cita. Define qué servicio van a tomar y quién los atiende; al guardar salen de esta lista.">
       <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
         {entrantes.map((c) => (
           <FichaEntrante key={c.id} cliente={c}
@@ -444,7 +450,7 @@ export function PanelClientesEntrantes({ clientes, setClientes, usuarios, citasA
             equipoPaseo={equipoPaseo} entrenadores={entrenadores} onGuardar={guardarDecision} />
         ))}
       </div>
-    </div>
+    </SeccionPlegable>
   );
 }
 

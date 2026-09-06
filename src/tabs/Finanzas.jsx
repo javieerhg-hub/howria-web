@@ -1149,8 +1149,6 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
               {verEmpresaCompleta ? "Ver mis clientes" : "Ver toda la empresa"}
             </button>
           )}
-          <button onClick={exportarCsvFinanzas} style={{ ...botonSecundario, flex: "none" }}>Exportar CSV</button>
-          <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none" }}>Imprimir informe</button>
         </div>
       </div>
 
@@ -1187,9 +1185,16 @@ export function Finanzas({ boletasEmitidas: boletasEmitidasProp, boletasAdiestra
           hicieron. Las dos están bien — son preguntas distintas, y hasta
           acá ninguna de las dos pantallas lo decía. */}
       <QueSeCuenta
-        que="boletas por el mes que cubren"
-        desde={actualDesde} hasta={actualHasta}
-        nota={periodo === "mes" ? "una emitida el 28 de agosto que cubre septiembre cuenta en septiembre" : undefined} />
+        que="boletas del ciclo — por el mes que cubren, no por el día en que se emitieron"
+        desde={actualDesde} hasta={actualHasta} />
+
+      {/* Exportar e imprimir van DESPUÉS de elegir período y vista, no
+          antes: son acciones sobre lo que se está mirando, y arriba de todo
+          se ofrecían antes de que hubiera algo decidido que exportar. */}
+      <div className="no-imprimir" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        <button onClick={exportarCsvFinanzas} style={{ ...botonSecundario, flex: "none", margin: 0 }}>Exportar CSV</button>
+        <button onClick={imprimirInforme} className="howria-finanzas-imprimir" style={{ ...botonSecundario, flex: "none", margin: 0 }}>Imprimir informe</button>
+      </div>
 
       {/* Caja es lo que se mira seguido; las otras dos, una vez al mes. Por
           eso arranca en Caja. La vista personal no lleva selector: ve todo
