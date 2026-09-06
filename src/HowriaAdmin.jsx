@@ -3208,7 +3208,19 @@ export function rangoPeriodo(periodo, hoy) {
     const desde = inicioSemana(hoy);
     const hasta = new Date(desde); hasta.setDate(hasta.getDate() + 7);
     const opciones = { day: "2-digit", month: "short" };
-    const etiqueta = `${desde.toLocaleDateString("es-CL", opciones)} – ${new Date(hasta.getTime() - 86400000).toLocaleDateString("es-CL", opciones)}`;
+    // El último día se calcula en DÍAS DE CALENDARIO, no restándole
+    // 86.400.000 milisegundos al final del rango. La noche del cambio de
+    // hora no dura 24 horas: restar un día exacto caía a las 23:00 del día
+    // anterior, y la etiqueta decía "31-ago – 05-sept" en una semana que
+    // termina el domingo 6. Cuarto bug de cambio de hora del proyecto.
+    //
+    // No es solo cosmético: esta etiqueta la usa Pago trabajadores como
+    // parte de la clave del ajuste y se GUARDA dentro de cada pago
+    // registrado, así que un pago de la semana del cambio quedaba con el
+    // período mal escrito para siempre.
+    const ultimo = new Date(desde);
+    ultimo.setDate(ultimo.getDate() + 6);
+    const etiqueta = `${desde.toLocaleDateString("es-CL", opciones)} – ${ultimo.toLocaleDateString("es-CL", opciones)}`;
     return { desde, hasta, etiqueta };
   }
   const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -6147,6 +6159,19 @@ export default function HowriaAdmin() {
           .howria-finanzas-caja { grid-template-columns: 1fr !important; }
           .howria-finanzas-camino { grid-template-columns: repeat(2, 1fr) !important; }
           .howria-stats-3 { grid-template-columns: repeat(2, 1fr) !important; }
+          /* Los tres números de "El día" en Coordinación (Programados /
+             Pendientes / Realizados) se quedan en TRES columnas también en
+             el celular, al revés que el resto de las tiras de estadística
+             que bajan a dos: acá los números no solo se miran, se tocan
+             para filtrar la lista. Partidos en 2+1 dejarían de leerse como
+             un grupo de opciones. Lo que se achica es el relleno y la
+             cifra, para que quepan sin apretarse.
+             Esta pantalla se abre en la calle: era la única grilla de tres
+             de la app sin regla de celular. */
+          .howria-filtro-dia { gap: 7px !important; }
+          .howria-filtro-dia button { padding: 11px 8px !important; }
+          .howria-filtro-dia button > span:first-child { font-size: 10.5px !important; }
+          .howria-filtro-dia button > span:last-child { font-size: 19px !important; }
           .howria-dia-selector-movil { display: flex !important; }
           /* En mobile, Coordinación solo muestra UNA columna de día a la
              vez (el resto se oculta con .howria-dia-col-oculta-movil) —

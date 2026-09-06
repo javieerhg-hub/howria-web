@@ -943,7 +943,7 @@ export function Coordinacion({ clientes, setClientes, usuarios, registroPaseos, 
             y justo debajo un selector "No realizados / Realizados": los
             mismos tres números dos veces, y solo la mitad servía para algo.
             Estos son las tarjetas Y el filtro. */}
-        <div role="group" aria-label="Filtrar por estado" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "4px 0" }}>
+        <div role="group" aria-label="Filtrar por estado" className="howria-filtro-dia" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, margin: "4px 0" }}>
           {[
             { id: "todos", nombre: "Programados", cuenta: itemsDelDia.length, bg: NAVY, color: CREAM, apagado: "#9BAAB8" },
             { id: "pendientes", nombre: "Pendientes", cuenta: pendientesDia, bg: RUST, color: "#FFFFFF", apagado: "#8A7E5C" },

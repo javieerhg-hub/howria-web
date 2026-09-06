@@ -4,7 +4,7 @@
 // pestaña sin `desc` sale en blanco en el buscador. Los dos casos pasan
 // el build sin chistar, así que se cubren acá.
 import { describe, it, expect } from "vitest";
-import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia } from "../HowriaAdmin.jsx";
+import { TODOS_LOS_TABS, TABS_SECUNDARIOS, esTabSecundario, fusionDeTab, entradasDeMenu, ORDEN_GRUPOS, PRIORIDAD_BARRA_NAV, pestanasDelRol, calcularAvisos, URGENCIAS, ordenarPorUrgencia, rangoPeriodo } from "../HowriaAdmin.jsx";
 
 describe("metadata de las pestañas", () => {
   it("cada pestaña tiene descripción y palabras de búsqueda", () => {
@@ -275,5 +275,45 @@ describe("urgencia de los avisos", () => {
   it("una urgencia desconocida se hunde al final en vez de romper la lista", () => {
     const ordenados = ordenarPorUrgencia([{ clave: "rara", urgencia: "🤷" }, { clave: "alta", urgencia: "alta" }]);
     expect(ordenados[0].clave).toBe("alta");
+  });
+});
+
+// La etiqueta de la semana. Se ve en Objetivos y tareas y en Pago
+// trabajadores — y en Pago trabajadores además se GUARDA dentro de cada
+// pago registrado, así que una etiqueta mal escrita queda ahí para siempre.
+//
+// Los tests corren en America/Santiago (ver vite.config.js): sin eso, el
+// caso del cambio de hora pasaría en verde sin probar nada.
+describe("etiqueta de la semana", () => {
+  const etiqueta = (fecha) => rangoPeriodo("semana", fecha).etiqueta;
+
+  it("una semana normal va de lunes a domingo", () => {
+    // Semana del lunes 17 al domingo 23 de agosto de 2026.
+    expect(etiqueta(new Date(2026, 7, 19))).toBe("17-ago – 23-ago");
+  });
+
+  it("la semana del cambio de hora no pierde el domingo", () => {
+    // Chile adelanta el reloj en la madrugada del domingo 6 de septiembre
+    // de 2026: esa noche dura 23 horas. Restando 86.400.000 ms exactos la
+    // etiqueta decía "05-sept" y se comía el último día de la semana.
+    expect(etiqueta(new Date(2026, 8, 2))).toBe("31-ago – 06-sept");
+    expect(etiqueta(new Date(2026, 8, 6))).toBe("31-ago – 06-sept");
+  });
+
+  it("la semana del cambio de vuelta tampoco", () => {
+    // Y en abril el reloj se atrasa: esa noche dura 25 horas.
+    const abr = rangoPeriodo("semana", new Date(2026, 3, 8)).etiqueta;
+    const [ini, fin] = abr.split(" – ");
+    expect(ini).toBeTruthy();
+    expect(fin).toBeTruthy();
+    expect(ini).not.toBe(fin);
+  });
+
+  it("el rango sigue cubriendo 7 días completos", () => {
+    // desde/hasta no cambian: hasta es exclusivo y lo usa el filtrado.
+    const { desde, hasta } = rangoPeriodo("semana", new Date(2026, 8, 2));
+    expect(desde.getDate()).toBe(31);
+    expect(hasta.getDate()).toBe(7);
+    expect(hasta.getMonth()).toBe(8);
   });
 });
