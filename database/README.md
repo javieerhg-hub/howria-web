@@ -129,6 +129,19 @@ no un runner de migraciones.
 | 101 | `ajustes_pago_motivo.sql` | 2026-08-19 | Agrega `motivo` a `ajustes_pago_pendientes` y `ajuste_motivo` a `pagos_trabajadores` — un bono/descuento quedaba con quién y cuándo, pero nunca por qué; pedido explícito de Javier tras la revisión de lógica financiera. |
 | 102 | `costos_negocio.sql` | 2026-08-19 | Crea `costos_negocio` (costo puntual con descripción/monto/fecha — arriendo, insumos, marketing) — "Ganancia de Howria" en Finanzas solo restaba pago a trabajadores; pedido explícito de Javier para que la ganancia mostrada sea la utilidad real. |
 | 103 | `tarifa_javier_arniaz.sql` | 2026-08-22 | Migración de datos (no de esquema): iguala `tarifa_paseador` a `valor_paseo_ref` en todos los clientes de Javier Arniaz — hallado en la revisión en vivo (25 paseos realizados, $0 de pago calculado, porque nunca se le cargó tarifa). Javier confirmó: a él se le paga el 100% de lo que se le cobra al cliente. |
+| 128 | `cupones_promocion.sql` | 2026-09-12 | Crea `cupones_promocion` (un código de descuento por correo, con vencimiento y marca de usado) — es la tabla del aviso de 10% que sale al entrar a la landing: `api/cupon.js` guarda acá el cupón, crea el prospecto con origen "Cupón 10%" y manda el código por mail. Solo escribe la función serverless (no hay policy de insert); lectura y marcado de "usado" quedan en coordinador/administrador. |
+
+## Nota sobre el índice incompleto (104–127)
+
+Los scripts `104` a `127` existen en la carpeta y están corridos en
+Supabase, pero **no alcanzaron a entrar a la tabla de arriba** — el índice
+se fue quedando atrás mientras el proyecto avanzaba rápido. El salto de
+103 a 128 en la tabla es eso, no un archivo perdido: la carpeta es la
+lista real de lo que se corrió, y esta tabla es el resumen de para qué
+sirve cada uno.
+
+Para ponerlo al día hay que abrir esos 24 archivos y resumir cada uno —
+el encabezado de cada script ya trae el contexto escrito.
 
 ## Nota sobre el orden 001–023
 

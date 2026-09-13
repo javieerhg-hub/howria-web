@@ -12,6 +12,8 @@ howria.cl (DNS en Cloudflare).
   `React.lazy()` para no bajar el código de las otras dos.
 - `src/Home.jsx` — landing pública (hero, servicios, nosotros, galería,
   contacto). Fotos en `public/images-home/` y `public/images/`.
+- `src/PromoCupon.jsx` — el aviso de promoción que sale a los 6 segundos de
+  entrar a la landing (ver "Cupón de promoción" más abajo).
 - `src/HowriaAdmin.jsx` — panel completo (un solo archivo grande): login con
   Supabase Auth, Inicio, Mis paseos, Boletas (paseos y adiestramiento),
   Facturas, Clientes, Finanzas, Pago trabajadores, Coordinación, Mapa,
@@ -118,6 +120,42 @@ Setup, además de las variables de entorno de arriba:
    valor, dos variables porque una la lee el navegador y la otra el
    servidor), la privada solo en `VAPID_PRIVATE_KEY` — nunca en una
    variable `VITE_*` (quedaría expuesta al navegador).
+
+## Cupón de promoción (10% plan mensual de paseos)
+
+Al entrar a la landing (`/`), a los 6 segundos sale un aviso con un cupón de
+10% de descuento en el plan mensual de paseos. Quien deja su correo recibe
+un código por mail y queda como prospecto en la pestaña Seguimiento.
+
+Piezas:
+- `src/PromoCupon.jsx` — el aviso. Lo monta `Home.jsx` con `React.lazy` (no
+  se baja hasta que hace falta). El texto de la promo está en las
+  constantes `PROMO_TITULO` / `PROMO_BAJADA` de ese archivo.
+- `api/cupon.js` — genera el código, crea el prospecto (origen "Cupón 10%")
+  y manda el correo con Resend desde `promociones@howria.cl`, con
+  `reply_to: contacto@howria.cl` para que las respuestas caigan en la
+  bandeja de la pestaña Mail. El texto del correo repite la promesa del
+  aviso: si cambia una, hay que cambiar la otra.
+- `database/128_cupones_promocion.sql` — tabla `cupones_promocion`.
+
+Cosas que conviene saber antes de tocarlo:
+- **Un correo = un cupón, para siempre.** El mismo correo que vuelve a
+  pedirlo recibe el código que ya tenía, y el mail no se reenvía (el código
+  igual se muestra en pantalla). Eso evita duplicados en Seguimiento y que
+  alguien use el formulario para llenarle la bandeja a un tercero.
+- **El descuento se aplica a mano.** No hay ninguna pantalla que valide el
+  código: cuando alguien llega con su cupón, el 10% se pone como descuento
+  al emitir la boleta, y el código queda en `cupones_promocion` para poder
+  comprobarlo. `usado_en` / `usado_por` existen para marcarlo, pero hoy hay
+  que escribirlos desde el SQL Editor.
+- **El cupón vence a los 30 días**, calculado en la base al crearlo
+  (`valido_hasta`, default de la tabla). Es un default puesto por falta de
+  una instrucción distinta — se cambia en la migración.
+- **Para volver a mostrarle el aviso a todo el mundo** (por ejemplo, con
+  una promoción nueva), subir la versión de `CLAVE_LOCAL` en
+  `PromoCupon.jsx` (`..._v1` → `..._v2`). Quien ya lo cerró vuelve a verlo.
+- El aviso solo está en `/` (`Home.jsx`). `/nosotros` es HTML estático
+  aparte y no lo tiene.
 
 ## Notas importantes
 

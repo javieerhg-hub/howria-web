@@ -1,5 +1,10 @@
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { Footprints, GraduationCap, ClipboardCheck, MessageCircle } from "lucide-react";
+
+// El aviso del cupón de 10% que sale a los pocos segundos de entrar. Va
+// aparte y perezoso porque no se ve en el primer pintado: así el visitante
+// que solo mira la landing no baja el formulario ni su lógica de envío.
+const PromoCupon = React.lazy(() => import("./PromoCupon.jsx"));
 
 const NAVY = "#14213D";
 const NAVY_LOGO = "#102A41";
@@ -236,6 +241,13 @@ export default function Home() {
         }}>
         <MessageCircle size={28} color="#FFFFFF" strokeWidth={2} aria-hidden="true" />
       </a>
+
+      {/* Sin fallback: mientras baja no tiene que mostrar nada — el aviso
+          aparece solo cuando está listo, y si nunca llegara, la landing
+          queda igual de completa. */}
+      <Suspense fallback={null}>
+        <PromoCupon />
+      </Suspense>
     </div>
   );
 }

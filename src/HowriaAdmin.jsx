@@ -1473,7 +1473,11 @@ export const ESTADOS_PROSPECTO = [
   { id: "perdido", nombre: "Perdido", color: "#A85C3B", bg: "#F1DCD2" },
 ];
 
-export const ORIGENES_PROSPECTO = ["Instagram", "Facebook", "WhatsApp", "Referido", "Página web", "Agenda pública", "Otro"];
+// "Cupón 10%" lo escribe api/cupon.js: es el lead que dejó su correo en el
+// aviso de promoción de la landing. Va en esta lista para que se pueda
+// filtrar por él en Seguimiento — un origen que no esté acá igual se ve en
+// la ficha, pero no aparece en el selector de filtro.
+export const ORIGENES_PROSPECTO = ["Instagram", "Facebook", "WhatsApp", "Referido", "Página web", "Cupón 10%", "Agenda pública", "Otro"];
 
 export const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 // Máximo de perros que una persona pasea junta en un turno. Es un límite
