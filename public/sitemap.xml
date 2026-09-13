@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Las páginas públicas de Howria. El dominio va con www porque es el que
+  responde: howria.cl redirige a www.howria.cl. Tiene que coincidir con el
+  canonical que pone src/lib/seo.js, o Google recibe dos señales distintas
+  sobre cuál es la URL buena.
+
+  Al agregar una página nueva hay que sumarla acá, en src/lib/seo.js y en la
+  navegación de Home.jsx.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.howria.cl/</loc>
+    <lastmod>2026-09-13</lastmod>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.howria.cl/paseos</loc>
+    <lastmod>2026-09-13</lastmod>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.howria.cl/adiestramiento</loc>
+    <lastmod>2026-09-13</lastmod>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.howria.cl/nosotros</loc>
+    <lastmod>2026-09-13</lastmod>
+    <priority>0.6</priority>
+  </url>
+</urlset>

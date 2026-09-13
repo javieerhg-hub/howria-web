@@ -30,12 +30,109 @@
     <meta property="og:site_name" content="Howria" />
     <meta property="og:title" content="Howria — Paseos y adiestramiento canino en Santiago" />
     <meta property="og:description" content="Paseos y adiestramiento canino profesional en Santiago. Cuidamos y educamos a tu perro con método real y cariño genuino — nunca una fórmula estándar." />
-    <meta property="og:image" content="https://howria.cl/apple-touch-icon.png" />
-    <meta property="og:url" content="https://howria.cl" />
+    <meta property="og:image" content="https://www.howria.cl/apple-touch-icon.png" />
+    <meta property="og:url" content="https://www.howria.cl/" />
     <meta name="twitter:card" content="summary" />
 
+    <!-- Los dos preconnect van juntos a propósito: googleapis.com sirve el CSS
+    de la fuente y gstatic.com sirve los archivos .woff2 que ese CSS pide
+    después. Sin el segundo, el navegador recién abre la conexión a gstatic
+    cuando terminó de leer el CSS — un viaje de ida y vuelta perdido justo
+    antes de pintar el texto. El crossorigin es obligatorio para fuentes. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- La foto del hero es el elemento más grande de la portada, o sea el que
+    define el LCP. Como vive dentro de un componente de React, el navegador no
+    la descubriría hasta haber bajado y ejecutado el bundle entero. Este preload
+    la pone a descargar apenas se lee el HTML, en el mismo formato y ancho que
+    después va a elegir el <picture> de Home.jsx — así el archivo ya está en
+    caché cuando React pinta.
+
+    Los navegadores sin AVIF ignoran este preload por el type: se quedan sin el
+    adelanto, pero igual reciben la foto correcta en WebP desde el <picture>.
+
+    Contrapartida conocida: index.html es el mismo para todas las rutas, así que
+    /admin también se lo baja sin usarlo (~44 KB en escritorio, ~13 KB en
+    celular, una sola vez porque el panel queda cacheado). Se asume el costo
+    porque la portada es la que ve el cliente nuevo y es donde se juega la
+    primera impresión. -->
+    <link
+      rel="preload"
+      as="image"
+      type="image/avif"
+      fetchpriority="high"
+      imagesrcset="/images-home/opt/hero-tres-perros-320.avif 320w, /images-home/opt/hero-tres-perros-480.avif 480w, /images-home/opt/hero-tres-perros-640.avif 640w, /images-home/opt/hero-tres-perros-960.avif 960w"
+      imagesizes="100vw"
+    />
+
+    <!-- Datos estructurados: es lo que le permite a Google entender que Howria
+    es un negocio local de Santiago y no un sitio cualquiera, y lo que abre la
+    puerta a aparecer en el panel lateral y en las búsquedas con intención local
+    ("paseador de perros Santiago"). Solo se declara lo que es verificable en el
+    sitio; no se inventa horario ni dirección. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "LocalBusiness",
+        "@id": "https://www.howria.cl/#negocio",
+        "name": "Howria",
+        "description": "Paseos y adiestramiento canino profesional en Santiago de Chile.",
+        "url": "https://www.howria.cl",
+        "telephone": "+56992471504",
+        "email": "javieer.hg@gmail.com",
+        "image": "https://www.howria.cl/apple-touch-icon.png",
+        "logo": "https://www.howria.cl/icon-512.png",
+        "priceRange": "$$",
+        "areaServed": [
+          { "@type": "City", "name": "Las Condes", "addressCountry": "CL" },
+          { "@type": "City", "name": "La Reina", "addressCountry": "CL" },
+          { "@type": "City", "name": "Providencia", "addressCountry": "CL" },
+          { "@type": "City", "name": "Ñuñoa", "addressCountry": "CL" },
+          { "@type": "City", "name": "Peñalolén", "addressCountry": "CL" },
+          { "@type": "City", "name": "La Florida", "addressCountry": "CL" }
+        ],
+        "address": {
+          "@type": "PostalAddress",
+          "addressLocality": "Santiago",
+          "addressCountry": "CL"
+        },
+        "sameAs": ["https://instagram.com/HowriaDogs"],
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "Servicios de Howria",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Paseos caninos",
+                "description": "Paseos individuales, en manada y personalizados, con seguimiento de cada salida.",
+                "url": "https://www.howria.cl/paseos"
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Adiestramiento canino",
+                "description": "Obediencia básica, media y avanzada, formación de cachorros y modificación de conducta.",
+                "url": "https://www.howria.cl/adiestramiento"
+              }
+            },
+            {
+              "@type": "Offer",
+              "itemOffered": {
+                "@type": "Service",
+                "name": "Evaluación conductual",
+                "description": "Evaluación presencial u online para armar un plan a la medida del perro."
+              }
+            }
+          ]
+        }
+      }
+    </script>
   </head>
   <body style="margin:0;">
     <div id="root"></div>
