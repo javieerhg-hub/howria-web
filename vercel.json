@@ -2,6 +2,8 @@
   "rewrites": [
     { "source": "/nosotros", "destination": "/nosotros.html" },
     { "source": "/admin", "destination": "/index.html" },
+    { "source": "/paseos", "destination": "/index.html" },
+    { "source": "/adiestramiento", "destination": "/index.html" },
     { "source": "/agendar", "destination": "/index.html" },
     { "source": "/agendaadiestrador", "destination": "/index.html" },
     { "source": "/cachorros", "destination": "/index.html" },

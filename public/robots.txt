@@ -1,0 +1,16 @@
+# Las páginas públicas se rastrean todas. Lo que queda fuera es el panel
+# interno y las pantallas de reserva y de vuelta de la pasarela de pago: no
+# aportan nada en buscadores, algunas llevan datos de clientes en la URL y
+# gastarían el presupuesto de rastreo que le corresponde a la portada y a las
+# páginas de servicio.
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /agendar
+Disallow: /agendaadiestrador
+Disallow: /confirmar-cita
+Disallow: /pago-exitoso
+Disallow: /pago-fallido
+
+Sitemap: https://www.howria.cl/sitemap.xml

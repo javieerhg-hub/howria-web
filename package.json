@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "imagenes": "node scripts/optimizar-imagenes.mjs",
     "lint": "eslint .",
     "build": "eslint . && node scripts/generar-version.mjs && vite build",
     "preview": "vite preview",
@@ -28,6 +29,7 @@
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.11.0",
+    "sharp": "^0.35.4",
     "vite": "^5.2.0",
     "vitest": "^4.1.10"
   }

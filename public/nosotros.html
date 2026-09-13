@@ -3,21 +3,23 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Howria — Paseos y adiestramiento canino</title>
+<title>Nosotros — el equipo de Howria | Paseos y adiestramiento canino</title>
 <meta name="description" content="Conoce el equipo de Howria: paseos y adiestramiento canino en Santiago, con cariño real y método profesional." />
 <!-- logo-howria.png es crema sobre transparente, pensado para ir dentro
 de un contenedor con fondo azul marino — como favicon/imagen de vista
 previa queda casi invisible sobre blanco. Se usan en cambio los íconos
 que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
+<link rel="canonical" href="https://www.howria.cl/nosotros" />
 <link rel="icon" type="image/png" href="/icon-192.png" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Howria" />
-<meta property="og:title" content="Howria — Paseos y adiestramiento canino" />
+<meta property="og:title" content="Nosotros — el equipo de Howria" />
 <meta property="og:description" content="Conoce el equipo de Howria: paseos y adiestramiento canino en Santiago, con cariño real y método profesional." />
-<meta property="og:image" content="https://howria.cl/apple-touch-icon.png" />
-<meta property="og:url" content="https://howria.cl/nosotros" />
+<meta property="og:image" content="https://www.howria.cl/apple-touch-icon.png" />
+<meta property="og:url" content="https://www.howria.cl/nosotros" />
 <meta name="twitter:card" content="summary" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
@@ -83,6 +85,13 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
     gap: 14px;
     margin-top: 10px;
   }
+  /* El hijo de la grilla es el <picture>, no el <img>: las reglas de
+  posicionamiento (grid-row, grid-column) tienen que ir sobre el <picture>, y
+  las de tamaño sobre el <img> que va adentro. */
+  .gallery picture { display: block; min-width: 0; }
+  .gallery picture.tall { grid-row: span 2; }
+  .gallery picture.ancha { grid-column: span 2; }
+  .gallery picture.tall img { height: 100%; min-height: 534px; }
   .gallery img {
     width: 100%;
     height: 260px;
@@ -90,10 +99,10 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
     border-radius: 14px;
     display: block;
   }
-  .gallery .tall { grid-row: span 2; height: 100%; min-height: 534px; }
   @media (max-width: 720px) {
     .gallery { grid-template-columns: repeat(2, 1fr); }
-    .gallery .tall { grid-row: span 1; height: 260px; min-height: unset; }
+    .gallery picture.tall { grid-row: span 1; }
+    .gallery picture.tall img { height: 260px; min-height: unset; }
   }
   .section-title {
     font-family: 'Fraunces', serif;
@@ -264,7 +273,8 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
     <div class="header-inner">
       <a href="/" class="brand-link">Howria</a>
       <nav class="nav-links">
-        <a href="/#servicios">Servicios</a>
+        <a href="/paseos">Paseos</a>
+      <a href="/adiestramiento">Adiestramiento</a>
         <a href="/nosotros" class="current">Nosotros</a>
         <a href="/#galeria">Galería</a>
         <a href="/#contacto">Contacto</a>
@@ -273,7 +283,8 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
       <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú" aria-expanded="false">☰</button>
     </div>
     <div class="mobile-menu" id="mobileMenu">
-      <a href="/#servicios">Servicios</a>
+      <a href="/paseos">Paseos</a>
+      <a href="/adiestramiento">Adiestramiento</a>
       <a href="/nosotros" class="current">Nosotros</a>
       <a href="/#galeria">Galería</a>
       <a href="/#contacto">Contacto</a>
@@ -289,10 +300,26 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
 
   <section>
     <div class="gallery">
-      <img class="tall" src="images/perro-1.jpg" alt="Pastor alemán sentado al aire libre" loading="lazy" />
-      <img src="images/javier-perro.jpg" alt="Entrenador junto a su perro" loading="lazy" />
-      <img src="images/perro-ciudad.jpg" alt="Perro paseando en un parque de la ciudad" loading="lazy" />
-      <img src="images/cachorros.jpg" alt="Dos cachorros golden retriever" style="grid-column: span 2;" loading="lazy" />
+      <picture class="tall">
+        <source type="image/avif" srcset="/images/opt/perro-1-320.avif 320w, /images/opt/perro-1-480.avif 480w, /images/opt/perro-1-640.avif 640w, /images/opt/perro-1-960.avif 960w, /images/opt/perro-1-1280.avif 1280w, /images/opt/perro-1-1600.avif 1600w" sizes="(max-width: 720px) 47vw, 308px" />
+        <source type="image/webp" srcset="/images/opt/perro-1-320.webp 320w, /images/opt/perro-1-480.webp 480w, /images/opt/perro-1-640.webp 640w, /images/opt/perro-1-960.webp 960w, /images/opt/perro-1-1280.webp 1280w, /images/opt/perro-1-1600.webp 1600w" sizes="(max-width: 720px) 47vw, 308px" />
+        <img src="/images/perro-1.jpg" alt="Pastor alemán sentado al aire libre" loading="lazy" decoding="async" />
+      </picture>
+      <picture>
+        <source type="image/avif" srcset="/images/opt/javier-perro-320.avif 320w, /images/opt/javier-perro-480.avif 480w, /images/opt/javier-perro-640.avif 640w, /images/opt/javier-perro-960.avif 960w" sizes="(max-width: 720px) 47vw, 308px" />
+        <source type="image/webp" srcset="/images/opt/javier-perro-320.webp 320w, /images/opt/javier-perro-480.webp 480w, /images/opt/javier-perro-640.webp 640w, /images/opt/javier-perro-960.webp 960w" sizes="(max-width: 720px) 47vw, 308px" />
+        <img src="/images/javier-perro.jpg" alt="Entrenador junto a su perro" loading="lazy" decoding="async" />
+      </picture>
+      <picture>
+        <source type="image/avif" srcset="/images/opt/perro-ciudad-320.avif 320w, /images/opt/perro-ciudad-480.avif 480w, /images/opt/perro-ciudad-640.avif 640w, /images/opt/perro-ciudad-960.avif 960w, /images/opt/perro-ciudad-1280.avif 1280w, /images/opt/perro-ciudad-1600.avif 1600w" sizes="(max-width: 720px) 47vw, 308px" />
+        <source type="image/webp" srcset="/images/opt/perro-ciudad-320.webp 320w, /images/opt/perro-ciudad-480.webp 480w, /images/opt/perro-ciudad-640.webp 640w, /images/opt/perro-ciudad-960.webp 960w, /images/opt/perro-ciudad-1280.webp 1280w, /images/opt/perro-ciudad-1600.webp 1600w" sizes="(max-width: 720px) 47vw, 308px" />
+        <img src="/images/perro-ciudad.jpg" alt="Perro paseando en un parque de la ciudad" loading="lazy" decoding="async" />
+      </picture>
+      <picture class="ancha">
+        <source type="image/avif" srcset="/images/opt/cachorros-320.avif 320w, /images/opt/cachorros-480.avif 480w, /images/opt/cachorros-640.avif 640w, /images/opt/cachorros-960.avif 960w" sizes="(max-width: 720px) 92vw, 630px" />
+        <source type="image/webp" srcset="/images/opt/cachorros-320.webp 320w, /images/opt/cachorros-480.webp 480w, /images/opt/cachorros-640.webp 640w, /images/opt/cachorros-960.webp 960w" sizes="(max-width: 720px) 92vw, 630px" />
+        <img src="/images/cachorros.jpg" alt="Dos cachorros golden retriever" loading="lazy" decoding="async" />
+      </picture>
     </div>
   </section>
 
@@ -332,8 +359,16 @@ que ya traen el azul marino incluido (mismos del manifest de la PWA). -->
 
   <section>
     <div class="gallery" style="grid-template-columns: 1fr 1fr;">
-      <img src="images/perro-cerca.jpg" alt="Retrato cercano de pastor alemán" style="height: 340px;" loading="lazy" />
-      <img src="images/perro-ciudad.jpg" alt="Perro con correa roja en el parque" style="height: 340px;" loading="lazy" />
+      <picture>
+        <source type="image/avif" srcset="/images/opt/perro-cerca-320.avif 320w, /images/opt/perro-cerca-480.avif 480w, /images/opt/perro-cerca-640.avif 640w, /images/opt/perro-cerca-960.avif 960w, /images/opt/perro-cerca-1280.avif 1280w, /images/opt/perro-cerca-1600.avif 1600w" sizes="(max-width: 720px) 47vw, 469px" />
+        <source type="image/webp" srcset="/images/opt/perro-cerca-320.webp 320w, /images/opt/perro-cerca-480.webp 480w, /images/opt/perro-cerca-640.webp 640w, /images/opt/perro-cerca-960.webp 960w, /images/opt/perro-cerca-1280.webp 1280w, /images/opt/perro-cerca-1600.webp 1600w" sizes="(max-width: 720px) 47vw, 469px" />
+        <img src="/images/perro-cerca.jpg" alt="Retrato cercano de pastor alemán" style="height: 340px;" loading="lazy" decoding="async" />
+      </picture>
+      <picture>
+        <source type="image/avif" srcset="/images/opt/perro-ciudad-320.avif 320w, /images/opt/perro-ciudad-480.avif 480w, /images/opt/perro-ciudad-640.avif 640w, /images/opt/perro-ciudad-960.avif 960w, /images/opt/perro-ciudad-1280.avif 1280w, /images/opt/perro-ciudad-1600.avif 1600w" sizes="(max-width: 720px) 47vw, 469px" />
+        <source type="image/webp" srcset="/images/opt/perro-ciudad-320.webp 320w, /images/opt/perro-ciudad-480.webp 480w, /images/opt/perro-ciudad-640.webp 640w, /images/opt/perro-ciudad-960.webp 960w, /images/opt/perro-ciudad-1280.webp 1280w, /images/opt/perro-ciudad-1600.webp 1600w" sizes="(max-width: 720px) 47vw, 469px" />
+        <img src="/images/perro-ciudad.jpg" alt="Perro con correa roja en el parque" style="height: 340px;" loading="lazy" decoding="async" />
+      </picture>
     </div>
   </section>
 
